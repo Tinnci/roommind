@@ -159,6 +159,7 @@
 
   "devices.climate_entities": "Klimageräte",
   "devices.temp_sensors": "Temperatursensoren",
+  "devices.primary_sensor": "Primär",
   "devices.humidity_sensors": "Feuchtigkeitssensoren",
   "devices.no_climate": "Keine Klimageräte in diesem Bereich gefunden.",
   "devices.no_temp_sensors": "Keine Temperatursensoren in diesem Bereich gefunden.",

@@ -64,6 +64,7 @@ _ROOM_SAVE_FIELDS = (
     "acs",
     "devices",
     "temperature_sensor",
+    "temperature_sensors",
     "humidity_sensor",
     "occupancy_sensors",
     "climate_mode",
@@ -318,6 +319,7 @@ async def websocket_list_rooms(
             )
         ],
         vol.Optional("temperature_sensor"): str,
+        vol.Optional("temperature_sensors"): [str],
         vol.Optional("humidity_sensor"): str,
         vol.Optional("occupancy_sensors"): [str],
         vol.Optional("climate_mode"): vol.In(CLIMATE_MODES),

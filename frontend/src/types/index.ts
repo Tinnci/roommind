@@ -91,6 +91,7 @@ export interface RoomConfig {
   acs: string[];
   devices?: DeviceConfig[];
   temperature_sensor: string;
+  temperature_sensors?: string[];
   humidity_sensor: string;
   occupancy_sensors?: string[];
   window_sensors: string[];

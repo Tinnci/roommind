@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from ..const import EKF_UPDATE_MIN_DT
 
 if TYPE_CHECKING:
-    from ..control.thermal_model import RoomModelManager
+    from ..control.thermal_model import RoomModelManager, TemperatureObservation
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -38,18 +38,20 @@ class EkfTrainingManager:
         q_residual: float = 0.0,
         shading_factor: float = 1.0,
         q_occupancy: float = 0.0,
+        current_observations: list[TemperatureObservation] | None = None,
     ) -> None:
         """Flush accumulated EKF update (on mode change or window open)."""
         accumulated = self._accumulated_dt.pop(area_id, 0.0)
         prev_mode = self._accumulated_mode.pop(area_id, None)
         pf = self._accumulated_pf.pop(area_id, 1.0)
         if accumulated > 0 and prev_mode is not None:
-            self._model_manager.update(
-                area_id,
-                current_temp,
-                T_outdoor,
-                prev_mode,
-                accumulated,
+            self._update_model(
+                area_id=area_id,
+                current_temp=current_temp,
+                current_observations=current_observations,
+                T_outdoor=T_outdoor,
+                mode=prev_mode,
+                dt_minutes=accumulated,
                 can_heat=can_heat,
                 can_cool=can_cool,
                 power_fraction=pf,
@@ -74,6 +76,7 @@ class EkfTrainingManager:
         can_cool: bool,
         dt_minutes: float,
         q_occupancy: float = 0.0,
+        current_observations: list[TemperatureObservation] | None = None,
     ) -> None:
         """Process an EKF training step for a room.
 
@@ -91,6 +94,7 @@ class EkfTrainingManager:
                 q_residual=q_residual,
                 shading_factor=shading_factor,
                 q_occupancy=q_occupancy,
+                current_observations=current_observations,
             )
             self._accumulated_dt.pop(area_id, None)
             self._accumulated_mode.pop(area_id, None)
@@ -116,6 +120,7 @@ class EkfTrainingManager:
                 q_residual=q_residual,
                 shading_factor=shading_factor,
                 q_occupancy=q_occupancy,
+                current_observations=current_observations,
             )
             self._accumulated_dt.pop(area_id, None)
             self._accumulated_mode.pop(area_id, None)
@@ -133,6 +138,7 @@ class EkfTrainingManager:
                     q_residual=q_residual,
                     shading_factor=shading_factor,
                     q_occupancy=q_occupancy,
+                    current_observations=current_observations,
                 )
 
             old_dt = self._accumulated_dt.get(area_id, 0.0)
@@ -145,12 +151,13 @@ class EkfTrainingManager:
 
             if self._accumulated_dt[area_id] >= EKF_UPDATE_MIN_DT:
                 pf = self._accumulated_pf.pop(area_id, 1.0)
-                self._model_manager.update(
-                    area_id,
-                    current_temp,
-                    T_outdoor,
-                    ekf_mode,
-                    self._accumulated_dt[area_id],
+                self._update_model(
+                    area_id=area_id,
+                    current_temp=current_temp,
+                    current_observations=current_observations,
+                    T_outdoor=T_outdoor,
+                    mode=ekf_mode,
+                    dt_minutes=self._accumulated_dt[area_id],
                     can_heat=can_heat,
                     can_cool=can_cool,
                     power_fraction=pf,
@@ -161,6 +168,53 @@ class EkfTrainingManager:
                 self._accumulated_dt[area_id] = 0.0
 
         self.last_temps[area_id] = current_temp
+
+    def _update_model(
+        self,
+        *,
+        area_id: str,
+        current_temp: float,
+        current_observations: list[TemperatureObservation] | None,
+        T_outdoor: float,
+        mode: str,
+        dt_minutes: float,
+        can_heat: bool,
+        can_cool: bool,
+        power_fraction: float,
+        q_solar: float,
+        q_residual: float,
+        q_occupancy: float,
+    ) -> None:
+        """Update the room model through the scalar or multi-observation path."""
+        if current_observations:
+            self._model_manager.update_observations(
+                area_id,
+                current_observations,
+                T_outdoor,
+                mode,
+                dt_minutes,
+                can_heat=can_heat,
+                can_cool=can_cool,
+                power_fraction=power_fraction,
+                q_solar=q_solar,
+                q_residual=q_residual,
+                q_occupancy=q_occupancy,
+            )
+            return
+
+        self._model_manager.update(
+            area_id,
+            current_temp,
+            T_outdoor,
+            mode,
+            dt_minutes,
+            can_heat=can_heat,
+            can_cool=can_cool,
+            power_fraction=power_fraction,
+            q_solar=q_solar,
+            q_residual=q_residual,
+            q_occupancy=q_occupancy,
+        )
 
     def clear(self, area_id: str) -> None:
         """Clear accumulated EKF state for a room."""

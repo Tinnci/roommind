@@ -20,6 +20,7 @@ async def test_save_room_creates_new(store):
     assert room["thermostats"] == []
     assert room["acs"] == []
     assert room["temperature_sensor"] == ""
+    assert room["temperature_sensors"] == []
     assert room["humidity_sensor"] == ""
     assert room["climate_mode"] == "auto"
     assert room["schedules"] == []
@@ -56,6 +57,7 @@ async def test_save_room_with_all_fields(store):
                 {"entity_id": "climate.sz_ac", "type": "ac", "role": "auto", "heating_system_type": ""},
             ],
             "temperature_sensor": "sensor.sz_temp",
+            "temperature_sensors": ["sensor.sz_temp", "sensor.sz_trv_temp"],
             "humidity_sensor": "sensor.sz_humidity",
             "climate_mode": "heat_only",
             "schedules": [{"entity_id": "schedule.bedroom_heating"}],
@@ -69,6 +71,7 @@ async def test_save_room_with_all_fields(store):
     assert room["thermostats"] == ["climate.sz_trv"]
     assert room["acs"] == ["climate.sz_ac"]
     assert room["temperature_sensor"] == "sensor.sz_temp"
+    assert room["temperature_sensors"] == ["sensor.sz_temp", "sensor.sz_trv_temp"]
     assert room["humidity_sensor"] == "sensor.sz_humidity"
     assert room["climate_mode"] == "heat_only"
     assert room["schedules"] == [{"entity_id": "schedule.bedroom_heating"}]

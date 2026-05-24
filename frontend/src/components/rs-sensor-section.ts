@@ -14,6 +14,7 @@ export class RsSensorSection extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
   @property({ attribute: false }) public area!: HassArea;
   @property({ type: String }) public temperatureSensor = "";
+  @property({ attribute: false }) public temperatureSensors: Set<string> = new Set();
   @property({ type: String }) public humiditySensor = "";
   @property({ attribute: false }) public occupancySensors: Set<string> = new Set();
   @property({ attribute: false }) public windowSensors: Set<string> = new Set();
@@ -144,6 +145,21 @@ export class RsSensorSection extends LitElement {
       .row ha-radio {
         flex-shrink: 0;
         margin: -4px 0;
+      }
+
+      .temp-controls {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex-shrink: 0;
+      }
+
+      .temp-role {
+        font-size: 10px;
+        color: var(--secondary-text-color);
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        min-width: 28px;
       }
 
       .row-info {
@@ -384,21 +400,22 @@ export class RsSensorSection extends LitElement {
   // ─── View mode ───
 
   private _renderViewMode() {
-    const hasTempSensor = !!this.temperatureSensor;
+    const tempSensorIds = this._temperatureSensorIds();
+    const hasTempSensors = tempSensorIds.length > 0;
     const hasHumiditySensor = !!this.humiditySensor;
     const hasOccupancySensors = this.occupancySensors.size > 0;
     const hasWindowSensors = this.windowSensors.size > 0;
 
-    if (!hasTempSensor && !hasHumiditySensor && !hasOccupancySensors && !hasWindowSensors) {
+    if (!hasTempSensors && !hasHumiditySensor && !hasOccupancySensors && !hasWindowSensors) {
       return nothing;
     }
 
     const lang = this.hass.language;
     return html`
-      ${hasTempSensor
+      ${hasTempSensors
         ? html`
             <div class="section-subtitle">${localize("devices.temp_sensors", lang)}</div>
-            ${this._renderSensorViewRow(this.temperatureSensor, "temp")}
+            ${tempSensorIds.map((id) => this._renderSensorViewRow(id, "temp"))}
           `
         : nothing}
       ${hasHumiditySensor
@@ -532,10 +549,7 @@ export class RsSensorSection extends LitElement {
       : [];
 
     const areaTempIds = new Set(areaTempSensors.map((e) => e.entity_id));
-    const externalTempSensor =
-      this.temperatureSensor && !areaTempIds.has(this.temperatureSensor)
-        ? this.temperatureSensor
-        : null;
+    const externalTempSensors = this._temperatureSensorIds().filter((id) => !areaTempIds.has(id));
 
     const areaHumidityIds = new Set(areaHumiditySensors.map((e) => e.entity_id));
     const externalHumiditySensor =
@@ -567,8 +581,8 @@ export class RsSensorSection extends LitElement {
         title: localize("devices.temp_sensors", lang),
         emptyText: localize("devices.no_temp_sensors", lang),
         areaSensors: areaTempSensors,
-        externalSensors: externalTempSensor ? [externalTempSensor] : [],
-        selectedCount: this.temperatureSensor ? 1 : 0,
+        externalSensors: externalTempSensors,
+        selectedCount: this._temperatureSensorIds().length,
       })}
       ${this._renderBlock({
         kind: "humidity",
@@ -769,6 +783,7 @@ export class RsSensorSection extends LitElement {
 
     const selected = kind === "temp" ? this.temperatureSensor : this.humiditySensor;
     const isSelected = selected === entityId;
+    const isIncludedTemp = this.temperatureSensors.has(entityId) || isSelected;
     const unit = kind === "temp" ? tempUnit(this.hass) : "%";
     const currentValue = entityId.startsWith("climate.")
       ? state?.attributes?.current_temperature
@@ -780,10 +795,27 @@ export class RsSensorSection extends LitElement {
 
     return html`
       <div
-        class="row ${isSelected ? "selected" : ""}"
-        @click=${() => this._onSensorSelected(isSelected ? "" : entityId, kind)}
+        class="row ${isSelected || (kind === "temp" && isIncludedTemp) ? "selected" : ""}"
+        @click=${(e: Event) => {
+          if ((e.target as HTMLElement).tagName === "HA-CHECKBOX") return;
+          this._onSensorSelected(isSelected ? "" : entityId, kind);
+        }}
       >
-        <ha-radio .checked=${isSelected} name="${kind}-sensor"></ha-radio>
+        ${kind === "temp"
+          ? html`
+              <div class="temp-controls">
+                <ha-radio .checked=${isSelected} name="temp-sensor"></ha-radio>
+                <span class="temp-role">${localize("devices.primary_sensor", lang)}</span>
+                <ha-checkbox
+                  .checked=${isIncludedTemp}
+                  @change=${(e: Event) => {
+                    const t = e.target as HTMLElement & { checked: boolean };
+                    this._onTemperatureSensorToggle(entityId, t.checked);
+                  }}
+                ></ha-checkbox>
+              </div>
+            `
+          : html`<ha-radio .checked=${isSelected} name="${kind}-sensor"></ha-radio>`}
         <div class="row-info">
           <div class="row-name-line">
             <span class="row-name">${friendlyName}</span>
@@ -803,6 +835,7 @@ export class RsSensorSection extends LitElement {
     const idAfterDot = id.substring(id.indexOf(".") + 1);
     if (idAfterDot.startsWith("roommind_")) return false;
     if (this.temperatureSensor === id) return false;
+    if (this.temperatureSensors.has(id)) return false;
     if (this.humiditySensor === id) return false;
     if (this.occupancySensors.has(id)) return false;
     if (this.windowSensors.has(id)) return false;
@@ -865,6 +898,41 @@ export class RsSensorSection extends LitElement {
         composed: true,
       }),
     );
+    if (kind === "temp") {
+      if (entityId) {
+        this._onTemperatureSensorToggle(entityId, true);
+      } else {
+        this.dispatchEvent(
+          new CustomEvent("sensor-changed", {
+            detail: { key: "temperature_sensors", value: [] },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+      }
+    }
+  }
+
+  private _onTemperatureSensorToggle(entityId: string, checked: boolean) {
+    const next = new Set(this.temperatureSensors);
+    if (checked) next.add(entityId);
+    else next.delete(entityId);
+    this.dispatchEvent(
+      new CustomEvent("sensor-changed", {
+        detail: { key: "temperature_sensors", value: [...next] },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  private _temperatureSensorIds(): string[] {
+    const ids: string[] = [];
+    if (this.temperatureSensor) ids.push(this.temperatureSensor);
+    for (const id of this.temperatureSensors) {
+      if (id && !ids.includes(id)) ids.push(id);
+    }
+    return ids;
   }
 
   private _onOccupancyToggle(entityId: string, checked: boolean) {

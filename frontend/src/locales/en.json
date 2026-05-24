@@ -159,6 +159,7 @@
 
   "devices.climate_entities": "Climate entities",
   "devices.temp_sensors": "Temperature sensors",
+  "devices.primary_sensor": "Primary",
   "devices.humidity_sensors": "Humidity sensors",
   "devices.no_climate": "No climate entities found in this area.",
   "devices.no_temp_sensors": "No temperature sensors found in this area.",

@@ -48,6 +48,7 @@ def _migrate_room_temps(room: dict) -> dict:
 def _migrate_room(room: dict) -> dict:
     """Apply all read-time migrations (safety net)."""
     _migrate_room_temps(room)
+    room.setdefault("temperature_sensors", [])
     migrate_heat_pump_devices(room.get("devices", []))
     ensure_room_has_devices(room)
     return room
@@ -202,6 +203,7 @@ class RoomMindStore:
             "area_id": area_id,
             "devices": config.get("devices", []),
             "temperature_sensor": config.get("temperature_sensor", ""),
+            "temperature_sensors": config.get("temperature_sensors", []),
             "humidity_sensor": config.get("humidity_sensor", ""),
             "occupancy_sensors": config.get("occupancy_sensors", []),
             "climate_mode": config.get("climate_mode", "auto"),

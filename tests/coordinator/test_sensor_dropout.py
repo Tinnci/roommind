@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import time
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from custom_components.roommind.const import MAX_SENSOR_STALENESS, MODE_IDLE
+from custom_components.roommind.control.thermal_model import TemperatureObservation
 
 from .conftest import (
     MANAGED_ROOM,
@@ -38,6 +40,92 @@ async def test_sensor_dropout_keeps_previous_mode(hass, mock_config_entry):
     assert room2["mode"] == "heating", "sensor dropout should use cached temp, not idle"
     assert room2["current_temp"] == 18.0, "current_temp should show cached value"
     assert room2["current_temp_raw"] is None, "current_temp_raw should be None (real reading)"
+
+
+def test_read_room_sensors_returns_multi_sensor_observations(hass, mock_config_entry):
+    """Configured auxiliary temperature sensors become EKF observations."""
+    now = datetime.now(UTC)
+    room = {
+        **SAMPLE_ROOM,
+        "temperature_sensors": ["sensor.living_room_temp", "sensor.living_room_trv"],
+    }
+
+    def _mock_state(entity_id):
+        state = MagicMock()
+        state.attributes = {"unit_of_measurement": "°C"}
+        state.last_reported = now - timedelta(seconds=5)
+        if entity_id == "sensor.living_room_temp":
+            state.state = "20.0"
+            return state
+        if entity_id == "sensor.living_room_trv":
+            state.state = "20.4"
+            return state
+        if entity_id == "sensor.living_room_humidity":
+            state.state = "55.0"
+            return state
+        return None
+
+    hass.states.get = MagicMock(side_effect=_mock_state)
+    coordinator = _create_coordinator(hass, mock_config_entry)
+
+    current_temp, current_temp_raw, current_humidity, has_external_sensor, observations = coordinator._read_room_sensors(
+        room,
+        "living_room_abc12345",
+    )
+
+    assert current_temp == 20.0
+    assert current_temp_raw == 20.0
+    assert current_humidity == 55.0
+    assert has_external_sensor is True
+    assert [observation.entity_id for observation in observations] == [
+        "sensor.living_room_temp",
+        "sensor.living_room_trv",
+    ]
+    assert observations[0].is_primary is True
+    assert observations[0].variance < observations[1].variance
+
+
+@pytest.mark.asyncio
+async def test_observe_and_train_uses_calibrated_temperature_observations(hass, mock_config_entry):
+    """EKF training receives bias-corrected observations from the fusion manager."""
+    coordinator = _create_coordinator(hass, mock_config_entry)
+    coordinator.outdoor_temp_effective = 5.0
+    raw_observations = [
+        TemperatureObservation(value=20.0, variance=0.04, entity_id="sensor.wall", is_primary=True),
+        TemperatureObservation(value=22.0, variance=0.16, entity_id="sensor.trv"),
+    ]
+    corrected_observations = [
+        raw_observations[0],
+        TemperatureObservation(value=20.5, variance=0.16, entity_id="sensor.trv"),
+    ]
+    coordinator._sensor_fusion.calibrate_observations = MagicMock(return_value=corrected_observations)
+    coordinator._ekf_training.process = MagicMock()
+    coordinator._observe_device_action = MagicMock(return_value=(None, 0.0))
+
+    await coordinator._observe_and_train(
+        area_id="living_room_abc12345",
+        room=SAMPLE_ROOM,
+        settings={},
+        current_temp_raw=20.0,
+        temperature_observations=raw_observations,
+        mode="heating",
+        power_fraction=0.5,
+        window_open=False,
+        raw_open=False,
+        q_residual=0.0,
+        shading_factor=1.0,
+        q_occupancy=0.0,
+        has_external_sensor=True,
+        heat_source_plan=None,
+        climate_active=True,
+    )
+
+    coordinator._sensor_fusion.calibrate_observations.assert_called_once_with(
+        raw_observations,
+        mode="heating",
+        power_fraction=0.5,
+    )
+    assert coordinator._ekf_training.process.call_args.kwargs["current_observations"] == corrected_observations
 
 
 @pytest.mark.asyncio

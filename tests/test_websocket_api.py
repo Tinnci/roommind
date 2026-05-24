@@ -101,6 +101,7 @@ async def test_save_room_creates_new(ws_hass, store, connection):
         "area_id": "living_room",
         "thermostats": ["climate.living_room_trv"],
         "temperature_sensor": "sensor.living_room_temp",
+        "temperature_sensors": ["sensor.living_room_temp", "sensor.living_room_trv_temp"],
     }
     await _save_room(ws_hass, connection, msg)
 
@@ -111,6 +112,7 @@ async def test_save_room_creates_new(ws_hass, store, connection):
     assert room["area_id"] == "living_room"
     assert room["thermostats"] == ["climate.living_room_trv"]
     assert room["temperature_sensor"] == "sensor.living_room_temp"
+    assert room["temperature_sensors"] == ["sensor.living_room_temp", "sensor.living_room_trv_temp"]
     # Defaults for fields not provided
     assert room["acs"] == []
     assert room["climate_mode"] == "auto"

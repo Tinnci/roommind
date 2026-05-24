@@ -10,6 +10,7 @@ import pytest
 from custom_components.roommind.control.thermal_model import (
     RCModel,
     RoomModelManager,
+    TemperatureObservation,
     ThermalEKF,
 )
 
@@ -127,6 +128,43 @@ def test_ekf_first_update_initializes():
     # No actual learning happened — counters unchanged
     assert ekf._n_updates == 0
     assert ekf._n_idle == 0
+
+
+def test_ekf_update_observations_fuses_measurements_by_variance():
+    """Multiple temperature observations are fused using their measurement variance."""
+    ekf = ThermalEKF(T_init=20.0)
+    ekf.update(T_measured=20.0, T_outdoor=10.0, mode="idle", dt_minutes=5.0)
+
+    ekf.update_observations(
+        [
+            TemperatureObservation(value=21.0, variance=0.04, entity_id="sensor.wall"),
+            TemperatureObservation(value=22.0, variance=0.16, entity_id="sensor.trv"),
+        ],
+        T_outdoor=10.0,
+        mode="idle",
+        dt_minutes=5.0,
+    )
+
+    assert ekf._x[0] == pytest.approx(21.2, abs=0.5)
+    assert ekf._P[0][0] < ThermalEKF._R
+
+
+def test_ekf_update_observations_drops_absolute_temperature_outlier():
+    """A single auxiliary observation with >3C residual is excluded from the update."""
+    ekf = ThermalEKF(T_init=20.0)
+    ekf.update(T_measured=20.0, T_outdoor=10.0, mode="idle", dt_minutes=5.0)
+
+    ekf.update_observations(
+        [
+            TemperatureObservation(value=20.2, variance=0.04, entity_id="sensor.wall"),
+            TemperatureObservation(value=27.0, variance=0.04, entity_id="sensor.bad_trv"),
+        ],
+        T_outdoor=10.0,
+        mode="idle",
+        dt_minutes=5.0,
+    )
+
+    assert ekf._x[0] == pytest.approx(20.2, abs=0.4)
 
 
 def test_ekf_learns_alpha_from_idle():
@@ -568,6 +606,21 @@ def test_manager_update_room():
         mode="heating",
         dt_minutes=5,
     )
+    est = mgr.get_estimator("living_room")
+    assert est._n_updates >= 1
+
+
+def test_manager_update_observations_room():
+    """Update with multiple observations records a room EKF observation."""
+    mgr = RoomModelManager()
+    observations = [
+        TemperatureObservation(value=20.0, variance=0.04, entity_id="sensor.wall"),
+        TemperatureObservation(value=20.5, variance=0.16, entity_id="sensor.trv"),
+    ]
+
+    mgr.update_observations("living_room", observations, 5.0, "heating", 5)
+    mgr.update_observations("living_room", observations, 5.0, "heating", 5)
+
     est = mgr.get_estimator("living_room")
     assert est._n_updates >= 1
 

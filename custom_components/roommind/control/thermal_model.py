@@ -20,8 +20,25 @@ from __future__ import annotations
 
 import logging
 import math
+from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import datetime
 
 _LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class TemperatureObservation:
+    """A temperature measurement channel for EKF observation fusion."""
+
+    value: float
+    variance: float = 0.04
+    entity_id: str | None = None
+    age_s: float = 0.0
+    last_reported: datetime | None = None
+    last_updated: datetime | None = None
+    last_changed: datetime | None = None
+    is_primary: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -275,6 +292,7 @@ class ThermalEKF:
 
     # Measurement noise
     _R: float = 0.04  # sensor noise variance (0.2 degC std)
+    _MULTI_OBSERVATION_ABS_OUTLIER: float = 3.0  # degC
 
     # Initial covariance diagonal — sized to prevent first-update overshoot.
     # Rule: K = F*P_init / (F^2*P_init + R) should stay below ~1.0.
@@ -589,6 +607,58 @@ class ThermalEKF:
         else:
             self._n_idle += 1
 
+    def update_observations(
+        self,
+        observations: Sequence[TemperatureObservation],
+        T_outdoor: float,
+        mode: str,
+        dt_minutes: float,
+        *,
+        power_fraction: float = 1.0,
+        q_solar: float = 0.0,
+        q_residual: float = 0.0,
+        q_occupancy: float = 0.0,
+    ) -> None:
+        """Run one EKF cycle using multiple independent temperature observations."""
+        if dt_minutes <= 0:
+            return
+
+        usable = self._usable_temperature_observations(observations)
+        if not usable:
+            return
+
+        if not self._initialized:
+            self._x[0] = self._weighted_temperature_mean(usable)
+            self._initialized = True
+            self._last_mode = mode
+            return
+
+        predict_mode = mode
+        dt_h = dt_minutes / 60.0
+
+        self._predict_step(
+            T_outdoor,
+            predict_mode,
+            dt_h,
+            power_fraction=power_fraction,
+            q_solar=q_solar,
+            q_residual=q_residual,
+            q_occupancy=q_occupancy,
+        )
+
+        self._update_step_observations(usable)
+        self._clamp_parameters()
+        self._enforce_psd()
+
+        self._last_mode = mode
+        self._n_updates += 1
+        if predict_mode == "heating":
+            self._n_heating += 1
+        elif predict_mode == "cooling":
+            self._n_cooling += 1
+        else:
+            self._n_idle += 1
+
     def get_model(self) -> RCModel:
         """Extract an RCModel (C=1 normalization) for the MPC optimizer.
 
@@ -762,11 +832,55 @@ class ThermalEKF:
 
         self._P = P_new
 
+    def _usable_temperature_observations(
+        self, observations: Sequence[TemperatureObservation]
+    ) -> list[TemperatureObservation]:
+        """Return finite observations with positive measurement variance."""
+        usable: list[TemperatureObservation] = []
+        for observation in observations:
+            if not math.isfinite(observation.value):
+                continue
+            if not math.isfinite(observation.variance) or observation.variance <= 0:
+                continue
+            usable.append(observation)
+        return usable
+
+    def _weighted_temperature_mean(self, observations: Sequence[TemperatureObservation]) -> float:
+        """Return inverse-variance weighted mean for initialization."""
+        total_weight = sum(1.0 / observation.variance for observation in observations)
+        if total_weight <= 0:
+            return self._x[0]
+        return sum(observation.value / observation.variance for observation in observations) / total_weight
+
     def _update_step(self, T_measured: float) -> None:
         """EKF update: correct state with measurement.
 
         Measurement model: H = [1, 0, 0, 0, 0, 0], so y = T_measured.
         """
+        self._update_step_with_variance(T_measured, self._R)
+
+    def _update_step_observations(self, observations: Sequence[TemperatureObservation]) -> None:
+        """EKF update for multiple temperature measurements.
+
+        All channels observe the same state component.  Independent scalar
+        updates are equivalent to a batch update for this linear measurement
+        model, while letting us reject per-channel absolute outliers cleanly.
+        """
+        predicted_temperature = self._x[0]
+        accepted = [
+            observation
+            for observation in observations
+            if observation.is_primary
+            or abs(observation.value - predicted_temperature) <= self._MULTI_OBSERVATION_ABS_OUTLIER
+        ]
+        if not accepted:
+            _LOGGER.debug("EKF: all temperature observations rejected as outliers")
+            return
+        for observation in accepted:
+            self._update_step_with_variance(observation.value, observation.variance)
+
+    def _update_step_with_variance(self, T_measured: float, measurement_variance: float) -> None:
+        """EKF scalar measurement update with an explicit variance."""
         N = self._N
         P = self._P
 
@@ -775,10 +889,10 @@ class ThermalEKF:
         innovation = T_measured - y_pred
 
         # Innovation covariance: S = P[0][0] + R
-        S = P[0][0] + self._R
+        S = P[0][0] + measurement_variance
 
         # Outlier detection via normalized innovation
-        R_eff = self._R
+        R_eff = measurement_variance
         if S > 0:
             norm_innov = abs(innovation) / math.sqrt(S)
             if norm_innov > self._ANOMALY_SIGMA:
@@ -787,7 +901,7 @@ class ThermalEKF:
                     innovation,
                     norm_innov,
                 )
-                R_eff = self._R * self._ANOMALY_R_INFLATE
+                R_eff = measurement_variance * self._ANOMALY_R_INFLATE
                 S = P[0][0] + R_eff
 
         if S < 1e-12:
@@ -800,14 +914,18 @@ class ThermalEKF:
         for i in range(N):
             self._x[i] += K[i] * innovation
 
-        # Covariance update: P = (I - K @ H) @ P
-        # Since H = [1, 0, 0, 0, 0, 0]:  P_new[i][j] = P[i][j] - K[i] * P[0][j]
-        P_new = [[P[i][j] - K[i] * P[0][j] for j in range(N)] for i in range(N)]
-
-        # Add K * R_eff * K^T for numerical stability (Joseph-form correction)
+        # Covariance update using Joseph form:
+        # P = (I - K @ H) @ P @ (I - K @ H)^T + K @ R @ K^T
+        # with H = [1, 0, 0, 0, 0, 0].
+        P_new = [[0.0] * N for _ in range(N)]
         for i in range(N):
             for j in range(N):
-                P_new[i][j] += K[i] * R_eff * K[j]
+                P_new[i][j] = (
+                    P[i][j]
+                    - K[i] * P[0][j]
+                    - P[i][0] * K[j]
+                    + K[i] * (P[0][0] + R_eff) * K[j]
+                )
 
         self._P = P_new
 
@@ -1014,6 +1132,35 @@ class RoomModelManager:
         est.set_applicable_modes(can_heat, can_cool)
         est.update(
             T_new,
+            T_outdoor,
+            mode,
+            dt_minutes,
+            power_fraction=power_fraction,
+            q_solar=q_solar,
+            q_residual=q_residual,
+            q_occupancy=q_occupancy,
+        )
+
+    def update_observations(
+        self,
+        area_id: str,
+        observations: Sequence[TemperatureObservation],
+        T_outdoor: float,
+        mode: str,
+        dt_minutes: float,
+        *,
+        can_heat: bool = True,
+        can_cool: bool = True,
+        power_fraction: float = 1.0,
+        q_solar: float = 0.0,
+        q_residual: float = 0.0,
+        q_occupancy: float = 0.0,
+    ) -> None:
+        """Feed multiple observed temperature channels to the room's estimator."""
+        est = self.get_estimator(area_id)
+        est.set_applicable_modes(can_heat, can_cool)
+        est.update_observations(
+            observations,
             T_outdoor,
             mode,
             dt_minutes,

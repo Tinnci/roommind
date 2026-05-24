@@ -49,6 +49,7 @@ export class RsRoomDetail extends LitElement {
 
   @state() private _devices: DeviceConfig[] = [];
   @state() private _selectedTempSensor = "";
+  @state() private _selectedTempSensors: Set<string> = new Set();
   @state() private _selectedHumiditySensor = "";
   @state() private _selectedOccupancySensors: Set<string> = new Set();
   @state() private _selectedWindowSensors: Set<string> = new Set();
@@ -246,6 +247,16 @@ export class RsRoomDetail extends LitElement {
         ];
       }
       this._selectedTempSensor = this.config.temperature_sensor;
+      this._selectedTempSensors = new Set(
+        this.config.temperature_sensors?.length
+          ? this.config.temperature_sensors
+          : this.config.temperature_sensor
+            ? [this.config.temperature_sensor]
+            : [],
+      );
+      if (this._selectedTempSensor) {
+        this._selectedTempSensors.add(this._selectedTempSensor);
+      }
       this._selectedHumiditySensor = this.config.humidity_sensor ?? "";
       this._selectedOccupancySensors = new Set(this.config.occupancy_sensors ?? []);
       this._selectedWindowSensors = new Set(this.config.window_sensors ?? []);
@@ -286,6 +297,7 @@ export class RsRoomDetail extends LitElement {
     } else {
       this._devices = [];
       this._selectedTempSensor = "";
+      this._selectedTempSensors = new Set();
       this._selectedHumiditySensor = "";
       this._selectedOccupancySensors = new Set();
       this._selectedWindowSensors = new Set();
@@ -484,6 +496,7 @@ export class RsRoomDetail extends LitElement {
                     .area=${this.area}
                     .editing=${false}
                     .temperatureSensor=${this._selectedTempSensor}
+                    .temperatureSensors=${this._selectedTempSensors}
                     .humiditySensor=${this._selectedHumiditySensor}
                     .occupancySensors=${this._selectedOccupancySensors}
                     .windowSensors=${this._selectedWindowSensors}
@@ -723,6 +736,7 @@ export class RsRoomDetail extends LitElement {
             .area=${this.area}
             .editing=${true}
             .temperatureSensor=${this._selectedTempSensor}
+            .temperatureSensors=${this._selectedTempSensors}
             .humiditySensor=${this._selectedHumiditySensor}
             .occupancySensors=${this._selectedOccupancySensors}
             .windowSensors=${this._selectedWindowSensors}
@@ -918,6 +932,21 @@ export class RsRoomDetail extends LitElement {
     const { key, value } = e.detail;
     if (key === "temperature_sensor") {
       this._selectedTempSensor = value as string;
+      if (this._selectedTempSensor) {
+        this._selectedTempSensors = new Set([
+          this._selectedTempSensor,
+          ...this._selectedTempSensors,
+        ]);
+      } else {
+        this._selectedTempSensors = new Set();
+      }
+    } else if (key === "temperature_sensors") {
+      const next = new Set(value as string[]);
+      if (this._selectedTempSensor && !next.has(this._selectedTempSensor)) {
+        this._selectedTempSensor = [...next][0] ?? "";
+      }
+      if (this._selectedTempSensor) next.add(this._selectedTempSensor);
+      this._selectedTempSensors = next;
     } else if (key === "humidity_sensor") {
       this._selectedHumiditySensor = value as string;
     } else if (key === "occupancy_sensors") {
@@ -1051,6 +1080,7 @@ export class RsRoomDetail extends LitElement {
         area_id: this.area.area_id,
         devices: this._devices,
         temperature_sensor: this._selectedTempSensor,
+        temperature_sensors: this._temperatureSensorIdsForSave(),
         humidity_sensor: this._selectedHumiditySensor,
         occupancy_sensors: [...this._selectedOccupancySensors],
         window_sensors: [...this._selectedWindowSensors],
@@ -1107,6 +1137,15 @@ export class RsRoomDetail extends LitElement {
       this._error = message;
       fireSaveStatus(this, "error");
     }
+  }
+
+  private _temperatureSensorIdsForSave(): string[] {
+    const ids: string[] = [];
+    if (this._selectedTempSensor) ids.push(this._selectedTempSensor);
+    for (const id of this._selectedTempSensors) {
+      if (id && !ids.includes(id)) ids.push(id);
+    }
+    return ids;
   }
 }
 

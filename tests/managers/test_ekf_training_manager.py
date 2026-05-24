@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from custom_components.roommind.const import EKF_UPDATE_MIN_DT
+from custom_components.roommind.control.thermal_model import TemperatureObservation
 from custom_components.roommind.managers.ekf_training_manager import EkfTrainingManager
 
 
@@ -14,6 +15,7 @@ from custom_components.roommind.managers.ekf_training_manager import EkfTraining
 def model_manager():
     mm = MagicMock()
     mm.update = MagicMock()
+    mm.update_observations = MagicMock()
     mm.update_window_open = MagicMock()
     return mm
 
@@ -200,6 +202,30 @@ class TestProcess:
         )
         model_manager.update.assert_called_once()
         assert mgr._accumulated_dt["r1"] == 0.0
+
+    def test_accumulation_with_observations_calls_update_observations(self, mgr, model_manager):
+        """Multi-sensor observations should use the EKF multi-observation path."""
+        observations = [
+            TemperatureObservation(value=20.0, variance=0.04, entity_id="sensor.wall", is_primary=True),
+            TemperatureObservation(value=20.4, variance=0.16, entity_id="sensor.trv"),
+        ]
+        mgr._accumulated_dt["r1"] = EKF_UPDATE_MIN_DT - 0.1
+        mgr._accumulated_mode["r1"] = "heat"
+        mgr._accumulated_pf["r1"] = 1.0
+
+        mgr.process(
+            "r1",
+            **{**self.COMMON, "dt_minutes": 0.2},
+            ekf_mode="heat",
+            ekf_pf=1.0,
+            window_open=False,
+            raw_open=False,
+            current_observations=observations,
+        )
+
+        model_manager.update.assert_not_called()
+        model_manager.update_observations.assert_called_once()
+        assert model_manager.update_observations.call_args.args[1] == observations
 
     def test_mode_transition_flushes_before_accumulating(self, mgr, model_manager):
         """Switching from heat to cool should flush heat data first."""

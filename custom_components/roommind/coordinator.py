@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from homeassistant.components.persistent_notification import async_create as async_create_notification
@@ -52,7 +52,7 @@ from .control.mpc_controller import (
     is_mpc_active,
 )
 from .control.solar import compute_q_solar_norm
-from .control.thermal_model import RoomModelManager
+from .control.thermal_model import RoomModelManager, TemperatureObservation
 from .managers.compressor_group_manager import (
     CompressorGroupConfig,
     CompressorGroupManager,
@@ -64,6 +64,7 @@ from .managers.ekf_training_manager import EkfTrainingManager
 from .managers.heat_source_orchestrator import HeatSourcePlan, evaluate_heat_sources
 from .managers.mold_manager import MoldManager
 from .managers.residual_heat_tracker import ResidualHeatTracker
+from .managers.sensor_fusion_manager import SensorFusionManager
 from .managers.valve_manager import ValveManager
 from .managers.weather_manager import WeatherManager
 from .managers.window_manager import WindowManager
@@ -132,6 +133,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         self._residual_tracker = ResidualHeatTracker()
         # EKF training accumulation
         self._ekf_training = EkfTrainingManager(self._model_manager)
+        self._sensor_fusion = SensorFusionManager()
         # Cover/blind automatic control
         from .managers.cover_manager import CoverManager
 
@@ -351,18 +353,35 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         self,
         room: dict,
         area_id: str,
-    ) -> tuple[float | None, float | None, float | None, bool]:
+    ) -> tuple[float | None, float | None, float | None, bool, list[TemperatureObservation]]:
         """Read temperature and humidity sensors for a room.
 
-        Returns (current_temp, current_temp_raw, current_humidity, has_external_sensor).
+        Returns (current_temp, current_temp_raw, current_humidity, has_external_sensor, observations).
         """
-        temp_sensor_id = room.get("temperature_sensor")
-        has_external_sensor = bool(temp_sensor_id)
+        primary_sensor_id = room.get("temperature_sensor")
+        temp_sensor_ids = self._temperature_sensor_ids(room)
+        has_external_sensor = bool(temp_sensor_ids)
+        observations: list[TemperatureObservation] = []
+        now = datetime.now(UTC)
 
-        raw_temp = read_sensor_value(self.hass, temp_sensor_id, area_id, "temperature")
-        current_temp = (
-            ha_temp_to_celsius(self.hass, raw_temp, entity_id=temp_sensor_id) if raw_temp is not None else None
-        )
+        current_temp: float | None = None
+        for temp_sensor_id in temp_sensor_ids:
+            raw_temp = read_sensor_value(self.hass, temp_sensor_id, area_id, "temperature")
+            temp_c = (
+                ha_temp_to_celsius(self.hass, raw_temp, entity_id=temp_sensor_id) if raw_temp is not None else None
+            )
+            if current_temp is None and temp_c is not None:
+                current_temp = temp_c
+            state = self.hass.states.get(temp_sensor_id) if temp_sensor_id else None
+            observation = self._sensor_fusion.observation_from_state(
+                temp_sensor_id,
+                state,
+                now=now,
+                value_c=temp_c,
+                is_primary=(temp_sensor_id == primary_sensor_id),
+            )
+            if observation is not None:
+                observations.append(observation)
 
         # Fallback: read current_temperature from first thermostat/AC if no external sensor
         if current_temp is None and not has_external_sensor:
@@ -389,7 +408,24 @@ class RoomMindCoordinator(DataUpdateCoordinator):
 
         current_humidity = read_sensor_value(self.hass, room.get("humidity_sensor"), area_id, "humidity")
 
-        return current_temp, current_temp_raw, current_humidity, has_external_sensor
+        return current_temp, current_temp_raw, current_humidity, has_external_sensor, observations
+
+    def _temperature_sensor_ids(self, room: dict) -> list[str]:
+        """Return configured temperature sensors with the primary sensor first."""
+        sensor_ids: list[str] = []
+        primary = room.get("temperature_sensor")
+        if primary:
+            sensor_ids.append(primary)
+
+        extra_sensors = room.get("temperature_sensors", []) or []
+        if isinstance(extra_sensors, str):
+            extra_sensors = [extra_sensors]
+        for item in extra_sensors:
+            entity_id = item.get("entity_id") if isinstance(item, dict) else item
+            if entity_id and entity_id not in sensor_ids:
+                sensor_ids.append(entity_id)
+
+        return sensor_ids
 
     def _resolve_outdoor_temp(self, settings: dict) -> tuple[float | None, str]:
         """Return (temp, source) for the current cycle.
@@ -496,7 +532,13 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         """Process a single room: read sensor, evaluate schedule, apply control."""
         area_id = room.get("area_id", "unknown")
 
-        current_temp, current_temp_raw, current_humidity, has_external_sensor = self._read_room_sensors(room, area_id)
+        (
+            current_temp,
+            current_temp_raw,
+            current_humidity,
+            has_external_sensor,
+            temperature_observations,
+        ) = self._read_room_sensors(room, area_id)
 
         # --- Outdoor room: skip all control logic ---
         if room.get("is_outdoor", False):
@@ -872,6 +914,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             room=room,
             settings=settings,
             current_temp_raw=current_temp_raw,
+            temperature_observations=temperature_observations,
             mode=mode,
             power_fraction=power_fraction,
             window_open=window_open,
@@ -923,6 +966,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         room: dict,
         settings: dict,
         current_temp_raw: float | None,
+        temperature_observations: list[TemperatureObservation],
         mode: str,
         power_fraction: float,
         window_open: bool,
@@ -1040,9 +1084,15 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         learning_active = area_id not in learning_disabled
         if learning_active and current_temp_raw is not None and self.outdoor_temp_effective is not None:
             can_heat, can_cool = get_can_heat_cool(room, acs_can_heat=check_acs_can_heat(self.hass, room))
+            training_observations = self._sensor_fusion.calibrate_observations(
+                temperature_observations,
+                mode=ekf_mode or MODE_IDLE,
+                power_fraction=ekf_pf,
+            )
             self._ekf_training.process(
                 area_id=area_id,
                 current_temp=current_temp_raw,
+                current_observations=training_observations,
                 T_outdoor=self.outdoor_temp_effective,
                 ekf_mode=ekf_mode,
                 ekf_pf=ekf_pf,
