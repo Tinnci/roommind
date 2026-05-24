@@ -53,6 +53,7 @@ from .control.mpc_controller import (
 )
 from .control.solar import compute_q_solar_norm
 from .control.thermal_model import RoomModelManager, TemperatureObservation
+from .managers.airflow_control_manager import AirflowControlManager
 from .managers.compressor_group_manager import (
     CompressorGroupConfig,
     CompressorGroupManager,
@@ -61,6 +62,11 @@ from .managers.compressor_group_manager import (
 )
 from .managers.cover_orchestrator import CoverOrchestrator, CoverResult
 from .managers.ekf_training_manager import EkfTrainingManager
+from .managers.environmental_factor_manager import (
+    AIRFLOW_ROLE_VENTILATION,
+    EnvironmentalFactorManager,
+    airflow_sensor_conflict,
+)
 from .managers.heat_source_orchestrator import HeatSourcePlan, evaluate_heat_sources
 from .managers.mold_manager import MoldManager
 from .managers.residual_heat_tracker import ResidualHeatTracker
@@ -134,6 +140,8 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         # EKF training accumulation
         self._ekf_training = EkfTrainingManager(self._model_manager)
         self._sensor_fusion = SensorFusionManager()
+        self._environmental_factors = EnvironmentalFactorManager(hass)
+        self._airflow_control = AirflowControlManager(hass)
         # Cover/blind automatic control
         from .managers.cover_manager import CoverManager
 
@@ -367,9 +375,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         current_temp: float | None = None
         for temp_sensor_id in temp_sensor_ids:
             raw_temp = read_sensor_value(self.hass, temp_sensor_id, area_id, "temperature")
-            temp_c = (
-                ha_temp_to_celsius(self.hass, raw_temp, entity_id=temp_sensor_id) if raw_temp is not None else None
-            )
+            temp_c = ha_temp_to_celsius(self.hass, raw_temp, entity_id=temp_sensor_id) if raw_temp is not None else None
             if current_temp is None and temp_c is not None:
                 current_temp = temp_c
             state = self.hass.states.get(temp_sensor_id) if temp_sensor_id else None
@@ -570,6 +576,11 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 "mold_prevention_delta": 0,
                 "shading_factor": 1.0,
                 "n_observations": 0,
+                "q_fan_mix": 0.0,
+                "q_vent": 0.0,
+                "airflow_active": False,
+                "airflow_plan_level": 0.0,
+                "airflow_devices_status": [],
                 "blind_position": None,
                 "cover_auto_paused": False,
                 "cover_forced_reason": "",
@@ -653,6 +664,12 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 break
             # unavailable/unknown/off → skip (conservative: no occupancy heat)
 
+        airflow = self._environmental_factors.read_room_airflow(room)
+        airflow_has_ventilation = any(
+            status.available and status.role == AIRFLOW_ROLE_VENTILATION for status in airflow.statuses
+        )
+        airflow_mix_score = max(airflow.q_fan_mix, airflow_sensor_conflict(temperature_observations))
+
         # Determine and apply mode with MPC controller
         controller = MPCController(
             self.hass,
@@ -673,6 +690,10 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             heating_system_type=system_type,
             shading_factor=shading_factor,
             q_occupancy=q_occupancy,
+            q_vent=airflow.q_vent,
+            airflow_levels=airflow.levels,
+            airflow_has_ventilation=airflow_has_ventilation,
+            airflow_mix_score=airflow_mix_score,
         )
         mode, power_fraction = await controller.async_evaluate(current_temp, targets)
 
@@ -719,6 +740,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             power_fraction = 0.0
 
         climate_active = settings.get("climate_control_active", True) and room.get("climate_control_enabled", True)
+        airflow_plan_level = 0.0 if window_open or force_off else controller.last_airflow_level
 
         # Read device temperature limits for dynamic boost targets
         trv_max_temps: list[float] = []
@@ -831,6 +853,12 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                     compressor_forced_on=compressor_forced_on or None,
                     compressor_forced_off=compressor_forced_off or None,
                 )
+                await self._airflow_control.async_apply(
+                    area_id,
+                    room,
+                    level=airflow_plan_level,
+                    mode=mode,
+                )
             except Exception:  # noqa: BLE001
                 _LOGGER.warning(
                     "Room '%s': climate service call failed",
@@ -863,6 +891,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             # Climate control disabled — do NOT send commands.
             mode = MODE_IDLE
             power_fraction = 0.0
+            airflow_plan_level = 0.0
 
         # --- Cover/blind automatic control ---
         has_override = is_override_active(room)
@@ -922,6 +951,8 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             q_residual=q_residual,
             shading_factor=shading_factor,
             q_occupancy=q_occupancy,
+            q_fan_mix=airflow.q_fan_mix,
+            q_vent=airflow.q_vent,
             has_external_sensor=has_external_sensor,
             heat_source_plan=heat_source_plan,
             climate_active=climate_active,
@@ -954,6 +985,10 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             mold_prevention_temp_delta=mold_prevention_temp_delta,
             shading_factor=shading_factor,
             q_occupancy=q_occupancy,
+            q_fan_mix=airflow.q_fan_mix,
+            q_vent=airflow.q_vent,
+            airflow_plan_level=airflow_plan_level,
+            airflow_devices_status=airflow.as_status_dicts(),
             cover_eids=cover_eids,
             cover_result=cover_result,
             mpc_active=mpc_active,
@@ -974,6 +1009,8 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         q_residual: float,
         shading_factor: float | None,
         q_occupancy: float,
+        q_fan_mix: float = 0.0,
+        q_vent: float = 0.0,
         has_external_sensor: bool,
         heat_source_plan: Any | None,
         climate_active: bool,
@@ -1088,6 +1125,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 temperature_observations,
                 mode=ekf_mode or MODE_IDLE,
                 power_fraction=ekf_pf,
+                q_fan_mix=q_fan_mix,
             )
             self._ekf_training.process(
                 area_id=area_id,
@@ -1105,6 +1143,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 can_cool=can_cool,
                 dt_minutes=UPDATE_INTERVAL / 60.0,
                 q_occupancy=q_occupancy,
+                q_vent=q_vent,
             )
         else:
             self._ekf_training.clear(area_id)
@@ -1171,6 +1210,10 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         mold_prevention_temp_delta: float,
         shading_factor: float | None,
         q_occupancy: float,
+        q_fan_mix: float,
+        q_vent: float,
+        airflow_plan_level: float,
+        airflow_devices_status: list[dict],
         cover_eids: list[str],
         cover_result: CoverResult,
         mpc_active: bool,
@@ -1229,6 +1272,11 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             "mold_prevention_delta": mold_prevention_temp_delta,
             "shading_factor": shading_factor,
             "q_occupancy": q_occupancy,
+            "q_fan_mix": q_fan_mix,
+            "q_vent": q_vent,
+            "airflow_active": q_fan_mix > 0.0 or q_vent > 0.0,
+            "airflow_plan_level": airflow_plan_level,
+            "airflow_devices_status": airflow_devices_status,
             "n_observations": self._model_manager.get_n_observations(area_id),
             "blind_position": (self._cover_orchestrator.get_current_position(area_id) if cover_eids else None),
             "cover_auto_paused": (self._cover_orchestrator.is_user_override_active(area_id) if cover_eids else False),

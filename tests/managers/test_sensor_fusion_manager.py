@@ -150,3 +150,29 @@ def test_calibrate_observations_clamps_cooling_active_bias_negative():
     bias = fusion.get_bias("sensor.ac_outlet")
     assert bias.static_c + bias.active_c * 0.5 == pytest.approx(-2.0, abs=0.5)
     assert bias.active_c <= 0.0
+
+
+def test_calibrate_observations_mix_reduces_aux_active_bias_correction():
+    """Circulation reduces active sensor self-heating correction and aux variance."""
+    observations = [
+        TemperatureObservation(value=20.0, variance=0.04, entity_id="sensor.wall", is_primary=True),
+        TemperatureObservation(value=22.0, variance=0.16, entity_id="sensor.trv", is_primary=False),
+    ]
+    still_air = SensorFusionManager()
+    mixed_air = SensorFusionManager()
+
+    corrected_still = still_air.calibrate_observations(
+        observations,
+        mode="heating",
+        power_fraction=1.0,
+        q_fan_mix=0.0,
+    )
+    corrected_mixed = mixed_air.calibrate_observations(
+        observations,
+        mode="heating",
+        power_fraction=1.0,
+        q_fan_mix=1.0,
+    )
+
+    assert corrected_mixed[1].value > corrected_still[1].value
+    assert corrected_mixed[1].variance < corrected_still[1].variance

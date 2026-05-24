@@ -40,26 +40,26 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Node
-        uses: actions/setup-node@v6
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: "20"
+          bun-version: latest
 
       - name: Install dependencies
         working-directory: frontend
-        run: npm ci
+        run: bun install
 
       - name: Type check
         working-directory: frontend
-        run: npx tsc --noEmit
+        run: bun run typecheck
 
       - name: ESLint
         working-directory: frontend
-        run: npx eslint src/
+        run: bun run lint
 
       - name: Prettier check
         working-directory: frontend
-        run: npx prettier --check src/
+        run: bun run format:check
 
   lint:
     name: Lint

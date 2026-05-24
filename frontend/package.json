@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "typecheck": "tsgo --noEmit",
+    "build": "bun run typecheck && vite build",
     "preview": "vite preview",
     "lint": "eslint src/",
     "format": "prettier --write src/",
@@ -18,6 +19,7 @@
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.59.2",
     "@typescript-eslint/parser": "^8.56.1",
+    "@typescript/native-preview": "7.0.0-dev.20260524.1",
     "eslint": "^10.2.1",
     "eslint-plugin-lit": "^2.2.1",
     "prettier": "^3.8.3",

@@ -102,6 +102,16 @@ async def test_save_room_creates_new(ws_hass, store, connection):
         "thermostats": ["climate.living_room_trv"],
         "temperature_sensor": "sensor.living_room_temp",
         "temperature_sensors": ["sensor.living_room_temp", "sensor.living_room_trv_temp"],
+        "airflow_devices": [
+            {
+                "entity_id": "fan.living_room",
+                "role": "circulation",
+                "controllable": True,
+                "control_enabled": True,
+                "preferred_direction": "forward",
+                "preferred_oscillating": True,
+            }
+        ],
     }
     await _save_room(ws_hass, connection, msg)
 
@@ -113,6 +123,16 @@ async def test_save_room_creates_new(ws_hass, store, connection):
     assert room["thermostats"] == ["climate.living_room_trv"]
     assert room["temperature_sensor"] == "sensor.living_room_temp"
     assert room["temperature_sensors"] == ["sensor.living_room_temp", "sensor.living_room_trv_temp"]
+    assert room["airflow_devices"] == [
+        {
+            "entity_id": "fan.living_room",
+            "role": "circulation",
+            "controllable": True,
+            "control_enabled": True,
+            "preferred_direction": "forward",
+            "preferred_oscillating": True,
+        }
+    ]
     # Defaults for fields not provided
     assert room["acs"] == []
     assert room["climate_mode"] == "auto"

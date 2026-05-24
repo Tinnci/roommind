@@ -13,18 +13,26 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Node
-        uses: actions/setup-node@v6
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: "20"
+          bun-version: latest
 
       - name: Install frontend dependencies
         working-directory: frontend
-        run: npm ci
+        run: bun install
+
+      - name: Lint frontend
+        working-directory: frontend
+        run: bun run lint
+
+      - name: Type check frontend
+        working-directory: frontend
+        run: bun run typecheck
 
       - name: Build frontend
         working-directory: frontend
-        run: npm run build
+        run: bun --bun vite build
 
       - name: Create release zip
         run: cd custom_components/roommind && zip -r ../../roommind.zip . -x "__pycache__/*"

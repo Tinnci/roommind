@@ -65,6 +65,7 @@ _ROOM_SAVE_FIELDS = (
     "devices",
     "temperature_sensor",
     "temperature_sensors",
+    "airflow_devices",
     "humidity_sensor",
     "occupancy_sensors",
     "climate_mode",
@@ -167,6 +168,10 @@ def _validate_no_own_entities(config: dict, own_prefix: str) -> str | None:
         eid = device.get("entity_id", "")
         if eid.split(".", 1)[-1].startswith(own_prefix):
             return f"Cannot assign RoomMind's own entity '{eid}' to a room"
+    for device in config.get("airflow_devices", []):
+        eid = device.get("entity_id", "")
+        if eid.split(".", 1)[-1].startswith(own_prefix):
+            return f"Cannot assign RoomMind's own entity '{eid}' to a room"
     for field in ("temperature_sensor", "humidity_sensor"):
         eid = config.get(field, "")
         if eid and eid.split(".", 1)[-1].startswith(own_prefix):
@@ -179,6 +184,9 @@ def _validate_no_duplicate_devices(config: dict) -> str | None:
     device_eids = [d["entity_id"] for d in config.get("devices", [])]
     if len(device_eids) != len(set(device_eids)):
         return "devices[] contains duplicate entity_ids"
+    airflow_eids = [d["entity_id"] for d in config.get("airflow_devices", [])]
+    if len(airflow_eids) != len(set(airflow_eids)):
+        return "airflow_devices[] contains duplicate entity_ids"
     return None
 
 
@@ -320,6 +328,18 @@ async def websocket_list_rooms(
         ],
         vol.Optional("temperature_sensor"): str,
         vol.Optional("temperature_sensors"): [str],
+        vol.Optional("airflow_devices"): [
+            {
+                vol.Required("entity_id"): str,
+                vol.Required("role"): vol.In(["circulation", "ventilation", "hvac_fan"]),
+                vol.Optional("controllable", default=False): bool,
+                vol.Optional("control_enabled", default=False): bool,
+                vol.Optional("preferred_direction", default=""): str,
+                vol.Optional("preferred_oscillating", default=None): vol.Any(bool, None),
+                vol.Optional("preferred_swing_mode", default=""): str,
+                vol.Optional("preferred_swing_horizontal_mode", default=""): str,
+            }
+        ],
         vol.Optional("humidity_sensor"): str,
         vol.Optional("occupancy_sensors"): [str],
         vol.Optional("climate_mode"): vol.In(CLIMATE_MODES),

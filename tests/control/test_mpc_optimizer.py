@@ -492,6 +492,63 @@ def test_get_current_power_fraction_with_fractions():
     assert plan.get_current_power_fraction() == 0.75
 
 
+def test_plan_get_current_airflow_level():
+    plan = MPCPlan(
+        actions=["idle", "idle"],
+        temperatures=[25.0, 24.8, 24.5],
+        dt_minutes=5,
+        airflow_levels=[0.667, 0.0],
+    )
+    assert plan.get_current_airflow_level() == 0.667
+
+
+def test_optimizer_uses_ventilation_airflow_to_reduce_overheat():
+    model = RCModel(C=1.0, U=0.2, Q_heat=0.0, Q_cool=0.0, beta_vent=2.0)
+    opt = MPCOptimizer(
+        model,
+        can_heat=False,
+        can_cool=False,
+        airflow_levels=[0.0, 0.25, 0.5, 1.0],
+        airflow_has_ventilation=True,
+        airflow_energy_weight=0.01,
+    )
+
+    plan = opt.optimize(
+        T_room=26.0,
+        T_outdoor_series=[18.0] * 12,
+        heat_target_series=[21.0] * 12,
+        cool_target_series=[23.0] * 12,
+        dt_minutes=5,
+    )
+
+    assert plan.actions[0] == "idle"
+    assert plan.airflow_levels[0] == 1.0
+    assert plan.temperatures[1] < 26.0
+
+
+def test_optimizer_keeps_airflow_off_without_temperature_or_mix_benefit():
+    model = RCModel(C=1.0, U=0.2, Q_heat=0.0, Q_cool=0.0, beta_vent=0.0)
+    opt = MPCOptimizer(
+        model,
+        can_heat=False,
+        can_cool=False,
+        airflow_levels=[0.0, 0.5, 1.0],
+        airflow_has_ventilation=False,
+        airflow_mix_score=0.0,
+        airflow_energy_weight=0.2,
+    )
+
+    plan = opt.optimize(
+        T_room=21.0,
+        T_outdoor_series=[21.0] * 12,
+        heat_target_series=[20.0] * 12,
+        cool_target_series=[23.0] * 12,
+        dt_minutes=5,
+    )
+
+    assert plan.get_current_airflow_level() == 0.0
+
+
 def test_min_run_forced_idle_outdoor_gate_mid_run():
     model = RCModel(C=200.0, U=50.0, Q_heat=1000.0, Q_cool=200.0)
     opt = MPCOptimizer(

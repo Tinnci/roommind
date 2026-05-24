@@ -68,9 +68,11 @@ def test_read_room_sensors_returns_multi_sensor_observations(hass, mock_config_e
     hass.states.get = MagicMock(side_effect=_mock_state)
     coordinator = _create_coordinator(hass, mock_config_entry)
 
-    current_temp, current_temp_raw, current_humidity, has_external_sensor, observations = coordinator._read_room_sensors(
-        room,
-        "living_room_abc12345",
+    current_temp, current_temp_raw, current_humidity, has_external_sensor, observations = (
+        coordinator._read_room_sensors(
+            room,
+            "living_room_abc12345",
+        )
     )
 
     assert current_temp == 20.0
@@ -124,6 +126,7 @@ async def test_observe_and_train_uses_calibrated_temperature_observations(hass, 
         raw_observations,
         mode="heating",
         power_fraction=0.5,
+        q_fan_mix=0.0,
     )
     assert coordinator._ekf_training.process.call_args.kwargs["current_observations"] == corrected_observations
 

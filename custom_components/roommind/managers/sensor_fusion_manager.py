@@ -33,6 +33,9 @@ class SensorFusionManager:
     _ACTIVE_HEAT_MAX = 8.0
     _ACTIVE_COOL_MIN = -8.0
     _ACTIVE_COOL_MAX = 0.0
+    _MIX_ACTIVE_BIAS_REDUCTION = 0.35
+    _MIX_VARIANCE_REDUCTION = 0.4
+    _AUXILIARY_VARIANCE_MIN = 0.06
 
     def __init__(self) -> None:
         self._biases: dict[str, SensorBiasState] = {}
@@ -80,6 +83,7 @@ class SensorFusionManager:
         *,
         mode: str,
         power_fraction: float,
+        q_fan_mix: float = 0.0,
     ) -> list[TemperatureObservation]:
         """Apply online auxiliary-sensor bias correction against the primary observation."""
         primary = next((observation for observation in observations if observation.is_primary), None)
@@ -88,6 +92,9 @@ class SensorFusionManager:
 
         corrected: list[TemperatureObservation] = []
         pf = max(0.0, min(1.0, power_fraction))
+        mix = max(0.0, min(1.0, q_fan_mix))
+        bias_pf = pf * (1.0 - self._MIX_ACTIVE_BIAS_REDUCTION * mix)
+        variance_scale = 1.0 - self._MIX_VARIANCE_REDUCTION * mix
         for observation in observations:
             entity_id = observation.entity_id
             if observation.is_primary or not entity_id:
@@ -95,26 +102,32 @@ class SensorFusionManager:
                 continue
 
             bias = self._biases.get(entity_id, SensorBiasState())
-            epsilon = observation.value - (primary.value + bias.static_c + bias.active_c * pf)
+            epsilon = observation.value - (primary.value + bias.static_c + bias.active_c * bias_pf)
 
             static_c = self._clamp(bias.static_c + self._ETA_STATIC * epsilon, self._STATIC_MIN, self._STATIC_MAX)
             active_c = bias.active_c
             if mode == "heating":
                 active_c = self._clamp(
-                    bias.active_c + self._ETA_ACTIVE * epsilon * pf,
+                    bias.active_c + self._ETA_ACTIVE * epsilon * bias_pf,
                     self._ACTIVE_HEAT_MIN,
                     self._ACTIVE_HEAT_MAX,
                 )
             elif mode == "cooling":
                 active_c = self._clamp(
-                    bias.active_c + self._ETA_ACTIVE * epsilon * pf,
+                    bias.active_c + self._ETA_ACTIVE * epsilon * bias_pf,
                     self._ACTIVE_COOL_MIN,
                     self._ACTIVE_COOL_MAX,
                 )
 
             updated = SensorBiasState(static_c=static_c, active_c=active_c)
             self._biases[entity_id] = updated
-            corrected.append(replace(observation, value=observation.value - (updated.static_c + updated.active_c * pf)))
+            corrected.append(
+                replace(
+                    observation,
+                    value=observation.value - (updated.static_c + updated.active_c * bias_pf),
+                    variance=max(self._AUXILIARY_VARIANCE_MIN, observation.variance * variance_scale),
+                )
+            )
 
         return corrected
 

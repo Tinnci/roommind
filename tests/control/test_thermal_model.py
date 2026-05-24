@@ -1700,6 +1700,35 @@ def test_ekf_prediction_std_with_q_occupancy():
     assert math.isfinite(std)
 
 
+def test_rc_model_ventilation_moves_temperature_toward_outdoor():
+    model = RCModel(C=1.0, U=0.2, Q_heat=0.0, Q_cool=0.0, beta_vent=2.0)
+
+    no_vent = model.predict(26.0, 18.0, 0.0, 5.0, q_vent=0.0)
+    with_vent = model.predict(26.0, 18.0, 0.0, 5.0, q_vent=1.0)
+
+    assert with_vent < no_vent
+    assert with_vent > 18.0
+
+
+def test_ekf_learns_positive_beta_vent_from_ventilation_cooling():
+    ekf = ThermalEKF()
+    ekf.update(26.0, 18.0, "idle", 5.0, q_vent=0.0)
+
+    for i in range(1, 12):
+        observed = max(18.0, 26.0 - i * 0.45)
+        ekf.update(observed, 18.0, "idle", 5.0, q_vent=1.0)
+
+    model = ekf.get_model()
+    assert model.beta_vent > 0.0
+    assert model.predict(24.0, 18.0, 0.0, 5.0, q_vent=1.0) < model.predict(
+        24.0,
+        18.0,
+        0.0,
+        5.0,
+        q_vent=0.0,
+    )
+
+
 def test_ekf_p55_frozen_when_unoccupied():
     """P[5][5] (beta_o variance) must not grow when q_occupancy=0."""
     ekf = ThermalEKF()

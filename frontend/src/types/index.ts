@@ -52,6 +52,11 @@ export interface RoomLiveData {
   active_cover_schedule_index: number;
   active_heat_sources: string | null;
   learning_paused_reason: "outdoor_unavailable" | null;
+  q_fan_mix?: number;
+  q_vent?: number;
+  airflow_active?: boolean;
+  airflow_plan_level?: number;
+  airflow_devices_status?: AirflowDeviceStatus[];
 }
 
 export type DeviceType = "trv" | "ac";
@@ -65,6 +70,40 @@ export interface DeviceConfig {
   idle_action?: "off" | "fan_only" | "setback" | "low"; // default "off"
   idle_fan_mode?: string; // default "low"
   setpoint_mode?: "proportional" | "direct"; // default "proportional"
+}
+
+export type AirflowRole = "circulation" | "ventilation" | "hvac_fan";
+
+export interface AirflowDeviceConfig {
+  entity_id: string;
+  role: AirflowRole;
+  controllable: boolean;
+  control_enabled: boolean;
+  preferred_direction?: string;
+  preferred_oscillating?: boolean | null;
+  preferred_swing_mode?: string;
+  preferred_swing_horizontal_mode?: string;
+}
+
+export interface AirflowDeviceStatus {
+  entity_id: string;
+  role: AirflowRole;
+  available: boolean;
+  q: number;
+  controllable: boolean;
+  control_enabled: boolean;
+  domain: string;
+  percentage?: number | null;
+  preset_mode?: string | null;
+  direction?: string | null;
+  oscillating?: boolean | null;
+  fan_mode?: string | null;
+  fan_modes?: string[];
+  swing_mode?: string | null;
+  swing_modes?: string[];
+  swing_horizontal_mode?: string | null;
+  swing_horizontal_modes?: string[];
+  levels?: number[];
 }
 
 export type ConflictResolution =
@@ -90,6 +129,7 @@ export interface RoomConfig {
   thermostats: string[];
   acs: string[];
   devices?: DeviceConfig[];
+  airflow_devices?: AirflowDeviceConfig[];
   temperature_sensor: string;
   temperature_sensors?: string[];
   humidity_sensor: string;

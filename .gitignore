@@ -210,6 +210,7 @@ __marimo__/
 # Frontend
 frontend/node_modules/
 frontend/dist/
+frontend/bun.lock
 custom_components/roommind/frontend/roommind-panel.js
 
 # IDE
@@ -226,4 +227,3 @@ docs/plans/
 
 # Worktrees
 .worktrees/
-

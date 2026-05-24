@@ -718,6 +718,10 @@ class MPCController:
         mode_on_since: float | None = None,
         shading_factor: float = 1.0,
         q_occupancy: float = 0.0,
+        q_vent: float = 0.0,
+        airflow_levels: list[float] | None = None,
+        airflow_has_ventilation: bool = False,
+        airflow_mix_score: float = 0.0,
     ) -> None:
         self.hass = hass
         self.room_config = room_config
@@ -743,6 +747,11 @@ class MPCController:
         self._mode_on_since = mode_on_since
         self._shading_factor = shading_factor
         self.q_occupancy = q_occupancy
+        self.q_vent = q_vent
+        self.airflow_levels = airflow_levels or [0.0]
+        self.airflow_has_ventilation = airflow_has_ventilation
+        self.airflow_mix_score = airflow_mix_score
+        self.last_airflow_level = 0.0
         self._idle_targets: TargetTemps | None = None
 
         s = settings or {}
@@ -778,6 +787,7 @@ class MPCController:
             targets = TargetTemps(heat=t, cool=t) if t is not None else TargetTemps(heat=None, cool=None)
 
         if not self.has_external_sensor:
+            self.last_airflow_level = 0.0
             mode = self._evaluate_managed_mode(targets)
             return mode, 1.0  # managed mode: device self-regulates
 
@@ -796,10 +806,12 @@ class MPCController:
             q_solar=self.q_solar,
             q_residual=self.q_residual,
             q_occupancy=self.q_occupancy,
+            q_vent=self.q_vent,
         )
         if pred_std < MPC_MAX_PREDICTION_STD and self._has_enough_data(can_heat, can_cool):
             return self._evaluate_mpc(current_temp, targets)
         # Bang-bang fallback: binary control (1.0 power) for fast EKF learning
+        self.last_airflow_level = 0.0
         mode = self._evaluate_bangbang(current_temp, targets)
         return mode, 1.0 if mode != MODE_IDLE else 0.0
 
@@ -842,6 +854,7 @@ class MPCController:
             q_solar=self.q_solar * self._shading_factor,
             q_residual=self.q_residual,
             q_occupancy=self.q_occupancy,
+            q_vent=self.q_vent,
         )
 
     def _evaluate_mpc(
@@ -910,6 +923,9 @@ class MPCController:
             min_run_blocks=min_run,
             override_active=is_override_active(self.room_config),
             heating_system_type=self._heating_system_type,
+            airflow_levels=self.airflow_levels,
+            airflow_has_ventilation=self.airflow_has_ventilation,
+            airflow_mix_score=self.airflow_mix_score,
         )
 
         plan = optimizer.optimize(
@@ -926,6 +942,7 @@ class MPCController:
 
         action = plan.get_current_action()
         power_fraction = plan.get_current_power_fraction()
+        self.last_airflow_level = plan.get_current_airflow_level()
 
         # Safety guard: don't heat above the maximum upcoming target,
         # don't cool below the minimum upcoming target, while preserving

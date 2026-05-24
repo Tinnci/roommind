@@ -11,12 +11,14 @@ import type {
   DeviceConfig,
   DeviceType,
   DeviceRole,
+  AirflowDeviceConfig,
 } from "../types";
 import "./rs-hero-status";
 import "./rs-climate-mode-selector";
 import "./rs-schedule-settings";
 import "./rs-device-section";
 import "./rs-sensor-section";
+import "./rs-airflow-section";
 import "./rs-section-card";
 import "./rs-override-section";
 import "./rs-presence-section";
@@ -34,7 +36,14 @@ import type { RsOverrideSection } from "./rs-override-section";
 const CONTROL_DOCS_URL =
   "https://github.com/snazzybean/roommind/blob/main/docs/control-and-devices.md";
 
-type EditableSection = "schedule" | "devices" | "sensors" | "presence" | "covers" | "heatSource";
+type EditableSection =
+  | "schedule"
+  | "devices"
+  | "sensors"
+  | "airflow"
+  | "presence"
+  | "covers"
+  | "heatSource";
 
 @customElement("rs-room-detail")
 export class RsRoomDetail extends LitElement {
@@ -48,6 +57,7 @@ export class RsRoomDetail extends LitElement {
   @property({ type: Boolean }) public valveProtectionEnabled = false;
 
   @state() private _devices: DeviceConfig[] = [];
+  @state() private _airflowDevices: AirflowDeviceConfig[] = [];
   @state() private _selectedTempSensor = "";
   @state() private _selectedTempSensors: Set<string> = new Set();
   @state() private _selectedHumiditySensor = "";
@@ -246,6 +256,7 @@ export class RsRoomDetail extends LitElement {
           })),
         ];
       }
+      this._airflowDevices = [...(this.config.airflow_devices ?? [])];
       this._selectedTempSensor = this.config.temperature_sensor;
       this._selectedTempSensors = new Set(
         this.config.temperature_sensors?.length
@@ -296,6 +307,7 @@ export class RsRoomDetail extends LitElement {
       this._heatSourceAcMinOutdoor = this.config.heat_source_ac_min_outdoor ?? -15.0;
     } else {
       this._devices = [];
+      this._airflowDevices = [];
       this._selectedTempSensor = "";
       this._selectedTempSensors = new Set();
       this._selectedHumiditySensor = "";
@@ -506,6 +518,27 @@ export class RsRoomDetail extends LitElement {
                     .language=${this.hass.language}
                     @sensor-changed=${this._onSensorChanged}
                   ></rs-sensor-section>
+                </rs-section-card>
+
+                <rs-section-card
+                  icon="mdi:fan"
+                  .heading=${localize("room.section.airflow", this.hass.language)}
+                  editable
+                  @edit-click=${this._openEdit("airflow")}
+                >
+                  <rs-airflow-section
+                    .hass=${this.hass}
+                    .area=${this.area}
+                    .editing=${false}
+                    .airflowDevices=${this._airflowDevices}
+                    .statuses=${this.config?.live?.airflow_devices_status ?? []}
+                    .qFanMix=${this.config?.live?.q_fan_mix ?? 0}
+                    .qVent=${this.config?.live?.q_vent ?? 0}
+                    .planLevel=${this.config?.live?.airflow_plan_level ?? 0}
+                    .active=${this.config?.live?.airflow_active ?? false}
+                    .language=${this.hass.language}
+                    @airflow-devices-changed=${this._onAirflowDevicesChanged}
+                  ></rs-airflow-section>
                 </rs-section-card>
 
                 ${this.presenceEnabled && this.presencePersons.length > 0
@@ -747,6 +780,35 @@ export class RsRoomDetail extends LitElement {
             @sensor-changed=${this._onSensorChanged}
           ></rs-sensor-section>
         </rs-edit-dialog>`;
+      case "airflow":
+        return html`<rs-edit-dialog
+          open
+          icon="mdi:fan"
+          .heading=${localize("room.section.airflow", lang)}
+          hasInfo
+          @rs-dialog-closed=${this._closeEdit}
+        >
+          <div slot="info">
+            <b>${localize("airflow.info_title", lang)}</b><br />
+            ${localize("airflow.info_body", lang)}
+            <br /><br />
+            <b>${localize("airflow.info_control_title", lang)}</b><br />
+            ${localize("airflow.info_control_body", lang)}
+          </div>
+          <rs-airflow-section
+            .hass=${this.hass}
+            .area=${this.area}
+            .editing=${true}
+            .airflowDevices=${this._airflowDevices}
+            .statuses=${this.config?.live?.airflow_devices_status ?? []}
+            .qFanMix=${this.config?.live?.q_fan_mix ?? 0}
+            .qVent=${this.config?.live?.q_vent ?? 0}
+            .planLevel=${this.config?.live?.airflow_plan_level ?? 0}
+            .active=${this.config?.live?.airflow_active ?? false}
+            .language=${this.hass.language}
+            @airflow-devices-changed=${this._onAirflowDevicesChanged}
+          ></rs-airflow-section>
+        </rs-edit-dialog>`;
       case "presence":
         return html`<rs-edit-dialog
           open
@@ -928,6 +990,11 @@ export class RsRoomDetail extends LitElement {
     this._autoSave();
   }
 
+  private _onAirflowDevicesChanged(e: CustomEvent<{ devices: AirflowDeviceConfig[] }>) {
+    this._airflowDevices = e.detail.devices;
+    this._autoSave();
+  }
+
   private _onSensorChanged(e: CustomEvent<{ key: string; value: string | string[] | number }>) {
     const { key, value } = e.detail;
     if (key === "temperature_sensor") {
@@ -1079,6 +1146,7 @@ export class RsRoomDetail extends LitElement {
         type: "roommind/rooms/save",
         area_id: this.area.area_id,
         devices: this._devices,
+        airflow_devices: this._airflowDevices,
         temperature_sensor: this._selectedTempSensor,
         temperature_sensors: this._temperatureSensorIdsForSave(),
         humidity_sensor: this._selectedHumiditySensor,
