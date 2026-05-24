@@ -720,6 +720,8 @@ class MPCController:
         q_occupancy: float = 0.0,
         q_vent: float = 0.0,
         airflow_levels: list[float] | None = None,
+        mix_levels: list[float] | None = None,
+        vent_levels: list[float] | None = None,
         airflow_has_ventilation: bool = False,
         airflow_mix_score: float = 0.0,
     ) -> None:
@@ -749,9 +751,15 @@ class MPCController:
         self.q_occupancy = q_occupancy
         self.q_vent = q_vent
         self.airflow_levels = airflow_levels or [0.0]
+        self.mix_levels = mix_levels if mix_levels is not None else self.airflow_levels
+        self.vent_levels = (
+            vent_levels if vent_levels is not None else ([0.0] if not airflow_has_ventilation else self.airflow_levels)
+        )
         self.airflow_has_ventilation = airflow_has_ventilation
         self.airflow_mix_score = airflow_mix_score
         self.last_airflow_level = 0.0
+        self.last_airflow_mix_level = 0.0
+        self.last_airflow_vent_level = 0.0
         self._idle_targets: TargetTemps | None = None
 
         s = settings or {}
@@ -788,6 +796,8 @@ class MPCController:
 
         if not self.has_external_sensor:
             self.last_airflow_level = 0.0
+            self.last_airflow_mix_level = 0.0
+            self.last_airflow_vent_level = 0.0
             mode = self._evaluate_managed_mode(targets)
             return mode, 1.0  # managed mode: device self-regulates
 
@@ -812,6 +822,8 @@ class MPCController:
             return self._evaluate_mpc(current_temp, targets)
         # Bang-bang fallback: binary control (1.0 power) for fast EKF learning
         self.last_airflow_level = 0.0
+        self.last_airflow_mix_level = 0.0
+        self.last_airflow_vent_level = 0.0
         mode = self._evaluate_bangbang(current_temp, targets)
         return mode, 1.0 if mode != MODE_IDLE else 0.0
 
@@ -924,6 +936,8 @@ class MPCController:
             override_active=is_override_active(self.room_config),
             heating_system_type=self._heating_system_type,
             airflow_levels=self.airflow_levels,
+            mix_levels=self.mix_levels,
+            vent_levels=self.vent_levels,
             airflow_has_ventilation=self.airflow_has_ventilation,
             airflow_mix_score=self.airflow_mix_score,
         )
@@ -943,6 +957,8 @@ class MPCController:
         action = plan.get_current_action()
         power_fraction = plan.get_current_power_fraction()
         self.last_airflow_level = plan.get_current_airflow_level()
+        self.last_airflow_mix_level = plan.get_current_mix_level()
+        self.last_airflow_vent_level = plan.get_current_vent_level()
 
         # Safety guard: don't heat above the maximum upcoming target,
         # don't cool below the minimum upcoming target, while preserving

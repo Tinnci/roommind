@@ -336,6 +336,7 @@ async def websocket_list_rooms(
                 vol.Optional("control_enabled", default=False): bool,
                 vol.Optional("preferred_direction", default=""): str,
                 vol.Optional("preferred_oscillating", default=None): vol.Any(bool, None),
+                vol.Optional("preferred_preset_mode", default=""): str,
                 vol.Optional("preferred_swing_mode", default=""): str,
                 vol.Optional("preferred_swing_horizontal_mode", default=""): str,
             }

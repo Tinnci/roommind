@@ -176,3 +176,31 @@ def test_calibrate_observations_mix_reduces_aux_active_bias_correction():
 
     assert corrected_mixed[1].value > corrected_still[1].value
     assert corrected_mixed[1].variance < corrected_still[1].variance
+
+
+def test_sensor_bias_roundtrip_preserves_correction_state():
+    """Learned auxiliary sensor bias can be persisted and restored."""
+    fusion = SensorFusionManager()
+    for _ in range(200):
+        fusion.calibrate_observations(
+            [
+                TemperatureObservation(value=20.0, variance=0.04, entity_id="sensor.wall", is_primary=True),
+                TemperatureObservation(value=22.0, variance=0.16, entity_id="sensor.trv", is_primary=False),
+            ],
+            mode="heating",
+            power_fraction=0.5,
+        )
+
+    restored = SensorFusionManager.from_dict(fusion.to_dict())
+    assert restored.get_bias("sensor.trv") == fusion.get_bias("sensor.trv")
+
+    corrected = restored.calibrate_observations(
+        [
+            TemperatureObservation(value=20.0, variance=0.04, entity_id="sensor.wall", is_primary=True),
+            TemperatureObservation(value=22.0, variance=0.16, entity_id="sensor.trv", is_primary=False),
+        ],
+        mode="heating",
+        power_fraction=0.5,
+    )
+
+    assert corrected[1].value < 22.0

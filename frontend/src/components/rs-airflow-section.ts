@@ -25,6 +25,8 @@ export class RsAirflowSection extends LitElement {
   @property({ type: Number }) public qFanMix = 0;
   @property({ type: Number }) public qVent = 0;
   @property({ type: Number }) public planLevel = 0;
+  @property({ type: Number }) public mixPlanLevel = 0;
+  @property({ type: Number }) public ventPlanLevel = 0;
   @property({ type: Boolean }) public active = false;
   @property({ type: Boolean }) public editing = false;
   @property() public language = "en";
@@ -229,8 +231,12 @@ export class RsAirflowSection extends LitElement {
           <div class="summary-value">${this._percent(this.qVent)}</div>
         </div>
         <div class="summary-item">
-          <div class="summary-label">${localize("airflow.plan_level", lang)}</div>
-          <div class="summary-value">${this._percent(this.planLevel)}</div>
+          <div class="summary-label">${localize("airflow.mix_plan_level", lang)}</div>
+          <div class="summary-value">${this._percent(this.mixPlanLevel)}</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">${localize("airflow.vent_plan_level", lang)}</div>
+          <div class="summary-value">${this._percent(this.ventPlanLevel)}</div>
         </div>
       </div>
       ${this.airflowDevices.map((device) => this._renderViewRow(device))}
@@ -377,6 +383,7 @@ export class RsAirflowSection extends LitElement {
     const friendlyName = (attrs.friendly_name as string) || entityId;
     const isFan = entityId.startsWith("fan.");
     const isClimate = entityId.startsWith("climate.");
+    const presetModes = this._stringArray(attrs.preset_modes);
     const swingModes = this._stringArray(attrs.swing_modes);
     const swingHorizontalModes = this._stringArray(attrs.swing_horizontal_modes);
 
@@ -440,14 +447,14 @@ export class RsAirflowSection extends LitElement {
             </div>
           `
         : nothing}
-      ${isFan ? this._renderFanPrefs(entityId, device) : nothing}
+      ${isFan ? this._renderFanPrefs(entityId, device, presetModes) : nothing}
       ${isClimate
         ? this._renderClimatePrefs(entityId, device, swingModes, swingHorizontalModes)
         : nothing}
     `;
   }
 
-  private _renderFanPrefs(entityId: string, device: AirflowDeviceConfig) {
+  private _renderFanPrefs(entityId: string, device: AirflowDeviceConfig, presetModes: string[]) {
     const lang = this.language;
     const oscillating =
       device.preferred_oscillating === true
@@ -457,6 +464,29 @@ export class RsAirflowSection extends LitElement {
           : KEEP;
 
     return html`
+      ${presetModes.length > 0
+        ? html`
+            <div class="detail-field">
+              <ha-select
+                .label=${localize("airflow.preset_mode", lang)}
+                .value=${device.preferred_preset_mode || KEEP}
+                @selected=${(e: Event) => {
+                  const value = getSelectValue(e);
+                  this._updateDevice(entityId, {
+                    preferred_preset_mode: value === KEEP ? "" : value,
+                  });
+                }}
+                @closed=${(e: Event) => e.stopPropagation()}
+                fixedMenuPosition
+              >
+                <ha-list-item value=${KEEP}>${localize("airflow.keep", lang)}</ha-list-item>
+                ${presetModes.map(
+                  (mode) => html`<ha-list-item value=${mode}>${mode}</ha-list-item>`,
+                )}
+              </ha-select>
+            </div>
+          `
+        : nothing}
       <div class="detail-field">
         <ha-select
           .label=${localize("airflow.direction", lang)}
@@ -602,6 +632,7 @@ export class RsAirflowSection extends LitElement {
       control_enabled: false,
       preferred_direction: "",
       preferred_oscillating: null,
+      preferred_preset_mode: "",
       preferred_swing_mode: "",
       preferred_swing_horizontal_mode: "",
     };

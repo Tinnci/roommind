@@ -135,6 +135,42 @@ class SensorFusionManager:
         """Return the current learned bias for an auxiliary sensor."""
         return self._biases.get(entity_id, SensorBiasState())
 
+    def to_dict(self) -> dict:
+        """Serialize learned auxiliary sensor biases."""
+        return {
+            "biases": {
+                entity_id: {"static_c": bias.static_c, "active_c": bias.active_c}
+                for entity_id, bias in self._biases.items()
+            }
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict | None) -> SensorFusionManager:
+        """Restore learned auxiliary sensor biases."""
+        manager = cls()
+        if not isinstance(data, dict):
+            return manager
+        biases = data.get("biases", data)
+        if not isinstance(biases, dict):
+            return manager
+        for entity_id, raw_bias in biases.items():
+            if not isinstance(entity_id, str) or not isinstance(raw_bias, dict):
+                continue
+            try:
+                static_c = float(raw_bias.get("static_c", 0.0))
+                active_c = float(raw_bias.get("active_c", 0.0))
+            except (TypeError, ValueError):
+                continue
+            manager._biases[entity_id] = SensorBiasState(
+                static_c=manager._clamp(static_c, manager._STATIC_MIN, manager._STATIC_MAX),
+                active_c=manager._clamp(
+                    active_c,
+                    manager._ACTIVE_COOL_MIN,
+                    manager._ACTIVE_HEAT_MAX,
+                ),
+            )
+        return manager
+
     def _freshness_timestamp(self, state: Any) -> datetime | None:
         """Prefer HA's report timestamp, falling back for older HA releases."""
         for attr in ("last_reported", "last_updated", "last_changed"):

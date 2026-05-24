@@ -81,6 +81,57 @@ async def test_save_room_with_all_fields(store):
 
 
 @pytest.mark.asyncio
+async def test_save_room_normalizes_temperature_sensor_list(store):
+    """The primary temperature sensor is persisted first and duplicates are removed."""
+    await store.async_load()
+
+    room = await store.async_save_room(
+        "wohnzimmer",
+        {
+            "temperature_sensor": "sensor.wall",
+            "temperature_sensors": ["sensor.trv", "sensor.wall", "sensor.trv"],
+        },
+    )
+
+    assert room["temperature_sensors"] == ["sensor.wall", "sensor.trv"]
+
+
+@pytest.mark.asyncio
+async def test_save_room_clears_temperature_sensors_without_primary(store):
+    """A room without a primary sensor must not retain auxiliary-only observations."""
+    await store.async_load()
+
+    room = await store.async_save_room(
+        "wohnzimmer",
+        {
+            "temperature_sensor": "",
+            "temperature_sensors": ["sensor.trv"],
+        },
+    )
+
+    assert room["temperature_sensors"] == []
+
+
+@pytest.mark.asyncio
+async def test_get_rooms_migrates_temperature_sensor_list(store):
+    """Read-time migration normalizes old persisted multi-sensor data."""
+    stored_data = {
+        "rooms": {
+            "wohnzimmer": {
+                "area_id": "wohnzimmer",
+                "temperature_sensor": "sensor.wall",
+                "temperature_sensors": ["sensor.trv", "sensor.wall", "sensor.trv"],
+            }
+        }
+    }
+    store._store.async_load = AsyncMock(return_value=stored_data)
+
+    await store.async_load()
+
+    assert store.get_rooms()["wohnzimmer"]["temperature_sensors"] == ["sensor.wall", "sensor.trv"]
+
+
+@pytest.mark.asyncio
 async def test_get_rooms(store):
     """After saving a room it appears in get_rooms()."""
     await store.async_load()

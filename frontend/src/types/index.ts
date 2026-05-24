@@ -56,6 +56,8 @@ export interface RoomLiveData {
   q_vent?: number;
   airflow_active?: boolean;
   airflow_plan_level?: number;
+  airflow_mix_plan_level?: number;
+  airflow_vent_plan_level?: number;
   airflow_devices_status?: AirflowDeviceStatus[];
 }
 
@@ -81,6 +83,7 @@ export interface AirflowDeviceConfig {
   control_enabled: boolean;
   preferred_direction?: string;
   preferred_oscillating?: boolean | null;
+  preferred_preset_mode?: string;
   preferred_swing_mode?: string;
   preferred_swing_horizontal_mode?: string;
 }
@@ -95,6 +98,7 @@ export interface AirflowDeviceStatus {
   domain: string;
   percentage?: number | null;
   preset_mode?: string | null;
+  preset_modes?: string[];
   direction?: string | null;
   oscillating?: boolean | null;
   fan_mode?: string | null;

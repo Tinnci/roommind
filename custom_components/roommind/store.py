@@ -50,9 +50,28 @@ def _migrate_room(room: dict) -> dict:
     _migrate_room_temps(room)
     room.setdefault("temperature_sensors", [])
     room.setdefault("airflow_devices", [])
+    _normalize_temperature_sensors(room)
     migrate_heat_pump_devices(room.get("devices", []))
     ensure_room_has_devices(room)
     return room
+
+
+def _normalize_temperature_sensors(room: dict) -> None:
+    """Keep the primary temperature sensor as the first fusion sensor."""
+    primary = room.get("temperature_sensor") or ""
+    if not primary:
+        room["temperature_sensors"] = []
+        return
+
+    raw_sensors = room.get("temperature_sensors", []) or []
+    if isinstance(raw_sensors, str):
+        raw_sensors = [raw_sensors]
+    sensor_ids = [primary]
+    for item in raw_sensors:
+        entity_id = item.get("entity_id") if isinstance(item, dict) else item
+        if entity_id and entity_id not in sensor_ids:
+            sensor_ids.append(entity_id)
+    room["temperature_sensors"] = sensor_ids
 
 
 _ORPHAN_SETTINGS_KEYS = ("heating_threshold", "cooling_threshold")
@@ -193,6 +212,8 @@ class RoomMindStore:
             existing["eco_heat"] = config["eco_temp"]
         # Directional device sync
         self._sync_devices(existing, config)
+        if "temperature_sensor" in config or "temperature_sensors" in config:
+            _normalize_temperature_sensors(existing)
         return existing
 
     def _create_room(self, area_id: str, config: dict) -> dict:
@@ -266,6 +287,7 @@ class RoomMindStore:
         # Ensure legacy keys always exist (for backward compat)
         room.setdefault("thermostats", [])
         room.setdefault("acs", [])
+        _normalize_temperature_sensors(room)
         return room
 
     async def async_save_room(self, area_id: str, config: dict) -> dict:
@@ -291,6 +313,8 @@ class RoomMindStore:
         changes.pop("area_id", None)
 
         self._data[area_id].update(changes)
+        if "temperature_sensor" in changes or "temperature_sensors" in changes:
+            _normalize_temperature_sensors(self._data[area_id])
         await self._async_save()
         return self._data[area_id]
 

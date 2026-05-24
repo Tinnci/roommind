@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from custom_components.roommind.control.mpc_optimizer import MPCOptimizer, MPCPlan
 from custom_components.roommind.control.thermal_model import RCModel
 
@@ -492,14 +494,17 @@ def test_get_current_power_fraction_with_fractions():
     assert plan.get_current_power_fraction() == 0.75
 
 
-def test_plan_get_current_airflow_level():
+def test_plan_get_current_airflow_levels():
     plan = MPCPlan(
         actions=["idle", "idle"],
         temperatures=[25.0, 24.8, 24.5],
         dt_minutes=5,
-        airflow_levels=[0.667, 0.0],
+        mix_levels=[0.25, 0.0],
+        vent_levels=[0.667, 0.0],
     )
     assert plan.get_current_airflow_level() == 0.667
+    assert plan.get_current_mix_level() == 0.25
+    assert plan.get_current_vent_level() == 0.667
 
 
 def test_optimizer_uses_ventilation_airflow_to_reduce_overheat():
@@ -508,8 +513,8 @@ def test_optimizer_uses_ventilation_airflow_to_reduce_overheat():
         model,
         can_heat=False,
         can_cool=False,
-        airflow_levels=[0.0, 0.25, 0.5, 1.0],
-        airflow_has_ventilation=True,
+        mix_levels=[0.0],
+        vent_levels=[0.0, 0.25, 0.5, 1.0],
         airflow_energy_weight=0.01,
     )
 
@@ -522,8 +527,34 @@ def test_optimizer_uses_ventilation_airflow_to_reduce_overheat():
     )
 
     assert plan.actions[0] == "idle"
-    assert plan.airflow_levels[0] == 1.0
+    assert plan.vent_levels[0] == 1.0
+    assert plan.mix_levels[0] == 0.0
     assert plan.temperatures[1] < 26.0
+
+
+def test_optimizer_uses_mix_airflow_without_ventilation():
+    model = RCModel(C=1.0, U=0.2, Q_heat=0.0, Q_cool=0.0, beta_vent=2.0)
+    opt = MPCOptimizer(
+        model,
+        can_heat=False,
+        can_cool=False,
+        mix_levels=[0.0, 0.5, 1.0],
+        vent_levels=[0.0],
+        airflow_mix_score=1.0,
+        airflow_energy_weight=0.01,
+    )
+
+    plan = opt.optimize(
+        T_room=21.0,
+        T_outdoor_series=[10.0] * 12,
+        heat_target_series=[20.0] * 12,
+        cool_target_series=[23.0] * 12,
+        dt_minutes=5,
+    )
+
+    assert plan.mix_levels[0] == 1.0
+    assert plan.vent_levels[0] == 0.0
+    assert plan.temperatures[1] == pytest.approx(model.predict(21.0, 10.0, 0.0, 5.0), abs=0.01)
 
 
 def test_optimizer_keeps_airflow_off_without_temperature_or_mix_benefit():
@@ -532,8 +563,8 @@ def test_optimizer_keeps_airflow_off_without_temperature_or_mix_benefit():
         model,
         can_heat=False,
         can_cool=False,
-        airflow_levels=[0.0, 0.5, 1.0],
-        airflow_has_ventilation=False,
+        mix_levels=[0.0, 0.5, 1.0],
+        vent_levels=[0.0, 0.5, 1.0],
         airflow_mix_score=0.0,
         airflow_energy_weight=0.2,
     )
@@ -547,6 +578,8 @@ def test_optimizer_keeps_airflow_off_without_temperature_or_mix_benefit():
     )
 
     assert plan.get_current_airflow_level() == 0.0
+    assert plan.get_current_mix_level() == 0.0
+    assert plan.get_current_vent_level() == 0.0
 
 
 def test_min_run_forced_idle_outdoor_gate_mid_run():

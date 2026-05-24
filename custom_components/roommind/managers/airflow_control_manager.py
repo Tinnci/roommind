@@ -9,7 +9,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 
 from ..const import MODE_IDLE, make_roommind_context
-from .environmental_factor_manager import _fan_mode_to_q
+from .environmental_factor_manager import AIRFLOW_ROLE_HVAC_FAN, AIRFLOW_ROLE_VENTILATION, _fan_mode_to_q
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -21,15 +21,28 @@ class AirflowControlManager:
         self.hass = hass
         self._last_commands: dict[tuple[str, str], tuple[tuple[str, Any], ...]] = {}
 
-    async def async_apply(self, area_id: str, room: dict, *, level: float, mode: str) -> None:
-        """Apply a normalized room-level airflow *level* to configured devices."""
-        target = _clamp_level(level)
+    async def async_apply(
+        self,
+        area_id: str,
+        room: dict,
+        *,
+        mode: str,
+        level: float | None = None,
+        mix_level: float | None = None,
+        vent_level: float | None = None,
+    ) -> None:
+        """Apply normalized role-specific airflow levels to configured devices."""
+        legacy_target = _clamp_level(level) if level is not None else None
+        mix_target = _clamp_level(mix_level if mix_level is not None else (legacy_target or 0.0))
+        vent_target = _clamp_level(vent_level if vent_level is not None else (legacy_target or 0.0))
         for config in room.get("airflow_devices", []) or []:
             if not config.get("controllable", False) or not config.get("control_enabled", False):
                 continue
             entity_id = config.get("entity_id", "")
             if not entity_id:
                 continue
+            role = config.get("role", "")
+            target = vent_target if role == AIRFLOW_ROLE_VENTILATION else mix_target
             domain = entity_id.split(".", 1)[0] if "." in entity_id else ""
             try:
                 if domain == "fan":
@@ -70,7 +83,15 @@ class AirflowControlManager:
         fan_modes = [str(item) for item in attrs.get("fan_modes") or []]
         hvac_modes = [str(item) for item in attrs.get("hvac_modes") or []]
 
-        if level > 0.0 and mode == MODE_IDLE and "fan_only" in hvac_modes and state and state.state != "fan_only":
+        role = config.get("role", "")
+        if (
+            level > 0.0
+            and mode == MODE_IDLE
+            and role == AIRFLOW_ROLE_HVAC_FAN
+            and "fan_only" in hvac_modes
+            and state
+            and state.state != "fan_only"
+        ):
             await self._call(
                 area_id,
                 "climate",

@@ -27,6 +27,7 @@ class AirflowDeviceStatus:
     domain: str = ""
     percentage: float | None = None
     preset_mode: str | None = None
+    preset_modes: list[str] = field(default_factory=list)
     direction: str | None = None
     oscillating: bool | None = None
     fan_mode: str | None = None
@@ -46,6 +47,8 @@ class AirflowFactors:
     q_vent: float = 0.0
     active: bool = False
     levels: list[float] = field(default_factory=lambda: [0.0])
+    mix_levels: list[float] = field(default_factory=lambda: [0.0])
+    vent_levels: list[float] = field(default_factory=lambda: [0.0])
     statuses: list[AirflowDeviceStatus] = field(default_factory=list)
 
     def as_status_dicts(self) -> list[dict[str, Any]]:
@@ -61,6 +64,7 @@ class AirflowFactors:
                 "domain": status.domain,
                 "percentage": status.percentage,
                 "preset_mode": status.preset_mode,
+                "preset_modes": status.preset_modes,
                 "direction": status.direction,
                 "oscillating": status.oscillating,
                 "fan_mode": status.fan_mode,
@@ -85,6 +89,8 @@ class EnvironmentalFactorManager:
         """Return airflow factors for configured devices in *room*."""
         statuses: list[AirflowDeviceStatus] = []
         levels = {0.0}
+        mix_levels = {0.0}
+        vent_levels = {0.0}
         q_fan_mix = 0.0
         q_vent = 0.0
 
@@ -95,6 +101,10 @@ class EnvironmentalFactorManager:
                 continue
             if status.controllable and status.control_enabled:
                 levels.update(status.levels)
+                if status.role == AIRFLOW_ROLE_VENTILATION:
+                    vent_levels.update(status.levels)
+                else:
+                    mix_levels.update(status.levels)
             if status.role == AIRFLOW_ROLE_VENTILATION:
                 q_vent = max(q_vent, status.q)
             else:
@@ -106,6 +116,8 @@ class EnvironmentalFactorManager:
             q_vent=_round_level(q_vent),
             active=q_fan_mix > 0.0 or q_vent > 0.0,
             levels=sorted_levels or [0.0],
+            mix_levels=sorted(_round_level(level) for level in mix_levels) or [0.0],
+            vent_levels=sorted(_round_level(level) for level in vent_levels) or [0.0],
             statuses=statuses,
         )
 
@@ -175,6 +187,7 @@ class EnvironmentalFactorManager:
             domain="fan",
             percentage=percentage,
             preset_mode=state.attributes.get("preset_mode"),
+            preset_modes=[str(mode) for mode in state.attributes.get("preset_modes") or []],
             direction=state.attributes.get("current_direction"),
             oscillating=state.attributes.get("oscillating"),
             levels=_unique_levels(levels),
@@ -191,8 +204,11 @@ class EnvironmentalFactorManager:
         fan_modes = [str(mode) for mode in state.attributes.get("fan_modes") or []]
         fan_mode = state.attributes.get("fan_mode")
         hvac_action = state.attributes.get("hvac_action")
-        q = _fan_mode_to_q(fan_mode, fan_modes)
-        if hvac_action == "fan" and q == 0.0:
+        if state.state == STATE_OFF or hvac_action == "off":
+            q = 0.0
+        else:
+            q = _fan_mode_to_q(fan_mode, fan_modes)
+        if hvac_action == "fan" and q == 0.0 and state.state != STATE_OFF:
             q = 1.0
         levels = _levels_from_fan_modes(fan_modes)
 

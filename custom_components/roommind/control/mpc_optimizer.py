@@ -27,6 +27,8 @@ class MPCPlan:
     dt_minutes: float = 5.0
     power_fractions: list[float] = field(default_factory=list)
     airflow_levels: list[float] = field(default_factory=list)
+    mix_levels: list[float] = field(default_factory=list)
+    vent_levels: list[float] = field(default_factory=list)
     # Per-system decision lookahead used when building this plan. Exposed so
     # the controller's safety guard can align its horizon with the optimizer's.
     lookahead_blocks: int = LOOKAHEAD_BASE_BLOCKS
@@ -44,10 +46,22 @@ class MPCPlan:
         return self.power_fractions[0]
 
     def get_current_airflow_level(self) -> float:
-        """Airflow level for the current block."""
-        if not self.airflow_levels:
-            return 0.0
-        return self.airflow_levels[0]
+        """Backward-compatible maximum airflow level for the current block."""
+        return max(self.get_current_mix_level(), self.get_current_vent_level())
+
+    def get_current_mix_level(self) -> float:
+        """Mixing airflow level for the current block."""
+        if self.mix_levels:
+            return self.mix_levels[0]
+        if self.airflow_levels:
+            return self.airflow_levels[0]
+        return 0.0
+
+    def get_current_vent_level(self) -> float:
+        """Ventilation airflow level for the current block."""
+        if self.vent_levels:
+            return self.vent_levels[0]
+        return 0.0
 
 
 @dataclass
@@ -71,6 +85,8 @@ class MPCOptimizer:
     override_active: bool = False
     heating_system_type: str = ""  # key into HEATING_SYSTEM_PROFILES; "" = unknown
     airflow_levels: list[float] | None = None
+    mix_levels: list[float] | None = None
+    vent_levels: list[float] | None = None
     airflow_has_ventilation: bool = False
     airflow_mix_score: float = 0.0
     airflow_energy_weight: float = 0.05
@@ -132,12 +148,15 @@ class MPCOptimizer:
         q_solar = solar_series or [0.0] * n_blocks
         q_residual = residual_series or [0.0] * n_blocks
         q_occupancy = occupancy_series or [0.0] * n_blocks
-        airflow_candidates = self._normalized_airflow_levels()
+        mix_candidates = self._normalized_mix_levels()
+        vent_candidates = self._normalized_vent_levels()
 
         actions: list[str] = []
         temperatures: list[float] = [T_room]
         power_fractions: list[float] = []
-        airflow_plan: list[float] = []
+        legacy_airflow_plan: list[float] = []
+        mix_plan: list[float] = []
+        vent_plan: list[float] = []
         current_temp = T_room
         current_mode = MODE_IDLE
         blocks_in_mode = 0
@@ -163,7 +182,7 @@ class MPCOptimizer:
                     best_action = current_mode
                 else:
                     best_action = MODE_IDLE  # forced off by constraint
-                best_airflow = self._best_airflow_for_action(
+                best_mix, best_vent = self._best_airflow_for_action(
                     best_action,
                     current_temp,
                     T_out,
@@ -173,7 +192,8 @@ class MPCOptimizer:
                     heat_target_series[i:],
                     cool_target_series[i:],
                     dt_minutes,
-                    airflow_candidates,
+                    mix_candidates,
+                    vent_candidates,
                     future_solar=q_solar[i:] if q_solar else None,
                     future_residual=q_residual[i:] if q_residual else None,
                     future_occupancy=q_occupancy[i:] if q_occupancy else None,
@@ -181,32 +201,36 @@ class MPCOptimizer:
             else:
                 # Evaluate each action: look ahead to find best
                 best_action = MODE_IDLE
-                best_airflow = 0.0
+                best_mix = 0.0
+                best_vent = 0.0
                 best_cost = float("inf")
                 future_solar = q_solar[i:] if q_solar else None
                 future_residual = q_residual[i:] if q_residual else None
                 future_occupancy = q_occupancy[i:] if q_occupancy else None
                 for action in available:
-                    for airflow_level in airflow_candidates:
-                        cost = self._evaluate_action(
-                            action,
-                            current_temp,
-                            T_out,
-                            heat_tgt,
-                            cool_tgt,
-                            T_outdoor_series[i:],
-                            heat_target_series[i:],
-                            cool_target_series[i:],
-                            dt_minutes,
-                            airflow_level=airflow_level,
-                            future_solar=future_solar,
-                            future_residual=future_residual,
-                            future_occupancy=future_occupancy,
-                        )
-                        if cost < best_cost:
-                            best_cost = cost
-                            best_action = action
-                            best_airflow = airflow_level
+                    for mix_level in mix_candidates:
+                        for vent_level in vent_candidates:
+                            cost = self._evaluate_action(
+                                action,
+                                current_temp,
+                                T_out,
+                                heat_tgt,
+                                cool_tgt,
+                                T_outdoor_series[i:],
+                                heat_target_series[i:],
+                                cool_target_series[i:],
+                                dt_minutes,
+                                mix_level=mix_level,
+                                vent_level=vent_level,
+                                future_solar=future_solar,
+                                future_residual=future_residual,
+                                future_occupancy=future_occupancy,
+                            )
+                            if cost < best_cost:
+                                best_cost = cost
+                                best_action = action
+                                best_mix = mix_level
+                                best_vent = vent_level
 
             # Compute proportional power fraction for this block
             # Use heat target for heating power, cool target for cooling power
@@ -219,7 +243,7 @@ class MPCOptimizer:
                 q_solar=qs,
                 q_residual=qr,
                 q_occupancy=qo,
-                q_vent=best_airflow if self.airflow_has_ventilation else 0.0,
+                q_vent=best_vent,
             )
             if best_action == MODE_IDLE:
                 pf = 0.0
@@ -241,14 +265,16 @@ class MPCOptimizer:
                 q_solar=qs,
                 q_residual=qr if Q == 0.0 else 0.0,
                 q_occupancy=qo,
-                q_vent=best_airflow if self.airflow_has_ventilation else 0.0,
+                q_vent=best_vent,
             )
             next_temp = max(self.temp_min, min(next_temp, self.temp_max))
 
             actions.append(best_action)
             temperatures.append(round(next_temp, 2))
             power_fractions.append(round(pf, 3))
-            airflow_plan.append(round(best_airflow, 3))
+            mix_plan.append(round(best_mix, 3))
+            vent_plan.append(round(best_vent, 3))
+            legacy_airflow_plan.append(round(max(best_mix, best_vent), 3))
 
             # Track run length
             if best_action == current_mode:
@@ -264,7 +290,9 @@ class MPCOptimizer:
             temperatures=temperatures,
             dt_minutes=dt_minutes,
             power_fractions=power_fractions,
-            airflow_levels=airflow_plan,
+            airflow_levels=legacy_airflow_plan,
+            mix_levels=mix_plan,
+            vent_levels=vent_plan,
             lookahead_blocks=self._lookahead_blocks,
         )
 
@@ -279,34 +307,39 @@ class MPCOptimizer:
         future_heat_targets: list[float],
         future_cool_targets: list[float],
         dt_minutes: float,
-        airflow_candidates: list[float],
+        mix_candidates: list[float],
+        vent_candidates: list[float],
         *,
         future_solar: list[float] | None = None,
         future_residual: list[float] | None = None,
         future_occupancy: list[float] | None = None,
-    ) -> float:
-        best_airflow = 0.0
+    ) -> tuple[float, float]:
+        best_mix = 0.0
+        best_vent = 0.0
         best_cost = float("inf")
-        for airflow_level in airflow_candidates:
-            cost = self._evaluate_action(
-                action,
-                current_temp,
-                T_out,
-                heat_tgt,
-                cool_tgt,
-                future_T_outdoor,
-                future_heat_targets,
-                future_cool_targets,
-                dt_minutes,
-                airflow_level=airflow_level,
-                future_solar=future_solar,
-                future_residual=future_residual,
-                future_occupancy=future_occupancy,
-            )
-            if cost < best_cost:
-                best_cost = cost
-                best_airflow = airflow_level
-        return best_airflow
+        for mix_level in mix_candidates:
+            for vent_level in vent_candidates:
+                cost = self._evaluate_action(
+                    action,
+                    current_temp,
+                    T_out,
+                    heat_tgt,
+                    cool_tgt,
+                    future_T_outdoor,
+                    future_heat_targets,
+                    future_cool_targets,
+                    dt_minutes,
+                    mix_level=mix_level,
+                    vent_level=vent_level,
+                    future_solar=future_solar,
+                    future_residual=future_residual,
+                    future_occupancy=future_occupancy,
+                )
+                if cost < best_cost:
+                    best_cost = cost
+                    best_mix = mix_level
+                    best_vent = vent_level
+        return best_mix, best_vent
 
     def _evaluate_action(
         self,
@@ -320,7 +353,8 @@ class MPCOptimizer:
         future_cool_targets: list[float],
         dt_minutes: float,
         *,
-        airflow_level: float = 0.0,
+        mix_level: float = 0.0,
+        vent_level: float = 0.0,
         future_solar: list[float] | None = None,
         future_residual: list[float] | None = None,
         future_occupancy: list[float] | None = None,
@@ -352,7 +386,7 @@ class MPCOptimizer:
         for j in range(lookahead):
             qs = solar[j] if j < len(solar) else 0.0
             qo = occupancy[j] if j < len(occupancy) else 0.0
-            qv = airflow_level if self.airflow_has_ventilation else 0.0
+            qv = vent_level
             # Simulate HVAC for min_run_blocks (not just 1 block) to correctly
             # value sustained heating/cooling over the lookahead horizon.
             block_Q = Q if j < self.min_run_blocks else 0.0
@@ -394,11 +428,13 @@ class MPCOptimizer:
             # Energy cost: proportional to HVAC power for min_run blocks
             if j < self.min_run_blocks and action != MODE_IDLE:
                 total_cost += self.w_energy * abs(Q) / 1000.0
-            if airflow_level > 0.0:
-                total_cost += self.w_energy * self.airflow_energy_weight * airflow_level
-                total_cost -= self.airflow_mix_weight * max(0.0, min(1.0, self.airflow_mix_score)) * airflow_level
+            if mix_level > 0.0:
+                total_cost += self.w_energy * self.airflow_energy_weight * mix_level
+                total_cost -= self.airflow_mix_weight * max(0.0, min(1.0, self.airflow_mix_score)) * mix_level
                 if action != MODE_IDLE:
-                    total_cost -= self.airflow_active_hvac_mix_weight * airflow_level
+                    total_cost -= self.airflow_active_hvac_mix_weight * mix_level
+            if vent_level > 0.0:
+                total_cost += self.w_energy * self.airflow_energy_weight * vent_level
 
         return total_cost
 
@@ -485,8 +521,22 @@ class MPCOptimizer:
         else:
             return 0.0, MODE_IDLE
 
+    def _normalized_mix_levels(self) -> list[float]:
+        levels = self.mix_levels if self.mix_levels is not None else self.airflow_levels
+        return self._normalized_levels(levels or [0.0])
+
+    def _normalized_vent_levels(self) -> list[float]:
+        levels = (
+            self.vent_levels
+            if self.vent_levels is not None
+            else (self.airflow_levels if self.airflow_has_ventilation else [0.0])
+        )
+        return self._normalized_levels(levels or [0.0])
+
     def _normalized_airflow_levels(self) -> list[float]:
-        levels = self.airflow_levels or [0.0]
+        return self._normalized_levels(self.airflow_levels or [0.0])
+
+    def _normalized_levels(self, levels: list[float]) -> list[float]:
         result = {0.0}
         for level in levels:
             if math.isfinite(level):

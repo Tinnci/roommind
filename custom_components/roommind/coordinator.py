@@ -206,9 +206,13 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         if not self._model_loaded:
             thermal_data = store.get_thermal_data()
             if thermal_data:
-                self._model_manager = RoomModelManager.from_dict(thermal_data)
+                model_data = thermal_data.get("models", thermal_data) if isinstance(thermal_data, dict) else {}
+                if isinstance(model_data, dict):
+                    self._model_manager = RoomModelManager.from_dict(model_data)
                 self._ekf_training._model_manager = self._model_manager
                 self._cover_orchestrator._model_manager = self._model_manager
+                if isinstance(thermal_data, dict):
+                    self._sensor_fusion = SensorFusionManager.from_dict(thermal_data.get("sensor_biases", {}))
             self._valve_manager.load_actuation_data(settings.get("valve_last_actuation", {}))
             self._model_loaded = True
 
@@ -327,7 +331,12 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         self._thermal_save_count += 1
         if self._thermal_save_count >= THERMAL_SAVE_CYCLES:
             self._thermal_save_count = 0
-            await store.async_save_thermal_data(self._model_manager.to_dict())
+            await store.async_save_thermal_data(
+                {
+                    "models": self._model_manager.to_dict(),
+                    "sensor_biases": self._sensor_fusion.to_dict(),
+                }
+            )
 
         # Rotate history periodically
         self._history_rotate_count += 1
@@ -579,6 +588,8 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 "q_fan_mix": 0.0,
                 "q_vent": 0.0,
                 "airflow_active": False,
+                "airflow_mix_plan_level": 0.0,
+                "airflow_vent_plan_level": 0.0,
                 "airflow_plan_level": 0.0,
                 "airflow_devices_status": [],
                 "blind_position": None,
@@ -692,6 +703,8 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             q_occupancy=q_occupancy,
             q_vent=airflow.q_vent,
             airflow_levels=airflow.levels,
+            mix_levels=airflow.mix_levels,
+            vent_levels=airflow.vent_levels,
             airflow_has_ventilation=airflow_has_ventilation,
             airflow_mix_score=airflow_mix_score,
         )
@@ -740,7 +753,9 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             power_fraction = 0.0
 
         climate_active = settings.get("climate_control_active", True) and room.get("climate_control_enabled", True)
-        airflow_plan_level = 0.0 if window_open or force_off else controller.last_airflow_level
+        airflow_mix_plan_level = 0.0 if window_open or force_off else controller.last_airflow_mix_level
+        airflow_vent_plan_level = 0.0 if window_open or force_off else controller.last_airflow_vent_level
+        airflow_plan_level = max(airflow_mix_plan_level, airflow_vent_plan_level)
 
         # Read device temperature limits for dynamic boost targets
         trv_max_temps: list[float] = []
@@ -856,7 +871,8 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 await self._airflow_control.async_apply(
                     area_id,
                     room,
-                    level=airflow_plan_level,
+                    mix_level=airflow_mix_plan_level,
+                    vent_level=airflow_vent_plan_level,
                     mode=mode,
                 )
             except Exception:  # noqa: BLE001
@@ -891,6 +907,8 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             # Climate control disabled — do NOT send commands.
             mode = MODE_IDLE
             power_fraction = 0.0
+            airflow_mix_plan_level = 0.0
+            airflow_vent_plan_level = 0.0
             airflow_plan_level = 0.0
 
         # --- Cover/blind automatic control ---
@@ -987,6 +1005,8 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             q_occupancy=q_occupancy,
             q_fan_mix=airflow.q_fan_mix,
             q_vent=airflow.q_vent,
+            airflow_mix_plan_level=airflow_mix_plan_level,
+            airflow_vent_plan_level=airflow_vent_plan_level,
             airflow_plan_level=airflow_plan_level,
             airflow_devices_status=airflow.as_status_dicts(),
             cover_eids=cover_eids,
@@ -1212,6 +1232,8 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         q_occupancy: float,
         q_fan_mix: float,
         q_vent: float,
+        airflow_mix_plan_level: float,
+        airflow_vent_plan_level: float,
         airflow_plan_level: float,
         airflow_devices_status: list[dict],
         cover_eids: list[str],
@@ -1275,6 +1297,8 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             "q_fan_mix": q_fan_mix,
             "q_vent": q_vent,
             "airflow_active": q_fan_mix > 0.0 or q_vent > 0.0,
+            "airflow_mix_plan_level": airflow_mix_plan_level,
+            "airflow_vent_plan_level": airflow_vent_plan_level,
             "airflow_plan_level": airflow_plan_level,
             "airflow_devices_status": airflow_devices_status,
             "n_observations": self._model_manager.get_n_observations(area_id),

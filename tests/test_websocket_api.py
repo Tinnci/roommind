@@ -110,6 +110,7 @@ async def test_save_room_creates_new(ws_hass, store, connection):
                 "control_enabled": True,
                 "preferred_direction": "forward",
                 "preferred_oscillating": True,
+                "preferred_preset_mode": "normal",
             }
         ],
     }
@@ -131,6 +132,7 @@ async def test_save_room_creates_new(ws_hass, store, connection):
             "control_enabled": True,
             "preferred_direction": "forward",
             "preferred_oscillating": True,
+            "preferred_preset_mode": "normal",
         }
     ]
     # Defaults for fields not provided

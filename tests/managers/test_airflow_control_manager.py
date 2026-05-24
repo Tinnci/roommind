@@ -39,6 +39,7 @@ async def test_fan_percentage_direction_and_oscillation_commands(hass):
                     "control_enabled": True,
                     "preferred_direction": "forward",
                     "preferred_oscillating": True,
+                    "preferred_preset_mode": "normal",
                 }
             ]
         },
@@ -50,6 +51,9 @@ async def test_fan_percentage_direction_and_oscillation_commands(hass):
     assert ("fan", "turn_on", {"entity_id": "fan.living", "percentage": 50}) in [c.args[:3] for c in calls]
     assert ("fan", "set_direction", {"entity_id": "fan.living", "direction": "forward"}) in [c.args[:3] for c in calls]
     assert ("fan", "oscillate", {"entity_id": "fan.living", "oscillating": True}) in [c.args[:3] for c in calls]
+    assert ("fan", "set_preset_mode", {"entity_id": "fan.living", "preset_mode": "normal"}) in [
+        c.args[:3] for c in calls
+    ]
 
 
 @pytest.mark.asyncio
@@ -109,3 +113,20 @@ async def test_redundant_airflow_command_is_cached(hass):
 
     turn_on_calls = [c for c in hass.services.async_call.call_args_list if c.args[:2] == ("fan", "turn_on")]
     assert len(turn_on_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_role_specific_levels_do_not_cross_apply(hass):
+    mgr = AirflowControlManager(hass)
+    room = {
+        "airflow_devices": [
+            {"entity_id": "fan.mix", "role": "circulation", "controllable": True, "control_enabled": True},
+            {"entity_id": "fan.vent", "role": "ventilation", "controllable": True, "control_enabled": True},
+        ]
+    }
+
+    await mgr.async_apply("living", room, mix_level=0.25, vent_level=0.0, mode="idle")
+
+    calls = [c.args[:3] for c in hass.services.async_call.call_args_list]
+    assert ("fan", "turn_on", {"entity_id": "fan.mix", "percentage": 25}) in calls
+    assert ("fan", "turn_off", {"entity_id": "fan.vent"}) in calls
