@@ -59,6 +59,7 @@ export interface RoomLiveData {
   airflow_mix_plan_level?: number;
   airflow_vent_plan_level?: number;
   airflow_devices_status?: AirflowDeviceStatus[];
+  airflow_command_status?: AirflowCommandStatus[];
 }
 
 export type DeviceType = "trv" | "ac";
@@ -108,6 +109,24 @@ export interface AirflowDeviceStatus {
   swing_horizontal_mode?: string | null;
   swing_horizontal_modes?: string[];
   levels?: number[];
+}
+
+export interface AirflowCommandStatus {
+  entity_id: string;
+  domain: string;
+  role: AirflowRole;
+  planned_level: number;
+  observed_q?: number | null;
+  outcome:
+    | "applied"
+    | "skipped_off_climate"
+    | "unsupported_fan_only"
+    | "blocked_by_mode"
+    | "failed"
+    | string;
+  skip_reason?: string;
+  last_service?: string | null;
+  roommind_fan_only?: boolean;
 }
 
 export type ConflictResolution =

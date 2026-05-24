@@ -532,6 +532,7 @@ export class RsRoomDetail extends LitElement {
                     .editing=${false}
                     .airflowDevices=${this._airflowDevices}
                     .statuses=${this.config?.live?.airflow_devices_status ?? []}
+                    .commandStatuses=${this.config?.live?.airflow_command_status ?? []}
                     .qFanMix=${this.config?.live?.q_fan_mix ?? 0}
                     .qVent=${this.config?.live?.q_vent ?? 0}
                     .planLevel=${this.config?.live?.airflow_plan_level ?? 0}
@@ -803,6 +804,7 @@ export class RsRoomDetail extends LitElement {
             .editing=${true}
             .airflowDevices=${this._airflowDevices}
             .statuses=${this.config?.live?.airflow_devices_status ?? []}
+            .commandStatuses=${this.config?.live?.airflow_command_status ?? []}
             .qFanMix=${this.config?.live?.q_fan_mix ?? 0}
             .qVent=${this.config?.live?.q_vent ?? 0}
             .planLevel=${this.config?.live?.airflow_plan_level ?? 0}

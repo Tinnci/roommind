@@ -592,6 +592,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 "airflow_vent_plan_level": 0.0,
                 "airflow_plan_level": 0.0,
                 "airflow_devices_status": [],
+                "airflow_command_status": [],
                 "blind_position": None,
                 "cover_auto_paused": False,
                 "cover_forced_reason": "",
@@ -756,6 +757,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         airflow_mix_plan_level = 0.0 if window_open or force_off else controller.last_airflow_mix_level
         airflow_vent_plan_level = 0.0 if window_open or force_off else controller.last_airflow_vent_level
         airflow_plan_level = max(airflow_mix_plan_level, airflow_vent_plan_level)
+        airflow_command_status: list[dict[str, Any]] = []
 
         # Read device temperature limits for dynamic boost targets
         trv_max_temps: list[float] = []
@@ -868,7 +870,14 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                     compressor_forced_on=compressor_forced_on or None,
                     compressor_forced_off=compressor_forced_off or None,
                 )
-                await self._airflow_control.async_apply(
+            except Exception:  # noqa: BLE001
+                _LOGGER.warning(
+                    "Room '%s': climate service call failed",
+                    area_id,
+                    exc_info=True,
+                )
+            try:
+                airflow_command_status = await self._airflow_control.async_apply(
                     area_id,
                     room,
                     mix_level=airflow_mix_plan_level,
@@ -877,7 +886,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 )
             except Exception:  # noqa: BLE001
                 _LOGGER.warning(
-                    "Room '%s': climate service call failed",
+                    "Room '%s': airflow service call failed",
                     area_id,
                     exc_info=True,
                 )
@@ -904,12 +913,20 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 else:
                     self._compressor_manager.update_member(eid, False)
         else:
-            # Climate control disabled — do NOT send commands.
+            # Climate control disabled — stop RoomMind airflow outputs and any
+            # RoomMind-owned climate fan_only state.
             mode = MODE_IDLE
             power_fraction = 0.0
             airflow_mix_plan_level = 0.0
             airflow_vent_plan_level = 0.0
             airflow_plan_level = 0.0
+            airflow_command_status = await self._airflow_control.async_apply(
+                area_id,
+                room,
+                mix_level=0.0,
+                vent_level=0.0,
+                mode=MODE_IDLE,
+            )
 
         # --- Cover/blind automatic control ---
         has_override = is_override_active(room)
@@ -1009,6 +1026,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             airflow_vent_plan_level=airflow_vent_plan_level,
             airflow_plan_level=airflow_plan_level,
             airflow_devices_status=airflow.as_status_dicts(),
+            airflow_command_status=airflow_command_status,
             cover_eids=cover_eids,
             cover_result=cover_result,
             mpc_active=mpc_active,
@@ -1236,6 +1254,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         airflow_vent_plan_level: float,
         airflow_plan_level: float,
         airflow_devices_status: list[dict],
+        airflow_command_status: list[dict],
         cover_eids: list[str],
         cover_result: CoverResult,
         mpc_active: bool,
@@ -1301,6 +1320,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             "airflow_vent_plan_level": airflow_vent_plan_level,
             "airflow_plan_level": airflow_plan_level,
             "airflow_devices_status": airflow_devices_status,
+            "airflow_command_status": airflow_command_status,
             "n_observations": self._model_manager.get_n_observations(area_id),
             "blind_position": (self._cover_orchestrator.get_current_position(area_id) if cover_eids else None),
             "cover_auto_paused": (self._cover_orchestrator.is_user_override_active(area_id) if cover_eids else False),

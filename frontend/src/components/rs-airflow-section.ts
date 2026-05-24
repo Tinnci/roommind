@@ -1,6 +1,7 @@
 import { LitElement, html, css, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type {
+  AirflowCommandStatus,
   AirflowDeviceConfig,
   AirflowDeviceStatus,
   AirflowRole,
@@ -22,6 +23,7 @@ export class RsAirflowSection extends LitElement {
   @property({ attribute: false }) public area!: HassArea;
   @property({ attribute: false }) public airflowDevices: AirflowDeviceConfig[] = [];
   @property({ attribute: false }) public statuses: AirflowDeviceStatus[] = [];
+  @property({ attribute: false }) public commandStatuses: AirflowCommandStatus[] = [];
   @property({ type: Number }) public qFanMix = 0;
   @property({ type: Number }) public qVent = 0;
   @property({ type: Number }) public planLevel = 0;
@@ -55,7 +57,7 @@ export class RsAirflowSection extends LitElement {
 
       .summary {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: 8px;
         margin-bottom: 10px;
       }
@@ -248,9 +250,16 @@ export class RsAirflowSection extends LitElement {
     const entityId = device.entity_id;
     const state = this.hass.states[entityId];
     const status = this._statusFor(entityId);
+    const command = this._commandFor(entityId);
     const friendlyName = (state?.attributes?.friendly_name as string) || entityId;
     const unavailable = status && !status.available;
     const q = status?.q ?? 0;
+    const planned =
+      command?.planned_level ??
+      (device.role === "ventilation" ? this.ventPlanLevel : this.mixPlanLevel);
+    const observed = command?.observed_q ?? q;
+    const commandLabel = command ? this._commandLabel(command) : "";
+    const showWarning = command && command.outcome !== "applied";
 
     return html`
       <div class="view-row">
@@ -267,9 +276,19 @@ export class RsAirflowSection extends LitElement {
             : nothing}
         ${unavailable
           ? html`<span class="pill warning">${localize("airflow.unavailable", lang)}</span>`
-          : q > 0
-            ? html`<span class="view-value">${this._percent(q)}</span>`
-            : nothing}
+          : html`
+              <span class="pill"
+                >${localize("airflow.planned_level", lang)} ${this._percent(planned)}</span
+              >
+              <span class="view-value"
+                >${localize("airflow.actual_level", lang)} ${this._percent(observed)}</span
+              >
+            `}
+        ${showWarning
+          ? html`<span class="pill warning" title=${command?.skip_reason ?? ""}
+              >${commandLabel}</span
+            >`
+          : nothing}
       </div>
     `;
   }
@@ -675,6 +694,26 @@ export class RsAirflowSection extends LitElement {
 
   private _statusFor(entityId: string): AirflowDeviceStatus | undefined {
     return this.statuses.find((status) => status.entity_id === entityId);
+  }
+
+  private _commandFor(entityId: string): AirflowCommandStatus | undefined {
+    return this.commandStatuses.find((status) => status.entity_id === entityId);
+  }
+
+  private _commandLabel(status: AirflowCommandStatus): string {
+    const key =
+      status.outcome === "unsupported_fan_only"
+        ? "airflow.command_unsupported_fan_only"
+        : status.outcome === "skipped_off_climate"
+          ? "airflow.command_skipped_off_climate"
+          : status.outcome === "blocked_by_mode" && status.skip_reason === "control_disabled"
+            ? "airflow.command_control_disabled"
+            : status.outcome === "blocked_by_mode"
+              ? "airflow.command_blocked_by_mode"
+              : status.outcome === "failed"
+                ? "airflow.command_failed"
+                : "airflow.command_applied";
+    return localize(key, this.language);
   }
 
   private _percent(value: number | null | undefined): string {
