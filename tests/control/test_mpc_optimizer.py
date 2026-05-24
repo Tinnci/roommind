@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from custom_components.roommind.const import MODE_FAN_ONLY
 from custom_components.roommind.control.mpc_optimizer import MPCOptimizer, MPCPlan
 from custom_components.roommind.control.thermal_model import RCModel
 
@@ -149,6 +150,57 @@ def test_plan_empty():
     """Empty plan returns idle."""
     plan = MPCPlan(actions=[], temperatures=[20.0], dt_minutes=5)
     assert plan.get_current_action() == "idle"
+
+
+def test_fan_only_is_explicit_mpc_action_when_idle_mix_has_benefit():
+    """Idle circulation should be represented as fan_only, not hidden idle."""
+    model = RCModel(C=2.0, U=0.1, Q_heat=4.0, Q_cool=4.0)
+    opt = MPCOptimizer(
+        model,
+        can_heat=False,
+        can_cool=False,
+        mix_levels=[0.0, 1.0],
+        airflow_mix_score=1.0,
+        airflow_energy_weight=0.01,
+        airflow_mix_weight=1.0,
+    )
+
+    plan = opt.optimize(
+        T_room=21.0,
+        T_outdoor_series=[21.0] * 6,
+        heat_target_series=[20.0] * 6,
+        cool_target_series=[22.0] * 6,
+        dt_minutes=5,
+    )
+
+    assert plan.actions[0] == MODE_FAN_ONLY
+    assert plan.get_current_action() == MODE_FAN_ONLY
+    assert plan.get_current_mix_level() == 1.0
+
+
+def test_hvac_fan_mix_increases_effective_heating_capacity():
+    """A controllable HVAC fan level should couple into active HVAC capacity."""
+    model = RCModel(C=1.0, U=0.5, Q_heat=20.0, Q_cool=20.0)
+    opt_plain = MPCOptimizer(model, mix_levels=[0.0, 1.0], airflow_has_hvac_fan=False)
+    opt_coupled = MPCOptimizer(model, mix_levels=[0.0, 1.0], airflow_has_hvac_fan=True)
+
+    pf_plain, mode_plain = opt_plain.compute_optimal_power(
+        T_room=20.0,
+        T_outdoor=5.0,
+        target=21.0,
+        dt_minutes=5.0,
+        q_mix=1.0,
+    )
+    pf_coupled, mode_coupled = opt_coupled.compute_optimal_power(
+        T_room=20.0,
+        T_outdoor=5.0,
+        target=21.0,
+        dt_minutes=5.0,
+        q_mix=1.0,
+    )
+
+    assert mode_plain == mode_coupled == "heating"
+    assert pf_coupled < pf_plain
 
 
 # ---------------------------------------------------------------------------

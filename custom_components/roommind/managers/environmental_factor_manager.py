@@ -49,6 +49,7 @@ class AirflowFactors:
     levels: list[float] = field(default_factory=lambda: [0.0])
     mix_levels: list[float] = field(default_factory=lambda: [0.0])
     vent_levels: list[float] = field(default_factory=lambda: [0.0])
+    has_hvac_fan_control: bool = False
     statuses: list[AirflowDeviceStatus] = field(default_factory=list)
 
     def as_status_dicts(self) -> list[dict[str, Any]]:
@@ -93,6 +94,7 @@ class EnvironmentalFactorManager:
         vent_levels = {0.0}
         q_fan_mix = 0.0
         q_vent = 0.0
+        has_hvac_fan_control = False
 
         for config in room.get("airflow_devices", []) or []:
             status = self._read_device(config)
@@ -105,6 +107,8 @@ class EnvironmentalFactorManager:
                     vent_levels.update(status.levels)
                 else:
                     mix_levels.update(status.levels)
+                    if status.role == AIRFLOW_ROLE_HVAC_FAN:
+                        has_hvac_fan_control = True
             if status.role == AIRFLOW_ROLE_VENTILATION:
                 q_vent = max(q_vent, status.q)
             else:
@@ -118,6 +122,7 @@ class EnvironmentalFactorManager:
             levels=sorted_levels or [0.0],
             mix_levels=sorted(_round_level(level) for level in mix_levels) or [0.0],
             vent_levels=sorted(_round_level(level) for level in vent_levels) or [0.0],
+            has_hvac_fan_control=has_hvac_fan_control,
             statuses=statuses,
         )
 

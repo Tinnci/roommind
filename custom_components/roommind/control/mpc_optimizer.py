@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
-from ..const import HEATING_SYSTEM_PROFILES, MIN_POWER_FRACTION, MODE_COOLING, MODE_HEATING, MODE_IDLE
+from ..const import HEATING_SYSTEM_PROFILES, MIN_POWER_FRACTION, MODE_COOLING, MODE_FAN_ONLY, MODE_HEATING, MODE_IDLE
 from .residual_heat import compute_residual_heat
 from .thermal_model import RCModel
 
@@ -88,10 +88,12 @@ class MPCOptimizer:
     mix_levels: list[float] | None = None
     vent_levels: list[float] | None = None
     airflow_has_ventilation: bool = False
+    airflow_has_hvac_fan: bool = False
     airflow_mix_score: float = 0.0
     airflow_energy_weight: float = 0.05
     airflow_mix_weight: float = 0.3
     airflow_active_hvac_mix_weight: float = 0.02
+    airflow_hvac_power_weight: float = 0.25
 
     def __post_init__(self) -> None:
         # Set before optimize() runs so callers / patched optimize() still expose
@@ -244,17 +246,18 @@ class MPCOptimizer:
                 q_residual=qr,
                 q_occupancy=qo,
                 q_vent=best_vent,
+                q_mix=best_mix,
             )
-            if best_action == MODE_IDLE:
+            if best_action in (MODE_IDLE, MODE_FAN_ONLY):
                 pf = 0.0
             elif best_action != MODE_IDLE and pf == 0.0:
                 pf = 1.0  # min_run_blocks enforcement: keep full power
 
             # Apply action with proportional Q for accurate forward prediction
             if best_action == MODE_HEATING:
-                Q = pf * self.model.Q_heat
+                Q = pf * self._effective_hvac_capacity(MODE_HEATING, best_mix)
             elif best_action == MODE_COOLING:
-                Q = -(pf * self.model.Q_cool)
+                Q = -(pf * self._effective_hvac_capacity(MODE_COOLING, best_mix))
             else:
                 Q = 0.0
             next_temp = self.model.predict(
@@ -269,7 +272,10 @@ class MPCOptimizer:
             )
             next_temp = max(self.temp_min, min(next_temp, self.temp_max))
 
-            actions.append(best_action)
+            plan_action = (
+                MODE_FAN_ONLY if best_action == MODE_IDLE and best_mix > 0.0 and best_vent <= 0.0 else best_action
+            )
+            actions.append(plan_action)
             temperatures.append(round(next_temp, 2))
             power_fractions.append(round(pf, 3))
             mix_plan.append(round(best_mix, 3))
@@ -369,7 +375,7 @@ class MPCOptimizer:
         to pre-fix behaviour.
         """
         lookahead = min(self._lookahead_blocks, len(future_T_outdoor))
-        Q = self._action_to_Q(action)
+        Q = self._action_to_Q(action, mix_level)
         total_cost = 0.0
         T = T_room
         solar = future_solar or []
@@ -436,13 +442,15 @@ class MPCOptimizer:
             if vent_level > 0.0:
                 total_cost += self.w_energy * self.airflow_energy_weight * vent_level
 
+        if action == MODE_IDLE and mix_level > 0.0 and vent_level <= 0.0:
+            total_cost -= 1e-6
         return total_cost
 
-    def _action_to_Q(self, action: str) -> float:
+    def _action_to_Q(self, action: str, mix_level: float = 0.0) -> float:
         if action == MODE_HEATING:
-            return self.model.Q_heat
+            return self._effective_hvac_capacity(MODE_HEATING, mix_level)
         if action == MODE_COOLING:
-            return -self.model.Q_cool
+            return -self._effective_hvac_capacity(MODE_COOLING, mix_level)
         return 0.0
 
     def _is_outdoor_gated(self, mode: str, T_outdoor: float) -> bool:
@@ -465,6 +473,7 @@ class MPCOptimizer:
         q_residual: float = 0.0,
         q_occupancy: float = 0.0,
         q_vent: float = 0.0,
+        q_mix: float = 0.0,
     ) -> tuple[float, str]:
         """Analytical closed-form optimal heating/cooling power.
 
@@ -513,13 +522,25 @@ class MPCOptimizer:
             Q_required = min(0.0, Q_required + energy_bias)
 
         if Q_required > 0 and self.can_heat and not self._is_outdoor_gated(MODE_HEATING, T_outdoor):
-            frac = min(Q_required / max(self.model.Q_heat, 0.01), 1.0)
+            frac = min(Q_required / max(self._effective_hvac_capacity(MODE_HEATING, q_mix), 0.01), 1.0)
             return max(frac, MIN_POWER_FRACTION), MODE_HEATING
         elif Q_required < 0 and self.can_cool and not self._is_outdoor_gated(MODE_COOLING, T_outdoor):
-            frac = min(abs(Q_required) / max(self.model.Q_cool, 0.01), 1.0)
+            frac = min(abs(Q_required) / max(self._effective_hvac_capacity(MODE_COOLING, q_mix), 0.01), 1.0)
             return max(frac, MIN_POWER_FRACTION), MODE_COOLING
         else:
             return 0.0, MODE_IDLE
+
+    def _effective_hvac_capacity(self, action: str, mix_level: float) -> float:
+        if action == MODE_HEATING:
+            base = self.model.Q_heat
+        elif action == MODE_COOLING:
+            base = self.model.Q_cool
+        else:
+            return 0.0
+        if not self.airflow_has_hvac_fan:
+            return base
+        mix = max(0.0, min(1.0, mix_level))
+        return base * (1.0 + self.airflow_hvac_power_weight * mix)
 
     def _normalized_mix_levels(self) -> list[float]:
         levels = self.mix_levels if self.mix_levels is not None else self.airflow_levels

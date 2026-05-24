@@ -21,6 +21,7 @@ from ..const import (
     DEFAULT_OUTDOOR_HEATING_MAX,
     HEATING_BOOST_TARGET,
     MODE_COOLING,
+    MODE_FAN_ONLY,
     MODE_HEATING,
     MODE_IDLE,
     TargetTemps,
@@ -723,6 +724,7 @@ class MPCController:
         mix_levels: list[float] | None = None,
         vent_levels: list[float] | None = None,
         airflow_has_ventilation: bool = False,
+        airflow_has_hvac_fan: bool = False,
         airflow_mix_score: float = 0.0,
     ) -> None:
         self.hass = hass
@@ -756,6 +758,7 @@ class MPCController:
             vent_levels if vent_levels is not None else ([0.0] if not airflow_has_ventilation else self.airflow_levels)
         )
         self.airflow_has_ventilation = airflow_has_ventilation
+        self.airflow_has_hvac_fan = airflow_has_hvac_fan
         self.airflow_mix_score = airflow_mix_score
         self.last_airflow_level = 0.0
         self.last_airflow_mix_level = 0.0
@@ -939,6 +942,7 @@ class MPCController:
             mix_levels=self.mix_levels,
             vent_levels=self.vent_levels,
             airflow_has_ventilation=self.airflow_has_ventilation,
+            airflow_has_hvac_fan=self.airflow_has_hvac_fan,
             airflow_mix_score=self.airflow_mix_score,
         )
 
@@ -959,6 +963,9 @@ class MPCController:
         self.last_airflow_level = plan.get_current_airflow_level()
         self.last_airflow_mix_level = plan.get_current_mix_level()
         self.last_airflow_vent_level = plan.get_current_vent_level()
+        if action == MODE_FAN_ONLY:
+            action = MODE_IDLE
+            power_fraction = 0.0
 
         # Safety guard: don't heat above the maximum upcoming target,
         # don't cool below the minimum upcoming target, while preserving

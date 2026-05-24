@@ -178,6 +178,38 @@ def test_calibrate_observations_mix_reduces_aux_active_bias_correction():
     assert corrected_mixed[1].variance < corrected_still[1].variance
 
 
+def test_calibrate_observations_learns_sensor_mix_coupling():
+    """Repeated fan-mixed samples learn k_mix for auxiliary active bias."""
+    fusion = SensorFusionManager()
+
+    for _ in range(350):
+        fusion.calibrate_observations(
+            [
+                TemperatureObservation(value=20.0, variance=0.04, entity_id="sensor.wall", is_primary=True),
+                TemperatureObservation(value=24.0, variance=0.16, entity_id="sensor.trv", is_primary=False),
+            ],
+            mode="heating",
+            power_fraction=1.0,
+            q_fan_mix=0.0,
+        )
+    before = fusion.get_bias("sensor.trv")
+
+    for _ in range(350):
+        fusion.calibrate_observations(
+            [
+                TemperatureObservation(value=20.0, variance=0.04, entity_id="sensor.wall", is_primary=True),
+                TemperatureObservation(value=22.0, variance=0.16, entity_id="sensor.trv", is_primary=False),
+            ],
+            mode="heating",
+            power_fraction=1.0,
+            q_fan_mix=1.0,
+        )
+
+    after = fusion.get_bias("sensor.trv")
+    assert before.k_mix == pytest.approx(0.0)
+    assert after.k_mix > 0.1
+
+
 def test_sensor_bias_roundtrip_preserves_correction_state():
     """Learned auxiliary sensor bias can be persisted and restored."""
     fusion = SensorFusionManager()

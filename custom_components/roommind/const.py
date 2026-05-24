@@ -28,6 +28,7 @@ OVERRIDE_TYPES = [OVERRIDE_BOOST, OVERRIDE_ECO, OVERRIDE_CUSTOM]
 MODE_IDLE = "idle"
 MODE_HEATING = "heating"
 MODE_COOLING = "cooling"
+MODE_FAN_ONLY = "fan_only"
 
 # Schedule states
 SCHEDULE_STATE_ON = "on"

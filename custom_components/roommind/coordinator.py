@@ -707,6 +707,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             mix_levels=airflow.mix_levels,
             vent_levels=airflow.vent_levels,
             airflow_has_ventilation=airflow_has_ventilation,
+            airflow_has_hvac_fan=airflow.has_hvac_fan_control,
             airflow_mix_score=airflow_mix_score,
         )
         mode, power_fraction = await controller.async_evaluate(current_temp, targets)

@@ -46,6 +46,7 @@ def test_reads_fan_percentage_as_circulation_factor(hass):
     assert factors.levels == [0.0, 0.25, 0.5, 0.75, 1.0]
     assert factors.mix_levels == [0.0, 0.25, 0.5, 0.75, 1.0]
     assert factors.vent_levels == [0.0]
+    assert factors.has_hvac_fan_control is False
     assert factors.statuses[0].preset_mode == "normal"
     assert factors.statuses[0].oscillating is True
 
@@ -87,6 +88,33 @@ def test_reads_climate_fan_mode_and_ventilation_role(hass):
     assert factors.statuses[0].fan_mode == "high"
     assert factors.statuses[0].swing_mode == "both"
     assert factors.statuses[0].swing_horizontal_mode == "on"
+
+
+def test_hvac_fan_control_capability_is_reported(hass):
+    hass.states.get.side_effect = lambda eid: _state(
+        "heat",
+        {
+            "fan_mode": "low",
+            "fan_modes": ["off", "low", "high"],
+            "hvac_modes": ["off", "heat", "fan_only"],
+        },
+    )
+    mgr = EnvironmentalFactorManager(hass)
+
+    factors = mgr.read_room_airflow(
+        {
+            "airflow_devices": [
+                {
+                    "entity_id": "climate.living_ac",
+                    "role": "hvac_fan",
+                    "controllable": True,
+                    "control_enabled": True,
+                }
+            ]
+        }
+    )
+
+    assert factors.has_hvac_fan_control is True
 
 
 def test_ignores_unavailable_airflow_entities(hass):

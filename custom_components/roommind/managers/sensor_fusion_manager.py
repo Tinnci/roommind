@@ -18,6 +18,7 @@ class SensorBiasState:
 
     static_c: float = 0.0
     active_c: float = 0.0
+    k_mix: float = 0.0
 
 
 class SensorFusionManager:
@@ -36,6 +37,9 @@ class SensorFusionManager:
     _MIX_ACTIVE_BIAS_REDUCTION = 0.35
     _MIX_VARIANCE_REDUCTION = 0.4
     _AUXILIARY_VARIANCE_MIN = 0.06
+    _ETA_MIX = 0.003
+    _K_MIX_MIN = 0.0
+    _K_MIX_MAX = 0.85
 
     def __init__(self) -> None:
         self._biases: dict[str, SensorBiasState] = {}
@@ -93,8 +97,6 @@ class SensorFusionManager:
         corrected: list[TemperatureObservation] = []
         pf = max(0.0, min(1.0, power_fraction))
         mix = max(0.0, min(1.0, q_fan_mix))
-        bias_pf = pf * (1.0 - self._MIX_ACTIVE_BIAS_REDUCTION * mix)
-        variance_scale = 1.0 - self._MIX_VARIANCE_REDUCTION * mix
         for observation in observations:
             entity_id = observation.entity_id
             if observation.is_primary or not entity_id:
@@ -102,6 +104,10 @@ class SensorFusionManager:
                 continue
 
             bias = self._biases.get(entity_id, SensorBiasState())
+            k_mix = self._clamp(bias.k_mix or self._MIX_ACTIVE_BIAS_REDUCTION, self._K_MIX_MIN, self._K_MIX_MAX)
+            if bias.k_mix > 0.0:
+                k_mix = bias.k_mix
+            bias_pf = pf * (1.0 - k_mix * mix)
             epsilon = observation.value - (primary.value + bias.static_c + bias.active_c * bias_pf)
 
             static_c = self._clamp(bias.static_c + self._ETA_STATIC * epsilon, self._STATIC_MIN, self._STATIC_MAX)
@@ -118,13 +124,24 @@ class SensorFusionManager:
                     self._ACTIVE_COOL_MIN,
                     self._ACTIVE_COOL_MAX,
                 )
+            learned_k_mix = bias.k_mix
+            if mix > 0.0 and pf > 0.0 and abs(bias.active_c) > 0.05:
+                derivative = -bias.active_c * pf * mix
+                learned_k_mix = self._clamp(
+                    learned_k_mix + self._ETA_MIX * epsilon * derivative,
+                    self._K_MIX_MIN,
+                    self._K_MIX_MAX,
+                )
 
-            updated = SensorBiasState(static_c=static_c, active_c=active_c)
+            updated = SensorBiasState(static_c=static_c, active_c=active_c, k_mix=learned_k_mix)
             self._biases[entity_id] = updated
+            effective_k_mix = updated.k_mix if updated.k_mix > 0.0 else self._MIX_ACTIVE_BIAS_REDUCTION
+            correction_pf = pf * (1.0 - effective_k_mix * mix)
+            variance_scale = 1.0 - min(self._MIX_VARIANCE_REDUCTION, effective_k_mix) * mix
             corrected.append(
                 replace(
                     observation,
-                    value=observation.value - (updated.static_c + updated.active_c * bias_pf),
+                    value=observation.value - (updated.static_c + updated.active_c * correction_pf),
                     variance=max(self._AUXILIARY_VARIANCE_MIN, observation.variance * variance_scale),
                 )
             )
@@ -139,7 +156,7 @@ class SensorFusionManager:
         """Serialize learned auxiliary sensor biases."""
         return {
             "biases": {
-                entity_id: {"static_c": bias.static_c, "active_c": bias.active_c}
+                entity_id: {"static_c": bias.static_c, "active_c": bias.active_c, "k_mix": bias.k_mix}
                 for entity_id, bias in self._biases.items()
             }
         }
@@ -159,6 +176,7 @@ class SensorFusionManager:
             try:
                 static_c = float(raw_bias.get("static_c", 0.0))
                 active_c = float(raw_bias.get("active_c", 0.0))
+                k_mix = float(raw_bias.get("k_mix", 0.0))
             except (TypeError, ValueError):
                 continue
             manager._biases[entity_id] = SensorBiasState(
@@ -168,6 +186,7 @@ class SensorFusionManager:
                     manager._ACTIVE_COOL_MIN,
                     manager._ACTIVE_HEAT_MAX,
                 ),
+                k_mix=manager._clamp(k_mix, manager._K_MIX_MIN, manager._K_MIX_MAX),
             )
         return manager
 
