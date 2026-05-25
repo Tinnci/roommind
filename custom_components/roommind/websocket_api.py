@@ -267,6 +267,14 @@ async def websocket_list_rooms(
             "cover_forced_reason": live.get("cover_forced_reason", ""),
             "active_cover_schedule_index": live.get("active_cover_schedule_index", -1),
             "active_heat_sources": live.get("active_heat_sources"),
+            "q_fan_mix": live.get("q_fan_mix", 0.0),
+            "q_vent": live.get("q_vent", 0.0),
+            "airflow_active": live.get("airflow_active", False),
+            "airflow_plan_level": live.get("airflow_plan_level", 0.0),
+            "airflow_mix_plan_level": live.get("airflow_mix_plan_level", 0.0),
+            "airflow_vent_plan_level": live.get("airflow_vent_plan_level", 0.0),
+            "airflow_devices_status": live.get("airflow_devices_status", []),
+            "airflow_command_status": live.get("airflow_command_status", []),
             "learning_paused_reason": learning_paused_reason,
         }
         result[area_id] = room_data

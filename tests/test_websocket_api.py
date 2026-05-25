@@ -218,6 +218,67 @@ async def test_list_rooms_after_save(ws_hass, store, connection):
 
 
 @pytest.mark.asyncio
+async def test_list_rooms_surfaces_airflow_live_fields(ws_hass, store, connection):
+    """The room list payload includes coordinator airflow telemetry."""
+    await store.async_load()
+
+    save_msg = {
+        "id": 2,
+        "type": "roommind/rooms/save",
+        "area_id": "living",
+        "thermostats": ["climate.living_ac"],
+        "temperature_sensor": "sensor.living_temp",
+    }
+    await _save_room(ws_hass, connection, save_msg)
+    connection.send_result.reset_mock()
+
+    mock_coordinator = MagicMock()
+    mock_coordinator.rooms = {
+        "living": {
+            "q_fan_mix": 0.4,
+            "q_vent": 0.2,
+            "airflow_active": True,
+            "airflow_plan_level": 0.5,
+            "airflow_mix_plan_level": 0.5,
+            "airflow_vent_plan_level": 0.25,
+            "airflow_devices_status": [
+                {
+                    "entity_id": "fan.living",
+                    "role": "circulation",
+                    "q": 0.4,
+                    "available": True,
+                }
+            ],
+            "airflow_command_status": [
+                {
+                    "entity_id": "fan.living",
+                    "planned_level": 0.5,
+                    "observed_q": 0.4,
+                    "outcome": "applied",
+                }
+            ],
+        }
+    }
+    mock_coordinator.async_request_refresh = AsyncMock()
+    mock_coordinator.outdoor_temp = 7.0
+    mock_coordinator.outdoor_temp_effective = 7.0
+    mock_coordinator.outdoor_humidity = 80.0
+    ws_hass.data[DOMAIN]["coordinator"] = mock_coordinator
+
+    await _list_rooms(ws_hass, connection, {"id": 3, "type": "roommind/rooms/list"})
+
+    live = connection.send_result.call_args[0][1]["rooms"]["living"]["live"]
+    assert live["q_fan_mix"] == 0.4
+    assert live["q_vent"] == 0.2
+    assert live["airflow_active"] is True
+    assert live["airflow_plan_level"] == 0.5
+    assert live["airflow_mix_plan_level"] == 0.5
+    assert live["airflow_vent_plan_level"] == 0.25
+    assert live["airflow_devices_status"][0]["entity_id"] == "fan.living"
+    assert live["airflow_command_status"][0]["outcome"] == "applied"
+
+
+@pytest.mark.asyncio
 async def test_list_rooms_learning_paused_when_outdoor_unavailable(ws_hass, store, connection):
     """list_rooms surfaces learning_paused_reason='outdoor_unavailable' when
     the coordinator has no effective outdoor temperature (see #301)."""

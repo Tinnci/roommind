@@ -107,6 +107,7 @@
   "mode.cool_only_desc": "仅使用空调，温控器/暖气保持关闭",
   "mode.heating": "正在供暖",
   "mode.cooling": "正在制冷",
+  "mode.fan_only": "仅送风",
   "mode.idle": "待机",
 
   "schedule.add_schedule": "添加日程",

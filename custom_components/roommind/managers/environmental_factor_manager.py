@@ -169,8 +169,14 @@ class EnvironmentalFactorManager:
         control_enabled: bool,
     ) -> AirflowDeviceStatus:
         percentage = _safe_float(state.attributes.get("percentage"))
+        preset_mode = state.attributes.get("preset_mode")
+        preset_modes = [str(mode) for mode in state.attributes.get("preset_modes") or []]
         if state.state == STATE_OFF:
             q = 0.0
+        elif percentage is not None and percentage > 0:
+            q = percentage / 100.0
+        elif preset_mode:
+            q = _fan_preset_mode_to_q(preset_mode, preset_modes)
         elif percentage is not None:
             q = percentage / 100.0
         else:
@@ -191,8 +197,8 @@ class EnvironmentalFactorManager:
             control_enabled=control_enabled,
             domain="fan",
             percentage=percentage,
-            preset_mode=state.attributes.get("preset_mode"),
-            preset_modes=[str(mode) for mode in state.attributes.get("preset_modes") or []],
+            preset_mode=preset_mode,
+            preset_modes=preset_modes,
             direction=state.attributes.get("current_direction"),
             oscillating=state.attributes.get("oscillating"),
             levels=_unique_levels(levels),
@@ -209,11 +215,14 @@ class EnvironmentalFactorManager:
         fan_modes = [str(mode) for mode in state.attributes.get("fan_modes") or []]
         fan_mode = state.attributes.get("fan_mode")
         hvac_action = state.attributes.get("hvac_action")
-        if state.state == STATE_OFF or hvac_action == "off":
+        hvac_action_text = str(hvac_action).lower() if hvac_action is not None else None
+        if state.state == STATE_OFF or hvac_action_text == "off":
+            q = 0.0
+        elif hvac_action_text == "idle" and state.state != "fan_only":
             q = 0.0
         else:
             q = _fan_mode_to_q(fan_mode, fan_modes)
-        if hvac_action == "fan" and q == 0.0 and state.state != STATE_OFF:
+        if hvac_action_text == "fan" and q == 0.0 and state.state != STATE_OFF:
             q = 1.0
         levels = _levels_from_fan_modes(fan_modes)
 
@@ -269,6 +278,24 @@ def _fan_mode_to_q(mode: Any, fan_modes: list[str] | None = None) -> float:
         if mode in active_modes and active_modes:
             return (active_modes.index(mode) + 1) / len(active_modes)
     return 1.0
+
+
+def _fan_preset_mode_to_q(mode: Any, preset_modes: list[str] | None = None) -> float:
+    """Return a conservative airflow estimate for preset-only fan states."""
+    text = str(mode).lower()
+    if text in {"off", "none", "stop", "stopped"}:
+        return 0.0
+    if text in {"sleep", "night", "quiet", "silent", "eco", "minimum", "min"}:
+        return 1.0 / 3.0
+    if text in {"auto", "smart", "breeze", "natural", "normal", "standard", "comfort"}:
+        return 0.5
+    if text in {"high", "max", "maximum", "turbo", "boost", "strong", "full", "on"}:
+        return 1.0
+    if preset_modes and mode in preset_modes:
+        active_modes = [m for m in preset_modes if str(m).lower() not in {"off", "none", "stop", "stopped"}]
+        if mode in active_modes and active_modes:
+            return (active_modes.index(mode) + 1) / len(active_modes)
+    return 0.5
 
 
 def _unique_levels(levels: Any) -> list[float]:

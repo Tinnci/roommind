@@ -107,6 +107,7 @@
   "mode.cool_only_desc": "Only uses ACs, thermostats stay off",
   "mode.heating": "Heating",
   "mode.cooling": "Cooling",
+  "mode.fan_only": "Fan only",
   "mode.idle": "Standby",
 
   "schedule.add_schedule": "Add schedule",

@@ -9,7 +9,12 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 
 from ..const import MODE_COOLING, MODE_HEATING, make_roommind_context
-from .environmental_factor_manager import AIRFLOW_ROLE_HVAC_FAN, AIRFLOW_ROLE_VENTILATION, _fan_mode_to_q
+from .environmental_factor_manager import (
+    AIRFLOW_ROLE_HVAC_FAN,
+    AIRFLOW_ROLE_VENTILATION,
+    _fan_mode_to_q,
+    _fan_preset_mode_to_q,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -292,11 +297,18 @@ def _fan_observed_q(state: str, attrs: dict[str, Any]) -> float:
     if state == "off":
         return 0.0
     percentage = attrs.get("percentage")
+    preset_mode = attrs.get("preset_mode")
+    preset_modes = [str(item) for item in attrs.get("preset_modes") or []]
     if percentage is not None:
         try:
-            return _clamp_level(float(percentage) / 100.0)
+            q = _clamp_level(float(percentage) / 100.0)
         except (TypeError, ValueError):
             return 1.0
+        if q > 0.0 or not preset_mode:
+            return q
+        return _fan_preset_mode_to_q(preset_mode, preset_modes)
+    if preset_mode:
+        return _fan_preset_mode_to_q(preset_mode, preset_modes)
     return 1.0
 
 

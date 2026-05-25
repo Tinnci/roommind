@@ -51,6 +51,38 @@ def test_reads_fan_percentage_as_circulation_factor(hass):
     assert factors.statuses[0].oscillating is True
 
 
+def test_preset_only_fan_on_does_not_collapse_to_zero_airflow(hass):
+    """Preset-driven fans can report percentage=0 while they are running."""
+    hass.states.get.side_effect = lambda eid: _state(
+        "on",
+        {
+            "percentage": 0,
+            "preset_mode": "auto",
+            "preset_modes": ["sleep", "auto", "turbo"],
+            "speed_count": 3,
+        },
+    )
+    mgr = EnvironmentalFactorManager(hass)
+
+    factors = mgr.read_room_airflow(
+        {
+            "airflow_devices": [
+                {
+                    "entity_id": "fan.living_room",
+                    "role": "circulation",
+                    "controllable": True,
+                    "control_enabled": True,
+                }
+            ]
+        }
+    )
+
+    assert factors.q_fan_mix == 0.5
+    assert factors.active is True
+    assert factors.statuses[0].percentage == 0
+    assert factors.statuses[0].preset_mode == "auto"
+
+
 def test_reads_climate_fan_mode_and_ventilation_role(hass):
     hass.states.get.side_effect = lambda eid: _state(
         "cool",
@@ -158,3 +190,27 @@ def test_off_climate_fan_mode_does_not_count_as_active_airflow(hass):
     assert factors.q_fan_mix == 0.0
     assert factors.active is False
     assert factors.mix_levels == [0.0, 0.333, 0.5, 1.0]
+
+
+def test_idle_climate_action_does_not_count_stale_fan_mode_as_airflow(hass):
+    """A stale climate fan_mode should not imply airflow while hvac_action is idle."""
+    hass.states.get.side_effect = lambda eid: _state(
+        "cool",
+        {
+            "fan_mode": "high",
+            "fan_modes": ["off", "low", "medium", "high"],
+            "hvac_action": "idle",
+        },
+    )
+    mgr = EnvironmentalFactorManager(hass)
+
+    factors = mgr.read_room_airflow(
+        {
+            "airflow_devices": [
+                {"entity_id": "climate.living_ac", "role": "hvac_fan", "controllable": True, "control_enabled": True}
+            ]
+        }
+    )
+
+    assert factors.q_fan_mix == 0.0
+    assert factors.active is False

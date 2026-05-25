@@ -279,6 +279,28 @@ async def test_redundant_airflow_command_is_cached(hass):
 
 
 @pytest.mark.asyncio
+async def test_preset_only_fan_reports_nonzero_observed_q(hass):
+    hass.states.get.return_value = _state(
+        "on",
+        {
+            "percentage": 0,
+            "preset_mode": "auto",
+            "preset_modes": ["sleep", "auto", "turbo"],
+        },
+    )
+    mgr = AirflowControlManager(hass)
+    room = {
+        "airflow_devices": [
+            {"entity_id": "fan.living", "role": "circulation", "controllable": False, "control_enabled": False}
+        ]
+    }
+
+    statuses = await mgr.async_apply("living", room, level=0.5, mode="heating")
+
+    assert statuses[0]["observed_q"] == 0.5
+
+
+@pytest.mark.asyncio
 async def test_role_specific_levels_do_not_cross_apply(hass):
     mgr = AirflowControlManager(hass)
     room = {

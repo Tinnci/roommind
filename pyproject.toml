@@ -2,8 +2,14 @@
 # Tool configuration
 # --------------------------------------------------------------------------- #
 
+[project]
+name = "roommind"
+version = "0.1.0"
+requires-python = ">=3.13.2"
+dependencies = []
+
 [tool.ruff]
-target-version = "py312"
+target-version = "py313"
 line-length = 120
 
 [tool.ruff.lint]
@@ -27,7 +33,7 @@ ignore = [
 known-first-party = ["custom_components.roommind"]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.13"
 check_untyped_defs = true
 disallow_untyped_defs = true
 ignore_missing_imports = true
@@ -48,4 +54,16 @@ do_not_mutate = [
     "**/const.py",        # constants, no logic
     "**/config_flow.py",  # HA boilerplate
     "**/__init__.py",     # setup/registration, tested via integration
+]
+
+[dependency-groups]
+dev = [
+    "homeassistant==2026.2.3",
+    "mypy>=2.1.0",
+    "pytest-cov>=7.0.0",
+    "pytest-freezer>=0.4.9",
+    "pytest-homeassistant-custom-component==0.13.316",
+    "pytest-sugar>=1.0.0",
+    "pytest-xdist>=3.8.0",
+    "ruff>=0.15.14",
 ]

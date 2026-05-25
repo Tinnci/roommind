@@ -107,6 +107,7 @@
   "mode.cool_only_desc": "Nutzt nur Klimaanlagen, Thermostate bleiben aus",
   "mode.heating": "Heizen",
   "mode.cooling": "Kühlen",
+  "mode.fan_only": "Nur Ventilator",
   "mode.idle": "Standby",
 
   "schedule.add_schedule": "Zeitplan hinzufügen",
