@@ -54,12 +54,15 @@ export interface RoomLiveData {
   learning_paused_reason: "outdoor_unavailable" | null;
   q_fan_mix?: number;
   q_vent?: number;
+  airflow_ach?: number;
+  perceived_temp?: number | null;
   airflow_active?: boolean;
   airflow_plan_level?: number;
   airflow_mix_plan_level?: number;
   airflow_vent_plan_level?: number;
   airflow_devices_status?: AirflowDeviceStatus[];
   airflow_command_status?: AirflowCommandStatus[];
+  hvac_output_status?: HVACOutputStatus | null;
 }
 
 export type DeviceType = "trv" | "ac";
@@ -85,8 +88,16 @@ export interface AirflowDeviceConfig {
   preferred_direction?: string;
   preferred_oscillating?: boolean | null;
   preferred_preset_mode?: string;
+  preferred_preset_mode_thermal?: string;
+  preferred_preset_mode_idle?: string;
+  preferred_preset_mode_night?: string;
+  preferred_preset_mode_away?: string;
   preferred_swing_mode?: string;
   preferred_swing_horizontal_mode?: string;
+  effect_weight?: number;
+  airflow_m3h?: number | null;
+  power_sensor_entity?: string;
+  assumed_state_ttl_s?: number;
 }
 
 export interface AirflowDeviceStatus {
@@ -109,6 +120,13 @@ export interface AirflowDeviceStatus {
   swing_horizontal_mode?: string | null;
   swing_horizontal_modes?: string[];
   levels?: number[];
+  effect_weight?: number;
+  airflow_m3h?: number | null;
+}
+
+export interface SkippedService {
+  service: string;
+  reason: string;
 }
 
 export interface AirflowCommandStatus {
@@ -125,8 +143,20 @@ export interface AirflowCommandStatus {
     | "failed"
     | string;
   skip_reason?: string;
+  skipped_services?: SkippedService[];
   last_service?: string | null;
   roommind_fan_only?: boolean;
+  assumed_state_confidence?: "observed" | "assumed" | "stale" | "conflicting" | string;
+  commanded_level?: number | null;
+  commanded_at?: number | null;
+}
+
+export interface HVACOutputStatus {
+  entity_id: string;
+  stage: string;
+  delivered_capacity_factor: number;
+  electric_power_w?: number | null;
+  confidence: string;
 }
 
 export type ConflictResolution =
@@ -153,6 +183,12 @@ export interface RoomConfig {
   acs: string[];
   devices?: DeviceConfig[];
   airflow_devices?: AirflowDeviceConfig[];
+  room_volume_m3?: number | null;
+  control_target?: "air_temperature" | "perceived_temperature";
+  quiet_hours?: { start: string; end: string } | null;
+  max_fan_level_night?: number;
+  sleep_temp_ramp_c?: number;
+  adjacent_rooms?: AdjacentRoomConfig[];
   temperature_sensor: string;
   temperature_sensors?: string[];
   humidity_sensor: string;
@@ -199,6 +235,13 @@ export interface RoomConfig {
   heat_source_ac_min_outdoor?: number;
   climate_control_enabled?: boolean;
   live?: RoomLiveData;
+}
+
+export interface AdjacentRoomConfig {
+  area_id: string;
+  link_sensor_entity?: string;
+  coupling_weight?: number;
+  enabled?: boolean;
 }
 
 export interface GlobalSettings {

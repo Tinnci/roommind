@@ -138,6 +138,54 @@ async def test_save_room_creates_new(ws_hass, store, connection):
     # Defaults for fields not provided
     assert room["acs"] == []
     assert room["climate_mode"] == "auto"
+
+
+@pytest.mark.asyncio
+async def test_save_room_accepts_p2_p3_p4_configuration(ws_hass, store, connection):
+    await store.async_load()
+
+    msg = {
+        "id": 22,
+        "type": "roommind/rooms/save",
+        "area_id": "living_room",
+        "room_volume_m3": 55,
+        "control_target": "perceived_temperature",
+        "quiet_hours": {"start": "22:00", "end": "07:00"},
+        "max_fan_level_night": 0.4,
+        "sleep_temp_ramp_c": 1.5,
+        "adjacent_rooms": [
+            {
+                "area_id": "hall",
+                "link_sensor_entity": "binary_sensor.living_hall_door",
+                "coupling_weight": 0.35,
+                "enabled": True,
+            }
+        ],
+        "airflow_devices": [
+            {
+                "entity_id": "climate.living_ac",
+                "role": "hvac_fan",
+                "controllable": True,
+                "control_enabled": True,
+                "effect_weight": 1.2,
+                "airflow_m3h": 300,
+                "power_sensor_entity": "sensor.living_ac_power",
+                "assumed_state_ttl_s": 180,
+                "preferred_preset_mode_thermal": "boost",
+                "preferred_preset_mode_idle": "eco",
+                "preferred_preset_mode_night": "sleep",
+                "preferred_preset_mode_away": "eco",
+            }
+        ],
+    }
+
+    await _save_room(ws_hass, connection, msg)
+
+    room = connection.send_result.call_args[0][1]["room"]
+    assert room["room_volume_m3"] == 55
+    assert room["control_target"] == "perceived_temperature"
+    assert room["adjacent_rooms"][0]["coupling_weight"] == 0.35
+    assert room["airflow_devices"][0]["preferred_preset_mode_night"] == "sleep"
     assert room["schedules"] == []
     assert room["schedule_selector_entity"] == ""
     assert room["comfort_temp"] == 21.0

@@ -106,6 +106,12 @@ _ROOM_SAVE_FIELDS = (
     "heat_source_ac_min_outdoor",
     "valve_protection_exclude",
     "climate_control_enabled",
+    "room_volume_m3",
+    "control_target",
+    "quiet_hours",
+    "max_fan_level_night",
+    "sleep_temp_ramp_c",
+    "adjacent_rooms",
 )
 
 _SETTINGS_SAVE_FIELDS = (
@@ -269,12 +275,15 @@ async def websocket_list_rooms(
             "active_heat_sources": live.get("active_heat_sources"),
             "q_fan_mix": live.get("q_fan_mix", 0.0),
             "q_vent": live.get("q_vent", 0.0),
+            "airflow_ach": live.get("airflow_ach", 0.0),
+            "perceived_temp": live.get("perceived_temp"),
             "airflow_active": live.get("airflow_active", False),
             "airflow_plan_level": live.get("airflow_plan_level", 0.0),
             "airflow_mix_plan_level": live.get("airflow_mix_plan_level", 0.0),
             "airflow_vent_plan_level": live.get("airflow_vent_plan_level", 0.0),
             "airflow_devices_status": live.get("airflow_devices_status", []),
             "airflow_command_status": live.get("airflow_command_status", []),
+            "hvac_output_status": live.get("hvac_output_status"),
             "learning_paused_reason": learning_paused_reason,
         }
         result[area_id] = room_data
@@ -345,8 +354,16 @@ async def websocket_list_rooms(
                 vol.Optional("preferred_direction", default=""): str,
                 vol.Optional("preferred_oscillating", default=None): vol.Any(bool, None),
                 vol.Optional("preferred_preset_mode", default=""): str,
+                vol.Optional("preferred_preset_mode_thermal", default=""): str,
+                vol.Optional("preferred_preset_mode_idle", default=""): str,
+                vol.Optional("preferred_preset_mode_night", default=""): str,
+                vol.Optional("preferred_preset_mode_away", default=""): str,
                 vol.Optional("preferred_swing_mode", default=""): str,
                 vol.Optional("preferred_swing_horizontal_mode", default=""): str,
+                vol.Optional("effect_weight", default=1.0): vol.All(vol.Coerce(float), vol.Range(min=0, max=2)),
+                vol.Optional("airflow_m3h", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0))),
+                vol.Optional("power_sensor_entity", default=""): str,
+                vol.Optional("assumed_state_ttl_s", default=120): vol.All(vol.Coerce(int), vol.Range(min=0, max=3600)),
             }
         ],
         vol.Optional("humidity_sensor"): str,
@@ -394,6 +411,25 @@ async def websocket_list_rooms(
         vol.Optional("heat_source_outdoor_threshold"): vol.All(vol.Coerce(float), vol.Range(min=-20, max=25)),
         vol.Optional("heat_source_ac_min_outdoor"): vol.All(vol.Coerce(float), vol.Range(min=-30, max=5)),
         vol.Optional("climate_control_enabled"): bool,
+        vol.Optional("room_volume_m3"): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0))),
+        vol.Optional("control_target"): vol.In(["air_temperature", "perceived_temperature"]),
+        vol.Optional("quiet_hours"): vol.Any(
+            None,
+            {
+                vol.Required("start"): str,
+                vol.Required("end"): str,
+            },
+        ),
+        vol.Optional("max_fan_level_night"): vol.All(vol.Coerce(float), vol.Range(min=0, max=1)),
+        vol.Optional("sleep_temp_ramp_c"): vol.All(vol.Coerce(float), vol.Range(min=0, max=5)),
+        vol.Optional("adjacent_rooms"): [
+            {
+                vol.Required("area_id"): str,
+                vol.Optional("link_sensor_entity", default=""): str,
+                vol.Optional("coupling_weight", default=0.0): vol.All(vol.Coerce(float), vol.Range(min=0, max=2)),
+                vol.Optional("enabled", default=True): bool,
+            }
+        ],
     }
 )
 @websocket_api.async_response

@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import inspect
 import logging
+import time
 from typing import Any
 
+from homeassistant.components.climate import ClimateEntityFeature
+from homeassistant.components.fan import FanEntityFeature
 from homeassistant.core import HomeAssistant
 
 from ..const import MODE_COOLING, MODE_HEATING, make_roommind_context
@@ -32,6 +35,7 @@ class AirflowControlManager:
         self.hass = hass
         self._last_commands: dict[tuple[str, str], tuple[tuple[str, Any], ...]] = {}
         self._roommind_fan_only: set[str] = set()
+        self._assumed_commands: dict[str, dict[str, Any]] = {}
 
     async def async_apply(
         self,
@@ -71,15 +75,20 @@ class AirflowControlManager:
                 _LOGGER.warning("Room '%s': airflow command failed for '%s'", area_id, entity_id, exc_info=True)
                 status.update({"outcome": OUTCOME_FAILED, "skip_reason": "service_error"})
             status["roommind_fan_only"] = entity_id in self._roommind_fan_only
+            status.update(self._assumed_status(entity_id, target, config))
             statuses.append(status)
         return statuses
 
     async def _apply_fan(self, area_id: str, entity_id: str, config: dict, level: float) -> dict[str, Any]:
         last_service = None
+        skipped_services: list[dict[str, str]] = []
+        state = self.hass.states.get(entity_id)
+        attrs = state.attributes if state else {}
         if level <= 0.0:
             if await self._call(area_id, "fan", "turn_off", {"entity_id": entity_id}):
                 last_service = "fan.turn_off"
-            return {"outcome": OUTCOME_APPLIED, "last_service": last_service}
+            self._record_assumed_command(entity_id, 0.0)
+            return {"outcome": OUTCOME_APPLIED, "last_service": last_service, "skipped_services": skipped_services}
 
         if await self._call(
             area_id,
@@ -90,10 +99,14 @@ class AirflowControlManager:
             last_service = "fan.turn_on"
         direction = config.get("preferred_direction")
         if direction:
-            if await self._call(area_id, "fan", "set_direction", {"entity_id": entity_id, "direction": direction}):
+            if not _supports_feature(attrs, FanEntityFeature.DIRECTION):
+                skipped_services.append({"service": "fan.set_direction", "reason": "direction_unsupported"})
+            elif await self._call(area_id, "fan", "set_direction", {"entity_id": entity_id, "direction": direction}):
                 last_service = "fan.set_direction"
         if config.get("preferred_oscillating") is not None:
-            if await self._call(
+            if not _supports_feature(attrs, FanEntityFeature.OSCILLATE):
+                skipped_services.append({"service": "fan.oscillate", "reason": "oscillate_unsupported"})
+            elif await self._call(
                 area_id,
                 "fan",
                 "oscillate",
@@ -102,14 +115,20 @@ class AirflowControlManager:
                 last_service = "fan.oscillate"
         preset_mode = config.get("preferred_preset_mode")
         if preset_mode:
-            if await self._call(
+            preset_modes = [str(item) for item in attrs.get("preset_modes") or []]
+            if not _supports_feature(attrs, FanEntityFeature.PRESET_MODE) or (
+                preset_modes and preset_mode not in preset_modes
+            ):
+                skipped_services.append({"service": "fan.set_preset_mode", "reason": "preset_unsupported"})
+            elif await self._call(
                 area_id,
                 "fan",
                 "set_preset_mode",
                 {"entity_id": entity_id, "preset_mode": preset_mode},
             ):
                 last_service = "fan.set_preset_mode"
-        return {"outcome": OUTCOME_APPLIED, "last_service": last_service}
+        self._record_assumed_command(entity_id, level)
+        return {"outcome": OUTCOME_APPLIED, "last_service": last_service, "skipped_services": skipped_services}
 
     async def _apply_climate(
         self,
@@ -122,9 +141,11 @@ class AirflowControlManager:
         state = self.hass.states.get(entity_id)
         attrs = state.attributes if state else {}
         fan_modes = [str(item) for item in attrs.get("fan_modes") or []]
+        preset_modes = [str(item) for item in attrs.get("preset_modes") or []]
         hvac_modes = [str(item) for item in attrs.get("hvac_modes") or []]
         current_hvac_mode = str(state.state) if state else ""
         last_service = None
+        skipped_services: list[dict[str, str]] = []
 
         role = config.get("role", "")
         active_thermal_mode = mode in (MODE_HEATING, MODE_COOLING)
@@ -176,7 +197,9 @@ class AirflowControlManager:
 
         fan_mode = self._nearest_fan_mode(level, fan_modes)
         if fan_mode:
-            if await self._call(
+            if not _supports_feature(attrs, ClimateEntityFeature.FAN_MODE):
+                skipped_services.append({"service": "climate.set_fan_mode", "reason": "fan_mode_unsupported"})
+            elif await self._call(
                 area_id,
                 "climate",
                 "set_fan_mode",
@@ -184,9 +207,25 @@ class AirflowControlManager:
             ):
                 last_service = "climate.set_fan_mode"
 
+        preset_mode = _select_climate_preset(config, mode)
+        if preset_mode:
+            if not _supports_feature(attrs, ClimateEntityFeature.PRESET_MODE) or (
+                preset_modes and preset_mode not in preset_modes
+            ):
+                skipped_services.append({"service": "climate.set_preset_mode", "reason": "preset_unsupported"})
+            elif await self._call(
+                area_id,
+                "climate",
+                "set_preset_mode",
+                {"entity_id": entity_id, "preset_mode": preset_mode},
+            ):
+                last_service = "climate.set_preset_mode"
+
         swing_mode = config.get("preferred_swing_mode")
         if swing_mode and (not attrs.get("swing_modes") or swing_mode in attrs.get("swing_modes", [])):
-            if await self._call(
+            if not _supports_feature(attrs, ClimateEntityFeature.SWING_MODE):
+                skipped_services.append({"service": "climate.set_swing_mode", "reason": "swing_unsupported"})
+            elif await self._call(
                 area_id,
                 "climate",
                 "set_swing_mode",
@@ -198,14 +237,19 @@ class AirflowControlManager:
         if swing_horizontal and (
             not attrs.get("swing_horizontal_modes") or swing_horizontal in attrs.get("swing_horizontal_modes", [])
         ):
-            if await self._call(
+            if not _supports_feature(attrs, ClimateEntityFeature.SWING_HORIZONTAL_MODE):
+                skipped_services.append(
+                    {"service": "climate.set_swing_horizontal_mode", "reason": "swing_horizontal_unsupported"}
+                )
+            elif await self._call(
                 area_id,
                 "climate",
                 "set_swing_horizontal_mode",
                 {"entity_id": entity_id, "swing_horizontal_mode": swing_horizontal},
             ):
                 last_service = "climate.set_swing_horizontal_mode"
-        return {"outcome": OUTCOME_APPLIED, "last_service": last_service}
+        self._record_assumed_command(entity_id, level)
+        return {"outcome": OUTCOME_APPLIED, "last_service": last_service, "skipped_services": skipped_services}
 
     async def _apply_climate_zero_level(
         self,
@@ -286,11 +330,60 @@ class AirflowControlManager:
             "skip_reason": "",
             "last_service": None,
             "roommind_fan_only": entity_id in self._roommind_fan_only,
+            "skipped_services": [],
+        }
+
+    def _record_assumed_command(self, entity_id: str, level: float) -> None:
+        self._assumed_commands[entity_id] = {"level": _clamp_level(level), "at": time.time()}
+
+    def _assumed_status(self, entity_id: str, target: float, config: dict) -> dict[str, Any]:
+        command = self._assumed_commands.get(entity_id)
+        if not command:
+            return {"assumed_state_confidence": "observed", "commanded_level": None, "commanded_at": None}
+        ttl = max(0.0, float(config.get("assumed_state_ttl_s") or 120))
+        age = time.time() - float(command["at"])
+        if age > ttl:
+            confidence = "stale"
+        else:
+            state = self.hass.states.get(entity_id)
+            observed = None
+            if state is not None:
+                domain = entity_id.split(".", 1)[0] if "." in entity_id else ""
+                observed = _fan_observed_q(str(state.state), state.attributes) if domain == "fan" else None
+                if domain == "climate":
+                    observed = _climate_observed_q(str(state.state), state.attributes)
+            confidence = "observed" if observed is not None and abs(observed - target) <= 0.15 else "assumed"
+        return {
+            "assumed_state_confidence": confidence,
+            "commanded_level": command["level"],
+            "commanded_at": command["at"],
         }
 
 
 def _clamp_level(level: float) -> float:
     return max(0.0, min(1.0, float(level)))
+
+
+def _supports_feature(attrs: dict[str, Any], feature: Any) -> bool:
+    supported = attrs.get("supported_features")
+    if supported is None:
+        return True
+    try:
+        return bool(int(supported) & int(feature))
+    except (TypeError, ValueError):
+        return True
+
+
+def _select_climate_preset(config: dict, mode: str) -> str:
+    if config.get("preferred_preset_mode_night") and _is_night_context(config):
+        return str(config.get("preferred_preset_mode_night"))
+    if mode in (MODE_HEATING, MODE_COOLING):
+        return str(config.get("preferred_preset_mode_thermal") or "")
+    return str(config.get("preferred_preset_mode_idle") or "")
+
+
+def _is_night_context(config: dict) -> bool:
+    return False
 
 
 def _fan_observed_q(state: str, attrs: dict[str, Any]) -> float:

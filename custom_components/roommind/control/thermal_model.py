@@ -23,6 +23,7 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -97,6 +98,7 @@ class RCModel:
         q_residual: float = 0.0,
         q_occupancy: float = 0.0,
         q_vent: float = 0.0,
+        coupling_terms: Sequence[dict[str, Any]] | None = None,
     ) -> float:
         """Predict room temperature after *dt_minutes* using the analytical solution.
 
@@ -109,6 +111,8 @@ class RCModel:
             q_residual: residual heat fraction from thermal mass (0–1).
             q_occupancy: occupancy signal (0 = unoccupied, 1 = occupied).
             q_vent: normalized ventilation airflow (0–1), increasing outdoor exchange.
+            coupling_terms: optional adjacent-room heat exchange terms with
+                temperature, k [1/h], and gate [0–1].
 
         Returns:
             Predicted room temperature [degC], clamped to [0, 50].
@@ -121,10 +125,23 @@ class RCModel:
         # Total thermal input including solar gain, occupancy heat, and residual heat
         Q_total = Q_active + self.Q_solar * q_solar + self.Q_occupancy * q_occupancy + Q_residual
         U_eff = max(0.001, self.U + max(0.0, self.beta_vent) * max(0.0, min(1.0, q_vent)))
-        # Equilibrium temperature: T_out + Q/U
-        T_eq = T_outdoor + Q_total / U_eff
-        # Decay constant  (U/C has unit 1/h)
-        decay = math.exp(-U_eff * dt_hours / self.C)
+        coupling_rate = 0.0
+        coupling_target = 0.0
+        for term in coupling_terms or []:
+            try:
+                k = max(0.0, float(term.get("k", 0.0)))
+                gate = max(0.0, min(1.0, float(term.get("gate", 1.0))))
+                adjacent_temp = float(term["temperature"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            rate = k * gate
+            coupling_rate += rate
+            coupling_target += rate * adjacent_temp
+        # Equilibrium temperature with outdoor conductance and optional room graph coupling.
+        outdoor_rate = U_eff / self.C
+        total_rate = max(0.001, outdoor_rate + coupling_rate)
+        T_eq = (outdoor_rate * T_outdoor + Q_total / self.C + coupling_target) / total_rate
+        decay = math.exp(-total_rate * dt_hours)
         result = T_eq + (T_room - T_eq) * decay
         # Hard output clamp for safety
         return max(0.0, min(50.0, result))

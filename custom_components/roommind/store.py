@@ -50,6 +50,12 @@ def _migrate_room(room: dict) -> dict:
     _migrate_room_temps(room)
     room.setdefault("temperature_sensors", [])
     room.setdefault("airflow_devices", [])
+    room.setdefault("room_volume_m3", None)
+    room.setdefault("control_target", "air_temperature")
+    room.setdefault("quiet_hours", None)
+    room.setdefault("max_fan_level_night", 0.5)
+    room.setdefault("sleep_temp_ramp_c", 0.0)
+    room.setdefault("adjacent_rooms", [])
     _normalize_temperature_sensors(room)
     migrate_heat_pump_devices(room.get("devices", []))
     ensure_room_has_devices(room)
@@ -227,6 +233,12 @@ class RoomMindStore:
             "temperature_sensor": config.get("temperature_sensor", ""),
             "temperature_sensors": config.get("temperature_sensors", []),
             "airflow_devices": config.get("airflow_devices", []),
+            "room_volume_m3": config.get("room_volume_m3", None),
+            "control_target": config.get("control_target", "air_temperature"),
+            "quiet_hours": config.get("quiet_hours", None),
+            "max_fan_level_night": config.get("max_fan_level_night", 0.5),
+            "sleep_temp_ramp_c": config.get("sleep_temp_ramp_c", 0.0),
+            "adjacent_rooms": config.get("adjacent_rooms", []),
             "humidity_sensor": config.get("humidity_sensor", ""),
             "occupancy_sensors": config.get("occupancy_sensors", []),
             "climate_mode": config.get("climate_mode", "auto"),

@@ -5,6 +5,8 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
+from homeassistant.components.climate import ClimateEntityFeature
+from homeassistant.components.fan import FanEntityFeature
 
 from custom_components.roommind.managers.airflow_control_manager import AirflowControlManager
 
@@ -22,7 +24,13 @@ async def test_fan_percentage_direction_and_oscillation_commands(hass):
         "off",
         {
             "percentage": 0,
-            "supported_features": 0,
+            "supported_features": int(
+                FanEntityFeature.TURN_ON
+                | FanEntityFeature.TURN_OFF
+                | FanEntityFeature.DIRECTION
+                | FanEntityFeature.OSCILLATE
+                | FanEntityFeature.PRESET_MODE
+            ),
             "preset_modes": ["normal"],
         },
     )
@@ -315,3 +323,82 @@ async def test_role_specific_levels_do_not_cross_apply(hass):
     calls = [c.args[:3] for c in hass.services.async_call.call_args_list]
     assert ("fan", "turn_on", {"entity_id": "fan.mix", "percentage": 25}) in calls
     assert ("fan", "turn_off", {"entity_id": "fan.vent"}) in calls
+
+
+@pytest.mark.asyncio
+async def test_fan_optional_services_are_skipped_when_features_are_unsupported(hass):
+    hass.states.get.return_value = _state(
+        "off",
+        {
+            "percentage": 0,
+            "supported_features": int(FanEntityFeature.TURN_ON | FanEntityFeature.TURN_OFF),
+            "preset_modes": ["normal"],
+        },
+    )
+    mgr = AirflowControlManager(hass)
+
+    statuses = await mgr.async_apply(
+        "living",
+        {
+            "airflow_devices": [
+                {
+                    "entity_id": "fan.living",
+                    "role": "circulation",
+                    "controllable": True,
+                    "control_enabled": True,
+                    "preferred_direction": "forward",
+                    "preferred_oscillating": True,
+                    "preferred_preset_mode": "normal",
+                }
+            ]
+        },
+        level=0.5,
+        mode="heating",
+    )
+
+    calls = [c.args[:2] for c in hass.services.async_call.call_args_list]
+    assert calls == [("fan", "turn_on")]
+    assert statuses[0]["skipped_services"] == [
+        {"service": "fan.set_direction", "reason": "direction_unsupported"},
+        {"service": "fan.oscillate", "reason": "oscillate_unsupported"},
+        {"service": "fan.set_preset_mode", "reason": "preset_unsupported"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_climate_preset_is_selected_by_context_and_guarded(hass):
+    hass.states.get.return_value = _state(
+        "cool",
+        {
+            "fan_mode": "low",
+            "fan_modes": ["off", "low", "medium", "high"],
+            "preset_modes": ["eco", "sleep", "boost"],
+            "supported_features": int(ClimateEntityFeature.FAN_MODE | ClimateEntityFeature.PRESET_MODE),
+            "hvac_modes": ["off", "cool", "fan_only"],
+        },
+    )
+    mgr = AirflowControlManager(hass)
+
+    statuses = await mgr.async_apply(
+        "living",
+        {
+            "airflow_devices": [
+                {
+                    "entity_id": "climate.ac",
+                    "role": "hvac_fan",
+                    "controllable": True,
+                    "control_enabled": True,
+                    "preferred_preset_mode_thermal": "boost",
+                    "preferred_preset_mode_night": "sleep",
+                }
+            ],
+            "quiet_hours": {"start": "22:00", "end": "07:00"},
+        },
+        level=1.0,
+        mode="cooling",
+    )
+
+    calls = [c.args[:3] for c in hass.services.async_call.call_args_list]
+    assert ("climate", "set_preset_mode", {"entity_id": "climate.ac", "preset_mode": "boost"}) in calls
+    assert statuses[0]["assumed_state_confidence"] in {"assumed", "conflicting", "observed"}
+    assert statuses[0]["commanded_level"] == 1.0

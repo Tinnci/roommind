@@ -37,6 +37,8 @@ class AirflowDeviceStatus:
     swing_horizontal_mode: str | None = None
     swing_horizontal_modes: list[str] = field(default_factory=list)
     levels: list[float] = field(default_factory=lambda: [0.0])
+    effect_weight: float = 1.0
+    airflow_m3h: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +47,7 @@ class AirflowFactors:
 
     q_fan_mix: float = 0.0
     q_vent: float = 0.0
+    airflow_ach: float = 0.0
     active: bool = False
     levels: list[float] = field(default_factory=lambda: [0.0])
     mix_levels: list[float] = field(default_factory=lambda: [0.0])
@@ -75,6 +78,8 @@ class AirflowFactors:
                 "swing_horizontal_mode": status.swing_horizontal_mode,
                 "swing_horizontal_modes": status.swing_horizontal_modes,
                 "levels": status.levels,
+                "effect_weight": status.effect_weight,
+                "airflow_m3h": status.airflow_m3h,
             }
             for status in self.statuses
         ]
@@ -94,7 +99,11 @@ class EnvironmentalFactorManager:
         vent_levels = {0.0}
         q_fan_mix = 0.0
         q_vent = 0.0
+        vent_sum = 0.0
+        vent_flow_m3h = 0.0
         has_hvac_fan_control = False
+        room_volume_m3 = _safe_float(room.get("room_volume_m3"))
+        ach_reference = _safe_float(room.get("ach_reference")) or 3.0
 
         for config in room.get("airflow_devices", []) or []:
             status = self._read_device(config)
@@ -110,14 +119,22 @@ class EnvironmentalFactorManager:
                     if status.role == AIRFLOW_ROLE_HVAC_FAN:
                         has_hvac_fan_control = True
             if status.role == AIRFLOW_ROLE_VENTILATION:
-                q_vent = max(q_vent, status.q)
+                weighted = _round_level(status.effect_weight * status.q)
+                vent_sum += weighted
+                if status.airflow_m3h is not None:
+                    vent_flow_m3h += max(0.0, status.airflow_m3h) * weighted
             else:
-                q_fan_mix = max(q_fan_mix, status.q)
+                weighted = _round_level(status.effect_weight * status.q)
+                q_fan_mix = 1.0 - (1.0 - q_fan_mix) * (1.0 - weighted)
+
+        airflow_ach = vent_flow_m3h / room_volume_m3 if room_volume_m3 and room_volume_m3 > 0 else 0.0
+        q_vent = min(1.0, airflow_ach / ach_reference) if airflow_ach > 0.0 else min(1.0, vent_sum)
 
         sorted_levels = sorted(_round_level(level) for level in levels)
         return AirflowFactors(
             q_fan_mix=_round_level(q_fan_mix),
             q_vent=_round_level(q_vent),
+            airflow_ach=round(max(0.0, airflow_ach), 3),
             active=q_fan_mix > 0.0 or q_vent > 0.0,
             levels=sorted_levels or [0.0],
             mix_levels=sorted(_round_level(level) for level in mix_levels) or [0.0],
@@ -133,6 +150,8 @@ class EnvironmentalFactorManager:
             role = AIRFLOW_ROLE_CIRCULATION
         controllable = bool(config.get("controllable", False))
         control_enabled = bool(config.get("control_enabled", False))
+        effect_weight = max(0.0, min(2.0, _safe_float(config.get("effect_weight")) or 1.0))
+        airflow_m3h = _safe_float(config.get("airflow_m3h"))
         domain = entity_id.split(".", 1)[0] if "." in entity_id else ""
         state = self.hass.states.get(entity_id) if entity_id else None
 
@@ -144,12 +163,14 @@ class EnvironmentalFactorManager:
                 controllable=controllable,
                 control_enabled=control_enabled,
                 domain=domain,
+                effect_weight=effect_weight,
+                airflow_m3h=airflow_m3h,
             )
 
         if domain == "fan":
-            return self._read_fan(entity_id, role, state, controllable, control_enabled)
+            return self._read_fan(entity_id, role, state, controllable, control_enabled, effect_weight, airflow_m3h)
         if domain == "climate":
-            return self._read_climate(entity_id, role, state, controllable, control_enabled)
+            return self._read_climate(entity_id, role, state, controllable, control_enabled, effect_weight, airflow_m3h)
 
         return AirflowDeviceStatus(
             entity_id=entity_id,
@@ -158,6 +179,8 @@ class EnvironmentalFactorManager:
             controllable=controllable,
             control_enabled=control_enabled,
             domain=domain,
+            effect_weight=effect_weight,
+            airflow_m3h=airflow_m3h,
         )
 
     def _read_fan(
@@ -167,6 +190,8 @@ class EnvironmentalFactorManager:
         state: Any,
         controllable: bool,
         control_enabled: bool,
+        effect_weight: float,
+        airflow_m3h: float | None,
     ) -> AirflowDeviceStatus:
         percentage = _safe_float(state.attributes.get("percentage"))
         preset_mode = state.attributes.get("preset_mode")
@@ -202,6 +227,8 @@ class EnvironmentalFactorManager:
             direction=state.attributes.get("current_direction"),
             oscillating=state.attributes.get("oscillating"),
             levels=_unique_levels(levels),
+            effect_weight=effect_weight,
+            airflow_m3h=airflow_m3h,
         )
 
     def _read_climate(
@@ -211,6 +238,8 @@ class EnvironmentalFactorManager:
         state: Any,
         controllable: bool,
         control_enabled: bool,
+        effect_weight: float,
+        airflow_m3h: float | None,
     ) -> AirflowDeviceStatus:
         fan_modes = [str(mode) for mode in state.attributes.get("fan_modes") or []]
         fan_mode = state.attributes.get("fan_mode")
@@ -241,6 +270,8 @@ class EnvironmentalFactorManager:
             swing_horizontal_mode=state.attributes.get("swing_horizontal_mode"),
             swing_horizontal_modes=[str(mode) for mode in state.attributes.get("swing_horizontal_modes") or []],
             levels=levels,
+            effect_weight=effect_weight,
+            airflow_m3h=airflow_m3h,
         )
 
 

@@ -1710,6 +1710,15 @@ def test_rc_model_ventilation_moves_temperature_toward_outdoor():
     assert with_vent > 18.0
 
 
+def test_rc_model_coupling_moves_room_toward_adjacent_temperature():
+    model = RCModel(C=1.0, U=0.2, Q_heat=0.0, Q_cool=0.0)
+
+    independent = model.predict(28.0, 30.0, 0.0, 30.0)
+    coupled = model.predict(28.0, 30.0, 0.0, 30.0, coupling_terms=[{"temperature": 24.0, "k": 0.4, "gate": 1.0}])
+
+    assert coupled < independent
+
+
 def test_ekf_learns_positive_beta_vent_from_ventilation_cooling():
     ekf = ThermalEKF()
     ekf.update(26.0, 18.0, "idle", 5.0, q_vent=0.0)

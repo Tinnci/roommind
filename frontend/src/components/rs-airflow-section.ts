@@ -26,6 +26,7 @@ export class RsAirflowSection extends LitElement {
   @property({ attribute: false }) public commandStatuses: AirflowCommandStatus[] = [];
   @property({ type: Number }) public qFanMix = 0;
   @property({ type: Number }) public qVent = 0;
+  @property({ type: Number }) public airflowAch = 0;
   @property({ type: Number }) public planLevel = 0;
   @property({ type: Number }) public mixPlanLevel = 0;
   @property({ type: Number }) public ventPlanLevel = 0;
@@ -233,6 +234,10 @@ export class RsAirflowSection extends LitElement {
           <div class="summary-value">${this._percent(this.qVent)}</div>
         </div>
         <div class="summary-item">
+          <div class="summary-label">${localize("airflow.ach", lang)}</div>
+          <div class="summary-value">${this.airflowAch.toFixed(2)}/h</div>
+        </div>
+        <div class="summary-item">
           <div class="summary-label">${localize("airflow.mix_plan_level", lang)}</div>
           <div class="summary-value">${this._percent(this.mixPlanLevel)}</div>
         </div>
@@ -287,6 +292,18 @@ export class RsAirflowSection extends LitElement {
         ${showWarning
           ? html`<span class="pill warning" title=${command?.skip_reason ?? ""}
               >${commandLabel}</span
+            >`
+          : nothing}
+        ${command?.assumed_state_confidence && command.assumed_state_confidence !== "observed"
+          ? html`<span class="pill warning">${command.assumed_state_confidence}</span>`
+          : nothing}
+        ${command?.skipped_services?.length
+          ? html`<span
+              class="pill warning"
+              title=${command.skipped_services
+                .map((item) => `${item.service}: ${item.reason}`)
+                .join("\n")}
+              >${command.skipped_services.length} skipped</span
             >`
           : nothing}
       </div>
@@ -652,8 +669,16 @@ export class RsAirflowSection extends LitElement {
       preferred_direction: "",
       preferred_oscillating: null,
       preferred_preset_mode: "",
+      preferred_preset_mode_thermal: "",
+      preferred_preset_mode_idle: "",
+      preferred_preset_mode_night: "",
+      preferred_preset_mode_away: "",
       preferred_swing_mode: "",
       preferred_swing_horizontal_mode: "",
+      effect_weight: 1,
+      airflow_m3h: null,
+      power_sensor_entity: "",
+      assumed_state_ttl_s: 120,
     };
   }
 

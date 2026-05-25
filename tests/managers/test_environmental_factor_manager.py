@@ -214,3 +214,50 @@ def test_idle_climate_action_does_not_count_stale_fan_mode_as_airflow(hass):
 
     assert factors.q_fan_mix == 0.0
     assert factors.active is False
+
+
+def test_multiple_circulation_fans_use_saturating_aggregation(hass):
+    def get_state(entity_id):
+        return _state("on", {"percentage": 50, "speed_count": 2})
+
+    hass.states.get.side_effect = get_state
+    mgr = EnvironmentalFactorManager(hass)
+
+    factors = mgr.read_room_airflow(
+        {
+            "airflow_devices": [
+                {"entity_id": "fan.one", "role": "circulation", "effect_weight": 1.0},
+                {"entity_id": "fan.two", "role": "circulation", "effect_weight": 1.0},
+            ]
+        }
+    )
+
+    assert factors.q_fan_mix == 0.75
+
+
+def test_ventilation_devices_sum_and_report_ach_when_physical_flow_is_configured(hass):
+    hass.states.get.side_effect = lambda eid: _state("on", {"percentage": 50, "speed_count": 2})
+    mgr = EnvironmentalFactorManager(hass)
+
+    factors = mgr.read_room_airflow(
+        {
+            "room_volume_m3": 50,
+            "airflow_devices": [
+                {
+                    "entity_id": "fan.vent_one",
+                    "role": "ventilation",
+                    "effect_weight": 1.0,
+                    "airflow_m3h": 120,
+                },
+                {
+                    "entity_id": "fan.vent_two",
+                    "role": "ventilation",
+                    "effect_weight": 0.5,
+                    "airflow_m3h": 80,
+                },
+            ],
+        }
+    )
+
+    assert factors.airflow_ach == 1.6
+    assert factors.q_vent == 0.533

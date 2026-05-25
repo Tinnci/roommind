@@ -239,6 +239,7 @@
   "airflow.vent_plan_level": "Vent plan",
   "airflow.mix_factor": "Mix factor",
   "airflow.vent_factor": "Ventilation factor",
+  "airflow.ach": "ACH",
   "airflow.planned_level": "Planned",
   "airflow.actual_level": "Actual",
   "airflow.command_applied": "Applied",

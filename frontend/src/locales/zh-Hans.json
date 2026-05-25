@@ -239,6 +239,7 @@
   "airflow.vent_plan_level": "换气计划档位",
   "airflow.mix_factor": "混合因子",
   "airflow.vent_factor": "换气因子",
+  "airflow.ach": "换气次数",
   "airflow.planned_level": "计划档位",
   "airflow.actual_level": "实际档位",
   "airflow.command_applied": "已下发",

@@ -239,6 +239,7 @@
   "airflow.vent_plan_level": "Lüftungsplan",
   "airflow.mix_factor": "Mischfaktor",
   "airflow.vent_factor": "Lüftungsfaktor",
+  "airflow.ach": "Luftwechsel",
   "airflow.planned_level": "Geplant",
   "airflow.actual_level": "Ist",
   "airflow.command_applied": "Gesetzt",

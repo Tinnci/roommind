@@ -51,6 +51,7 @@ from .control.mpc_controller import (
     get_can_heat_cool,
     is_mpc_active,
 )
+from .control.perceived_temperature import perceived_temperature
 from .control.solar import compute_q_solar_norm
 from .control.thermal_model import RoomModelManager, TemperatureObservation
 from .managers.airflow_control_manager import AirflowControlManager
@@ -68,6 +69,7 @@ from .managers.environmental_factor_manager import (
     airflow_sensor_conflict,
 )
 from .managers.heat_source_orchestrator import HeatSourcePlan, evaluate_heat_sources
+from .managers.hvac_output_observer import HVACOutputObserver
 from .managers.mold_manager import MoldManager
 from .managers.residual_heat_tracker import ResidualHeatTracker
 from .managers.sensor_fusion_manager import SensorFusionManager
@@ -142,6 +144,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         self._sensor_fusion = SensorFusionManager()
         self._environmental_factors = EnvironmentalFactorManager(hass)
         self._airflow_control = AirflowControlManager(hass)
+        self._hvac_output_observer = HVACOutputObserver(hass)
         # Cover/blind automatic control
         from .managers.cover_manager import CoverManager
 
@@ -1023,11 +1026,13 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             q_occupancy=q_occupancy,
             q_fan_mix=airflow.q_fan_mix,
             q_vent=airflow.q_vent,
+            airflow_ach=airflow.airflow_ach,
             airflow_mix_plan_level=airflow_mix_plan_level,
             airflow_vent_plan_level=airflow_vent_plan_level,
             airflow_plan_level=airflow_plan_level,
             airflow_devices_status=airflow.as_status_dicts(),
             airflow_command_status=airflow_command_status,
+            hvac_output_status=self._observe_hvac_output(room, airflow.as_status_dicts(), current_temp_raw),
             cover_eids=cover_eids,
             cover_result=cover_result,
             mpc_active=mpc_active,
@@ -1251,11 +1256,13 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         q_occupancy: float,
         q_fan_mix: float,
         q_vent: float,
+        airflow_ach: float,
         airflow_mix_plan_level: float,
         airflow_vent_plan_level: float,
         airflow_plan_level: float,
         airflow_devices_status: list[dict],
         airflow_command_status: list[dict],
+        hvac_output_status: dict | None,
         cover_eids: list[str],
         cover_result: CoverResult,
         mpc_active: bool,
@@ -1316,12 +1323,24 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             "q_occupancy": q_occupancy,
             "q_fan_mix": q_fan_mix,
             "q_vent": q_vent,
+            "airflow_ach": airflow_ach,
+            "perceived_temp": (
+                perceived_temperature(
+                    air_temp_c=current_temp,
+                    humidity=current_humidity,
+                    q_mix=q_fan_mix,
+                    mode=mode,
+                )
+                if current_temp is not None
+                else None
+            ),
             "airflow_active": q_fan_mix > 0.0 or q_vent > 0.0,
             "airflow_mix_plan_level": airflow_mix_plan_level,
             "airflow_vent_plan_level": airflow_vent_plan_level,
             "airflow_plan_level": airflow_plan_level,
             "airflow_devices_status": airflow_devices_status,
             "airflow_command_status": airflow_command_status,
+            "hvac_output_status": hvac_output_status,
             "n_observations": self._model_manager.get_n_observations(area_id),
             "blind_position": (self._cover_orchestrator.get_current_position(area_id) if cover_eids else None),
             "cover_auto_paused": (self._cover_orchestrator.is_user_override_active(area_id) if cover_eids else False),
@@ -1330,6 +1349,35 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             "active_cover_schedule_index": (cover_result.active_cover_schedule_index if cover_eids else -1),
             "active_heat_sources": self._heat_source_states.get(area_id),
         }
+
+    def _observe_hvac_output(
+        self,
+        room: dict,
+        airflow_statuses: list[dict],
+        current_temp_raw: float | None,
+    ) -> dict | None:
+        """Return a coarse HVAC output observation for the first configured climate airflow device."""
+        status_by_entity = {status.get("entity_id"): status for status in airflow_statuses}
+        for device in room.get("airflow_devices", []) or []:
+            entity_id = device.get("entity_id", "")
+            if not entity_id.startswith("climate."):
+                continue
+            state = self.hass.states.get(entity_id)
+            attrs = state.attributes if state else {}
+            observation = self._hvac_output_observer.observe(
+                device,
+                hvac_action=attrs.get("hvac_action"),
+                fan_q=float(status_by_entity.get(entity_id, {}).get("q") or 0.0),
+                temp_slope_c_per_h=None if current_temp_raw is None else 0.0,
+            )
+            return {
+                "entity_id": entity_id,
+                "stage": observation.stage,
+                "delivered_capacity_factor": observation.delivered_capacity_factor,
+                "electric_power_w": observation.electric_power_w,
+                "confidence": observation.confidence,
+            }
+        return None
 
     @staticmethod
     def _compute_device_setpoint_orchestrated(

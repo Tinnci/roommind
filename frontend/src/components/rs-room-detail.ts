@@ -58,6 +58,12 @@ export class RsRoomDetail extends LitElement {
 
   @state() private _devices: DeviceConfig[] = [];
   @state() private _airflowDevices: AirflowDeviceConfig[] = [];
+  @state() private _roomVolumeM3: number | null = null;
+  @state() private _controlTarget: "air_temperature" | "perceived_temperature" = "air_temperature";
+  @state() private _quietHours: { start: string; end: string } | null = null;
+  @state() private _maxFanLevelNight = 0.5;
+  @state() private _sleepTempRampC = 0.0;
+  @state() private _adjacentRooms: RoomConfig["adjacent_rooms"] = [];
   @state() private _selectedTempSensor = "";
   @state() private _selectedTempSensors: Set<string> = new Set();
   @state() private _selectedHumiditySensor = "";
@@ -257,6 +263,12 @@ export class RsRoomDetail extends LitElement {
         ];
       }
       this._airflowDevices = [...(this.config.airflow_devices ?? [])];
+      this._roomVolumeM3 = this.config.room_volume_m3 ?? null;
+      this._controlTarget = this.config.control_target ?? "air_temperature";
+      this._quietHours = this.config.quiet_hours ?? null;
+      this._maxFanLevelNight = this.config.max_fan_level_night ?? 0.5;
+      this._sleepTempRampC = this.config.sleep_temp_ramp_c ?? 0.0;
+      this._adjacentRooms = this.config.adjacent_rooms ?? [];
       this._selectedTempSensor = this.config.temperature_sensor;
       this._selectedTempSensors = new Set(
         this.config.temperature_sensors?.length
@@ -308,6 +320,12 @@ export class RsRoomDetail extends LitElement {
     } else {
       this._devices = [];
       this._airflowDevices = [];
+      this._roomVolumeM3 = null;
+      this._controlTarget = "air_temperature";
+      this._quietHours = null;
+      this._maxFanLevelNight = 0.5;
+      this._sleepTempRampC = 0.0;
+      this._adjacentRooms = [];
       this._selectedTempSensor = "";
       this._selectedTempSensors = new Set();
       this._selectedHumiditySensor = "";
@@ -535,6 +553,7 @@ export class RsRoomDetail extends LitElement {
                     .commandStatuses=${this.config?.live?.airflow_command_status ?? []}
                     .qFanMix=${this.config?.live?.q_fan_mix ?? 0}
                     .qVent=${this.config?.live?.q_vent ?? 0}
+                    .airflowAch=${this.config?.live?.airflow_ach ?? 0}
                     .planLevel=${this.config?.live?.airflow_plan_level ?? 0}
                     .mixPlanLevel=${this.config?.live?.airflow_mix_plan_level ?? 0}
                     .ventPlanLevel=${this.config?.live?.airflow_vent_plan_level ?? 0}
@@ -807,6 +826,7 @@ export class RsRoomDetail extends LitElement {
             .commandStatuses=${this.config?.live?.airflow_command_status ?? []}
             .qFanMix=${this.config?.live?.q_fan_mix ?? 0}
             .qVent=${this.config?.live?.q_vent ?? 0}
+            .airflowAch=${this.config?.live?.airflow_ach ?? 0}
             .planLevel=${this.config?.live?.airflow_plan_level ?? 0}
             .mixPlanLevel=${this.config?.live?.airflow_mix_plan_level ?? 0}
             .ventPlanLevel=${this.config?.live?.airflow_vent_plan_level ?? 0}
@@ -1153,6 +1173,12 @@ export class RsRoomDetail extends LitElement {
         area_id: this.area.area_id,
         devices: this._devices,
         airflow_devices: this._airflowDevices,
+        room_volume_m3: this._roomVolumeM3,
+        control_target: this._controlTarget,
+        quiet_hours: this._quietHours,
+        max_fan_level_night: this._maxFanLevelNight,
+        sleep_temp_ramp_c: this._sleepTempRampC,
+        adjacent_rooms: this._adjacentRooms,
         temperature_sensor: this._selectedTempSensor,
         temperature_sensors: this._temperatureSensorIdsForSave(),
         humidity_sensor: this._selectedHumiditySensor,
