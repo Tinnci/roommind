@@ -726,6 +726,13 @@ class MPCController:
         airflow_has_ventilation: bool = False,
         airflow_has_hvac_fan: bool = False,
         airflow_mix_score: float = 0.0,
+        airflow_capacity_curve: list[dict[str, float]] | None = None,
+        airflow_power_curve: list[dict[str, float]] | None = None,
+        control_target: str = "air_temperature",
+        current_humidity: float | None = None,
+        night_active: bool = False,
+        night_quiet_penalty: float = 0.0,
+        coupling_terms: list[dict] | None = None,
     ) -> None:
         self.hass = hass
         self.room_config = room_config
@@ -760,6 +767,13 @@ class MPCController:
         self.airflow_has_ventilation = airflow_has_ventilation
         self.airflow_has_hvac_fan = airflow_has_hvac_fan
         self.airflow_mix_score = airflow_mix_score
+        self.airflow_capacity_curve = airflow_capacity_curve or []
+        self.airflow_power_curve = airflow_power_curve or []
+        self.control_target = control_target
+        self.current_humidity = current_humidity
+        self.night_active = night_active
+        self.night_quiet_penalty = night_quiet_penalty
+        self.coupling_terms = coupling_terms or []
         self.last_airflow_level = 0.0
         self.last_airflow_mix_level = 0.0
         self.last_airflow_vent_level = 0.0
@@ -944,6 +958,12 @@ class MPCController:
             airflow_has_ventilation=self.airflow_has_ventilation,
             airflow_has_hvac_fan=self.airflow_has_hvac_fan,
             airflow_mix_score=self.airflow_mix_score,
+            airflow_capacity_curve=self.airflow_capacity_curve,
+            airflow_power_curve=self.airflow_power_curve,
+            control_target=self.control_target,
+            current_humidity=self.current_humidity,
+            night_quiet_penalty=self.night_quiet_penalty if self.night_active else 0.0,
+            coupling_terms=self.coupling_terms,
         )
 
         plan = optimizer.optimize(

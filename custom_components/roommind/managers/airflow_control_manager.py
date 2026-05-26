@@ -12,6 +12,7 @@ from homeassistant.components.fan import FanEntityFeature
 from homeassistant.core import HomeAssistant
 
 from ..const import MODE_COOLING, MODE_HEATING, make_roommind_context
+from ..utils.night_utils import is_quiet_hours_now
 from .environmental_factor_manager import (
     AIRFLOW_ROLE_HVAC_FAN,
     AIRFLOW_ROLE_VENTILATION,
@@ -51,6 +52,14 @@ class AirflowControlManager:
         legacy_target = _clamp_level(level) if level is not None else None
         mix_target = _clamp_level(mix_level if mix_level is not None else (legacy_target or 0.0))
         vent_target = _clamp_level(vent_level if vent_level is not None else (legacy_target or 0.0))
+        night_active = _is_night_context(room)
+        rapid_recovery = bool(room.get("_rapid_recovery_active", False))
+        night_cap = room.get("max_fan_level_night")
+        capped_by_night = False
+        if night_active and not rapid_recovery and night_cap is not None:
+            capped_mix = min(mix_target, _clamp_level(float(night_cap)))
+            capped_by_night = capped_mix < mix_target
+            mix_target = capped_mix
         statuses: list[dict[str, Any]] = []
         for config in room.get("airflow_devices", []) or []:
             entity_id = config.get("entity_id", "")
@@ -60,6 +69,8 @@ class AirflowControlManager:
             target = vent_target if role == AIRFLOW_ROLE_VENTILATION else mix_target
             domain = entity_id.split(".", 1)[0] if "." in entity_id else ""
             status = self._base_status(entity_id, domain, role, target)
+            status["night_mode_active"] = night_active
+            status["night_capped"] = capped_by_night and role != AIRFLOW_ROLE_VENTILATION
             if not config.get("controllable", False) or not config.get("control_enabled", False):
                 status.update({"outcome": OUTCOME_BLOCKED_BY_MODE, "skip_reason": "control_disabled"})
                 statuses.append(status)
@@ -68,7 +79,7 @@ class AirflowControlManager:
                 if domain == "fan":
                     status.update(await self._apply_fan(area_id, entity_id, config, target))
                 elif domain == "climate":
-                    status.update(await self._apply_climate(area_id, entity_id, config, target, mode))
+                    status.update(await self._apply_climate(area_id, entity_id, config, target, mode, night_active))
                 else:
                     status.update({"outcome": OUTCOME_BLOCKED_BY_MODE, "skip_reason": "unsupported_domain"})
             except Exception:  # noqa: BLE001
@@ -137,6 +148,7 @@ class AirflowControlManager:
         config: dict,
         level: float,
         mode: str,
+        night_active: bool = False,
     ) -> dict[str, Any]:
         state = self.hass.states.get(entity_id)
         attrs = state.attributes if state else {}
@@ -207,7 +219,7 @@ class AirflowControlManager:
             ):
                 last_service = "climate.set_fan_mode"
 
-        preset_mode = _select_climate_preset(config, mode)
+        preset_mode = _select_climate_preset(config, mode, night_active=night_active)
         if preset_mode:
             if not _supports_feature(attrs, ClimateEntityFeature.PRESET_MODE) or (
                 preset_modes and preset_mode not in preset_modes
@@ -340,7 +352,8 @@ class AirflowControlManager:
         command = self._assumed_commands.get(entity_id)
         if not command:
             return {"assumed_state_confidence": "observed", "commanded_level": None, "commanded_at": None}
-        ttl = max(0.0, float(config.get("assumed_state_ttl_s") or 120))
+        ttl_raw = config.get("assumed_state_ttl", None)
+        ttl = max(0.0, float(ttl_raw if ttl_raw is not None else (config.get("assumed_state_ttl_s") or 120)))
         age = time.time() - float(command["at"])
         if age > ttl:
             confidence = "stale"
@@ -374,8 +387,8 @@ def _supports_feature(attrs: dict[str, Any], feature: Any) -> bool:
         return True
 
 
-def _select_climate_preset(config: dict, mode: str) -> str:
-    if config.get("preferred_preset_mode_night") and _is_night_context(config):
+def _select_climate_preset(config: dict, mode: str, *, night_active: bool = False) -> str:
+    if night_active and config.get("preferred_preset_mode_night"):
         return str(config.get("preferred_preset_mode_night"))
     if mode in (MODE_HEATING, MODE_COOLING):
         return str(config.get("preferred_preset_mode_thermal") or "")
@@ -383,7 +396,9 @@ def _select_climate_preset(config: dict, mode: str) -> str:
 
 
 def _is_night_context(config: dict) -> bool:
-    return False
+    if "_night_mode_active" in config:
+        return bool(config.get("_night_mode_active"))
+    return bool(config.get("night_mode_enabled", True)) and is_quiet_hours_now(config.get("quiet_hours"))
 
 
 def _fan_observed_q(state: str, attrs: dict[str, Any]) -> float:

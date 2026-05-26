@@ -53,9 +53,16 @@ def _migrate_room(room: dict) -> dict:
     room.setdefault("room_volume_m3", None)
     room.setdefault("control_target", "air_temperature")
     room.setdefault("quiet_hours", None)
+    room.setdefault("night_mode_enabled", True)
+    room.setdefault("night_controls", [])
+    room.setdefault("night_allow_rapid_recovery", True)
+    room.setdefault("rapid_recovery_delta_c", 2.0)
     room.setdefault("max_fan_level_night", 0.5)
     room.setdefault("sleep_temp_ramp_c", 0.0)
     room.setdefault("adjacent_rooms", [])
+    for adjacent in room.get("adjacent_rooms", []) or []:
+        if isinstance(adjacent, dict):
+            adjacent.setdefault("allow_borrowed_conditioning", True)
     _normalize_temperature_sensors(room)
     migrate_heat_pump_devices(room.get("devices", []))
     ensure_room_has_devices(room)
@@ -236,6 +243,10 @@ class RoomMindStore:
             "room_volume_m3": config.get("room_volume_m3", None),
             "control_target": config.get("control_target", "air_temperature"),
             "quiet_hours": config.get("quiet_hours", None),
+            "night_mode_enabled": config.get("night_mode_enabled", True),
+            "night_controls": config.get("night_controls", []),
+            "night_allow_rapid_recovery": config.get("night_allow_rapid_recovery", True),
+            "rapid_recovery_delta_c": config.get("rapid_recovery_delta_c", 2.0),
             "max_fan_level_night": config.get("max_fan_level_night", 0.5),
             "sleep_temp_ramp_c": config.get("sleep_temp_ramp_c", 0.0),
             "adjacent_rooms": config.get("adjacent_rooms", []),

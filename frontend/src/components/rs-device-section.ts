@@ -696,11 +696,9 @@ export class RsDeviceSection extends LitElement {
               ? html`<div class="detail-field">
                   <ha-select
                     .label=${localize("devices.idle_fan_mode", lang)}
-                    .value=${device.idle_fan_mode === ""
-                      ? "__keep__"
-                      : (device.idle_fan_mode ?? "low")}
+                    .value=${device.idle_fan_mode ?? ""}
                     .options=${[
-                      { value: "__keep__", label: localize("devices.idle_fan_mode_keep", lang) },
+                      { value: "", label: localize("devices.idle_fan_mode_keep", lang) },
                       ...((entityState?.attributes?.fan_modes ?? []) as string[]).map((fm) => ({
                         value: fm,
                         label: fm,
@@ -708,12 +706,12 @@ export class RsDeviceSection extends LitElement {
                     ]}
                     @selected=${(e: Event) => {
                       const v = getSelectValue(e);
-                      this._onIdleFanModeChange(entityId, v === "__keep__" ? "" : v);
+                      this._onIdleFanModeChange(entityId, v ?? "");
                     }}
                     @closed=${(e: Event) => e.stopPropagation()}
                     fixedMenuPosition
                   >
-                    <ha-list-item value="__keep__"
+                    <ha-list-item value=""
                       >${localize("devices.idle_fan_mode_keep", lang)}</ha-list-item
                     >
                     ${((entityState?.attributes?.fan_modes ?? []) as string[]).map(

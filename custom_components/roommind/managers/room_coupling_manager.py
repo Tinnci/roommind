@@ -50,10 +50,16 @@ class RoomCouplingManager:
         self._links[key] = observation
         return observation
 
+    def observations_for(self, room_id: str) -> list[RoomCouplingObservation]:
+        """Return learned observations for one source room."""
+        return [observation for (source, _), observation in self._links.items() if source == room_id]
+
     def coupling_terms_for(self, room_id: str, temperatures: dict[str, float], gate: float = 1.0) -> list[dict]:
         """Return RCModel coupling terms for a room."""
         terms = []
         for (source, adjacent), observation in self._links.items():
             if source == room_id and adjacent in temperatures and observation.confidence >= 0.7:
-                terms.append({"temperature": temperatures[adjacent], "k": observation.k, "gate": gate})
+                terms.append(
+                    {"area_id": adjacent, "temperature": temperatures[adjacent], "k": observation.k, "gate": gate}
+                )
         return terms

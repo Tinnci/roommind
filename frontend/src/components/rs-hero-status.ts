@@ -585,6 +585,27 @@ export class RsHeroStatus extends LitElement {
                     })}
                   </div>`
                 : nothing}
+              ${live.perceived_temp != null && !this.isOutdoor
+                ? html`<div class="hero-metric info">
+                    <ha-icon icon="mdi:human-handsup"></ha-icon>
+                    ${localize("hero.perceived_temp", this.hass?.language ?? "en", {
+                      value: formatTemp(live.perceived_temp, this.hass),
+                      unit: tempUnit(this.hass),
+                    })}
+                  </div>`
+                : nothing}
+              ${live.night_mode?.active && !this.isOutdoor
+                ? html`<div class="hero-metric warning">
+                    <ha-icon icon="mdi:weather-night"></ha-icon>
+                    ${localize("hero.night_mode_active", this.hass?.language ?? "en")}
+                  </div>`
+                : nothing}
+              ${live.rapid_recovery_active && !this.isOutdoor
+                ? html`<div class="hero-metric warning">
+                    <ha-icon icon="mdi:rocket-launch-outline"></ha-icon>
+                    ${localize("hero.rapid_recovery_active", this.hass?.language ?? "en")}
+                  </div>`
+                : nothing}
               ${live.device_setpoint != null && !this.isOutdoor
                 ? html`<div class="hero-metric">
                     <ha-icon

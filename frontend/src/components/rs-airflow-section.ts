@@ -5,17 +5,18 @@ import type {
   AirflowDeviceConfig,
   AirflowDeviceStatus,
   AirflowRole,
+  HVACOutputStatus,
   HassArea,
   HomeAssistant,
 } from "../types";
 import { getEntitiesForArea } from "../utils/room-state";
 import { getSelectValue, openEntityInfo } from "../utils/events";
-import { localize } from "../utils/localize";
+import { localize, type TranslationKey } from "../utils/localize";
 import { masterDetailStyles } from "../styles/master-detail-styles";
 import { inputStyles } from "../styles/input-styles";
 import "./shared/rs-master-detail";
 
-const KEEP = "__keep__";
+const KEEP = "";
 
 @customElement("rs-airflow-section")
 export class RsAirflowSection extends LitElement {
@@ -24,6 +25,7 @@ export class RsAirflowSection extends LitElement {
   @property({ attribute: false }) public airflowDevices: AirflowDeviceConfig[] = [];
   @property({ attribute: false }) public statuses: AirflowDeviceStatus[] = [];
   @property({ attribute: false }) public commandStatuses: AirflowCommandStatus[] = [];
+  @property({ attribute: false }) public hvacOutputStatus: HVACOutputStatus | null = null;
   @property({ type: Number }) public qFanMix = 0;
   @property({ type: Number }) public qVent = 0;
   @property({ type: Number }) public airflowAch = 0;
@@ -198,6 +200,18 @@ export class RsAirflowSection extends LitElement {
         color: var(--secondary-text-color);
       }
 
+      .native-textarea {
+        width: 100%;
+        min-height: 68px;
+        box-sizing: border-box;
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+        padding: 8px;
+        color: var(--primary-text-color);
+        background: var(--card-background-color);
+        font: inherit;
+      }
+
       .detail-field + .detail-field,
       .detail-field + .detail-toggle-row,
       .detail-toggle-row + .detail-toggle-row,
@@ -245,6 +259,15 @@ export class RsAirflowSection extends LitElement {
           <div class="summary-label">${localize("airflow.vent_plan_level", lang)}</div>
           <div class="summary-value">${this._percent(this.ventPlanLevel)}</div>
         </div>
+        ${this.hvacOutputStatus
+          ? html`<div class="summary-item">
+              <div class="summary-label">${localize("airflow.hvac_output", lang)}</div>
+              <div class="summary-value">
+                ${this.hvacOutputStatus.stage} ·
+                ${this.hvacOutputStatus.delivered_capacity_factor.toFixed(2)}x
+              </div>
+            </div>`
+          : nothing}
       </div>
       ${this.airflowDevices.map((device) => this._renderViewRow(device))}
     `;
@@ -294,8 +317,13 @@ export class RsAirflowSection extends LitElement {
               >${commandLabel}</span
             >`
           : nothing}
+        ${command?.night_capped
+          ? html`<span class="pill warning">${localize("airflow.night_capped", lang)}</span>`
+          : nothing}
         ${command?.assumed_state_confidence && command.assumed_state_confidence !== "observed"
-          ? html`<span class="pill warning">${command.assumed_state_confidence}</span>`
+          ? html`<span class="pill warning"
+              >${this._confidenceLabel(command.assumed_state_confidence)}</span
+            >`
           : nothing}
         ${command?.skipped_services?.length
           ? html`<span
@@ -303,7 +331,7 @@ export class RsAirflowSection extends LitElement {
               title=${command.skipped_services
                 .map((item) => `${item.service}: ${item.reason}`)
                 .join("\n")}
-              >${command.skipped_services.length} skipped</span
+              >${command.skipped_services.length} ${localize("airflow.skipped", lang)}</span
             >`
           : nothing}
       </div>
@@ -485,8 +513,9 @@ export class RsAirflowSection extends LitElement {
         : nothing}
       ${isFan ? this._renderFanPrefs(entityId, device, presetModes) : nothing}
       ${isClimate
-        ? this._renderClimatePrefs(entityId, device, swingModes, swingHorizontalModes)
+        ? this._renderClimatePrefs(entityId, device, presetModes, swingModes, swingHorizontalModes)
         : nothing}
+      ${this._renderAdvancedPrefs(entityId, device)}
     `;
   }
 
@@ -568,11 +597,37 @@ export class RsAirflowSection extends LitElement {
   private _renderClimatePrefs(
     entityId: string,
     device: AirflowDeviceConfig,
+    presetModes: string[],
     swingModes: string[],
     swingHorizontalModes: string[],
   ) {
     const lang = this.language;
     return html`
+      ${presetModes.length > 0
+        ? html`
+            ${this._renderPresetSelect(
+              entityId,
+              device,
+              "preferred_preset_mode_thermal",
+              "airflow.preset_mode_thermal",
+              presetModes,
+            )}
+            ${this._renderPresetSelect(
+              entityId,
+              device,
+              "preferred_preset_mode_idle",
+              "airflow.preset_mode_idle",
+              presetModes,
+            )}
+            ${this._renderPresetSelect(
+              entityId,
+              device,
+              "preferred_preset_mode_night",
+              "airflow.preset_mode_night",
+              presetModes,
+            )}
+          `
+        : nothing}
       ${swingModes.length > 0
         ? html`
             <div class="detail-field">
@@ -619,6 +674,121 @@ export class RsAirflowSection extends LitElement {
             </div>
           `
         : nothing}
+    `;
+  }
+
+  private _renderPresetSelect(
+    entityId: string,
+    device: AirflowDeviceConfig,
+    key:
+      | "preferred_preset_mode_thermal"
+      | "preferred_preset_mode_idle"
+      | "preferred_preset_mode_night",
+    labelKey: TranslationKey,
+    presetModes: string[],
+  ) {
+    return html`
+      <div class="detail-field">
+        <ha-select
+          .label=${localize(labelKey, this.language)}
+          .value=${device[key] || KEEP}
+          @selected=${(e: Event) => {
+            const value = getSelectValue(e);
+            this._updateDevice(entityId, {
+              [key]: value === KEEP ? "" : value,
+            } as Partial<AirflowDeviceConfig>);
+          }}
+          @closed=${(e: Event) => e.stopPropagation()}
+          fixedMenuPosition
+        >
+          <ha-list-item value=${KEEP}>${localize("airflow.keep", this.language)}</ha-list-item>
+          ${presetModes.map((mode) => html`<ha-list-item value=${mode}>${mode}</ha-list-item>`)}
+        </ha-select>
+      </div>
+    `;
+  }
+
+  private _renderAdvancedPrefs(entityId: string, device: AirflowDeviceConfig) {
+    const lang = this.language;
+    return html`
+      <div class="detail-field">
+        <ha-entity-picker
+          .hass=${this.hass}
+          .includeDomains=${["sensor", "number", "input_number"]}
+          .value=${device.power_sensor_entity || ""}
+          .label=${localize("airflow.power_sensor", lang)}
+          @value-changed=${(e: CustomEvent) =>
+            this._updateDevice(entityId, { power_sensor_entity: e.detail?.value || "" })}
+        ></ha-entity-picker>
+      </div>
+      <div class="detail-field">
+        <ha-select
+          .label=${localize("airflow.compressor_stage_observer", lang)}
+          .value=${device.compressor_stage_observer || "auto"}
+          @selected=${(e: Event) =>
+            this._updateDevice(entityId, {
+              compressor_stage_observer: getSelectValue(
+                e,
+              ) as AirflowDeviceConfig["compressor_stage_observer"],
+            })}
+          @closed=${(e: Event) => e.stopPropagation()}
+          fixedMenuPosition
+        >
+          <ha-list-item value="auto">${localize("airflow.observer_auto", lang)}</ha-list-item>
+          <ha-list-item value="power_sensor"
+            >${localize("airflow.observer_power", lang)}</ha-list-item
+          >
+          <ha-list-item value="thermal_slope"
+            >${localize("airflow.observer_slope", lang)}</ha-list-item
+          >
+          <ha-list-item value="disabled"
+            >${localize("airflow.observer_disabled", lang)}</ha-list-item
+          >
+        </ha-select>
+      </div>
+      <div class="detail-field">
+        <ha-textfield
+          .label=${localize("airflow.assumed_state_ttl", lang)}
+          type="number"
+          min="0"
+          max="3600"
+          .value=${String(device.assumed_state_ttl_s ?? device.assumed_state_ttl ?? 120)}
+          @input=${(e: Event) =>
+            this._updateDevice(entityId, {
+              assumed_state_ttl_s: Number((e.target as HTMLInputElement).value),
+            })}
+        ></ha-textfield>
+      </div>
+      <div class="detail-field">
+        <label class="summary-label">${localize("airflow.fan_capacity_curve", lang)}</label>
+        <textarea
+          class="native-textarea"
+          .value=${this._curveToText(device.fan_capacity_curve, "capacity_factor")}
+          placeholder="0:1, 0.5:1.12, 1:1.25"
+          @input=${(e: Event) =>
+            this._updateDevice(entityId, {
+              fan_capacity_curve: this._parseCurveText(
+                (e.target as HTMLTextAreaElement).value,
+                "capacity_factor",
+              ),
+            })}
+        ></textarea>
+      </div>
+      <div class="detail-field">
+        <label class="summary-label">${localize("airflow.fan_power_curve", lang)}</label>
+        <textarea
+          class="native-textarea"
+          .value=${this._curveToText(device.fan_power_curve, "power_w")}
+          placeholder="0:0, 0.5:18, 1:45"
+          @input=${(e: Event) =>
+            this._updateDevice(entityId, {
+              fan_power_curve: this._parseCurveText(
+                (e.target as HTMLTextAreaElement).value,
+                "power_w",
+              ),
+            })}
+        ></textarea>
+      </div>
     `;
   }
 
@@ -678,7 +848,11 @@ export class RsAirflowSection extends LitElement {
       effect_weight: 1,
       airflow_m3h: null,
       power_sensor_entity: "",
+      assumed_state_ttl: null,
       assumed_state_ttl_s: 120,
+      compressor_stage_observer: "auto",
+      fan_capacity_curve: [],
+      fan_power_curve: [],
     };
   }
 
@@ -743,6 +917,51 @@ export class RsAirflowSection extends LitElement {
 
   private _percent(value: number | null | undefined): string {
     return `${Math.round(Math.max(0, Math.min(1, Number(value ?? 0))) * 100)}%`;
+  }
+
+  private _confidenceLabel(value: string): string {
+    const key =
+      value === "assumed"
+        ? "airflow.confidence_assumed"
+        : value === "stale"
+          ? "airflow.confidence_stale"
+          : value === "conflicting"
+            ? "airflow.confidence_conflicting"
+            : value === "observed"
+              ? "airflow.confidence_observed"
+              : "airflow.confidence_unknown";
+    return localize(key, this.language);
+  }
+
+  private _curveToText(
+    curve: AirflowDeviceConfig["fan_capacity_curve"] | AirflowDeviceConfig["fan_power_curve"],
+    key: "capacity_factor" | "power_w",
+  ): string {
+    return (curve ?? [])
+      .filter((point) => Number.isFinite(point.level) && Number.isFinite(Number(point[key])))
+      .map((point) => `${point.level}:${Number(point[key]).toFixed(key === "power_w" ? 0 : 2)}`)
+      .join(", ");
+  }
+
+  private _parseCurveText(
+    text: string,
+    key: "capacity_factor" | "power_w",
+  ): AirflowDeviceConfig["fan_capacity_curve"] {
+    return text
+      .split(/[,\n]/)
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => {
+        const [rawLevel, rawValue] = part.split(":").map((chunk) => chunk.trim());
+        const level = Number(rawLevel);
+        const value = Number(rawValue);
+        if (!Number.isFinite(level) || !Number.isFinite(value)) return null;
+        return { level: Math.max(0, Math.min(1, level)), [key]: value };
+      })
+      .filter((point): point is { level: number; capacity_factor?: number; power_w?: number } =>
+        Boolean(point),
+      )
+      .sort((a, b) => a.level - b.level);
   }
 
   private _stringArray(value: unknown): string[] {

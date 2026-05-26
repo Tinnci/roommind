@@ -23,6 +23,7 @@ from .const import (
     DEFAULT_COMFORT_HEAT,
     DEFAULT_ECO_COOL,
     DEFAULT_ECO_HEAT,
+    DEFAULT_OUTDOOR_COOLING_MIN,
     DEFAULT_OUTDOOR_HEATING_MAX,
     DOMAIN,
     HEATING_BOOST_TARGET,
@@ -71,7 +72,9 @@ from .managers.environmental_factor_manager import (
 from .managers.heat_source_orchestrator import HeatSourcePlan, evaluate_heat_sources
 from .managers.hvac_output_observer import HVACOutputObserver
 from .managers.mold_manager import MoldManager
+from .managers.night_mode_manager import NightModeManager
 from .managers.residual_heat_tracker import ResidualHeatTracker
+from .managers.room_coupling_manager import RoomCouplingManager
 from .managers.sensor_fusion_manager import SensorFusionManager
 from .managers.valve_manager import ValveManager
 from .managers.weather_manager import WeatherManager
@@ -85,6 +88,7 @@ from .utils.device_utils import (
     room_contributes_to_group,
 )
 from .utils.history_store import HistoryStore
+from .utils.night_utils import is_quiet_hours_now
 from .utils.schedule_utils import resolve_schedule_index
 from .utils.sensor_utils import read_sensor_value
 from .utils.temp_utils import celsius_delta_to_ha, ha_temp_to_celsius, ha_temp_unit_str
@@ -145,6 +149,9 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         self._environmental_factors = EnvironmentalFactorManager(hass)
         self._airflow_control = AirflowControlManager(hass)
         self._hvac_output_observer = HVACOutputObserver(hass)
+        self._night_mode_manager = NightModeManager(hass)
+        self._room_coupling = RoomCouplingManager()
+        self._room_coupling_last_temps: dict[str, tuple[float, float]] = {}
         # Cover/blind automatic control
         from .managers.cover_manager import CoverManager
 
@@ -252,6 +259,8 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             except Exception:  # noqa: BLE001
                 _LOGGER.exception("Room '%s': processing failed, skipping", area_id)
 
+        self._update_room_couplings(rooms, room_states)
+
         # Control master devices based on aggregate room demand
         await self._async_control_master_devices(room_states, rooms, settings)
 
@@ -287,6 +296,13 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                             "cover_reason": rs.get("cover_reason", ""),
                             "device_setpoint": rs.get("device_setpoint"),
                             "occupancy": rs.get("q_occupancy", 0.0) > 0,
+                            "perceived_temp": rs.get("perceived_temp"),
+                            "q_fan_mix": rs.get("q_fan_mix", 0.0),
+                            "q_vent": rs.get("q_vent", 0.0),
+                            "airflow_ach": rs.get("airflow_ach", 0.0),
+                            "night_mode_active": rs.get("night_mode", {}).get("active", False),
+                            "rapid_recovery_active": rs.get("rapid_recovery_active", False),
+                            "hvac_stage": (rs.get("hvac_output_status") or {}).get("stage"),
                         },
                     )
                 except Exception:  # noqa: BLE001
@@ -321,6 +337,9 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                                 Q,
                                 3.0,
                                 q_solar=self._current_q_solar * rs.get("shading_factor", 1.0),
+                                q_vent=rs.get("q_vent", 0.0),
+                                q_occupancy=rs.get("q_occupancy", 0.0),
+                                coupling_terms=rs.get("coupling_status", []),
                             )
                         # Sanity clamp: prevent unrealistic jumps in one prediction step
                         clamped = max(
@@ -523,6 +542,165 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         )
         self._outdoor_warning_sent = True
 
+    def _is_night_active(self, room: dict) -> bool:
+        """Return whether room-level night mode should currently apply."""
+        return bool(room.get("night_mode_enabled", True)) and is_quiet_hours_now(room.get("quiet_hours"))
+
+    @staticmethod
+    def _apply_sleep_ramp_to_targets(targets: TargetTemps, ramp_c: float) -> TargetTemps:
+        """Relax targets at night: slightly cooler heating and warmer cooling."""
+        if ramp_c <= 0:
+            return targets
+        return TargetTemps(
+            heat=(targets.heat - ramp_c if targets.heat is not None else None),
+            cool=(targets.cool + ramp_c if targets.cool is not None else None),
+        )
+
+    def _wrap_target_resolver_for_night(self, resolver: Any, *, night_active: bool, ramp_c: float) -> Any:
+        if not night_active or ramp_c <= 0:
+            return resolver
+
+        def _resolver(ts: float) -> TargetTemps | float | None:
+            result = resolver(ts)
+            if isinstance(result, TargetTemps):
+                return self._apply_sleep_ramp_to_targets(result, ramp_c)
+            if result is None:
+                return None
+            return float(result) + ramp_c
+
+        return _resolver
+
+    def _select_airflow_curve(self, room: dict, key: str) -> list[dict[str, float]]:
+        """Merge airflow curves from configured climate/HVAC fan devices."""
+        curves: list[dict[str, float]] = []
+        for device in room.get("airflow_devices", []) or []:
+            if not device.get(key):
+                continue
+            if device.get("role") not in {"hvac_fan", "circulation"}:
+                continue
+            for point in device.get(key) or []:
+                if isinstance(point, dict):
+                    curves.append(point)
+            if curves:
+                break
+        return curves
+
+    def _adjacent_gate(self, config: dict) -> float:
+        sensor = config.get("link_sensor_entity") or config.get("door_sensor_entity") or ""
+        if not sensor:
+            return 1.0
+        state = self.hass.states.get(sensor)
+        if state is None or state.state in ("unavailable", "unknown"):
+            return 0.0
+        if str(state.state).lower() in {"on", "open", "opening", "true", "home"}:
+            return 1.0
+        return 0.0
+
+    def _build_coupling_terms(self, area_id: str, room: dict) -> list[dict]:
+        """Build adjacent-room RC coupling terms from config and learned k values."""
+        temperatures: dict[str, float] = {}
+        for rid, live in self.rooms.items():
+            temp = live.get("current_temp_raw", live.get("current_temp")) if isinstance(live, dict) else None
+            if isinstance(temp, (int, float)) and not isinstance(temp, bool):
+                temperatures[rid] = float(temp)
+        terms: list[dict] = []
+        learned = {obs.adjacent_room_id: obs for obs in self._room_coupling.observations_for(area_id)}
+        for adjacent in room.get("adjacent_rooms", []) or []:
+            if not isinstance(adjacent, dict) or not adjacent.get("enabled", True):
+                continue
+            adjacent_id = str(adjacent.get("area_id") or "")
+            if not adjacent_id or adjacent_id not in temperatures:
+                continue
+            if not adjacent.get("allow_borrowed_conditioning", True):
+                continue
+            gate = self._adjacent_gate(adjacent)
+            if gate <= 0.0:
+                continue
+            configured_k = float(adjacent.get("coupling_weight") or 0.0)
+            learned_obs = learned.get(adjacent_id)
+            learned_k = learned_obs.k if learned_obs and learned_obs.confidence >= 0.7 else 0.0
+            k = configured_k if configured_k > 0 else learned_k
+            if k <= 0.0:
+                continue
+            terms.append({"area_id": adjacent_id, "temperature": temperatures[adjacent_id], "k": k, "gate": gate})
+        return terms
+
+    def _update_room_couplings(self, rooms: dict[str, dict], room_states: dict[str, dict]) -> None:
+        """Train adjacent-room coupling coefficients and surface current link status."""
+        now = time.time()
+        for area_id, room in rooms.items():
+            state = room_states.get(area_id, {})
+            temp = state.get("current_temp_raw", state.get("current_temp"))
+            if not isinstance(temp, (int, float)) or isinstance(temp, bool):
+                continue
+            previous = self._room_coupling_last_temps.get(area_id)
+            for adjacent in room.get("adjacent_rooms", []) or []:
+                if not isinstance(adjacent, dict) or not adjacent.get("enabled", True):
+                    continue
+                adjacent_id = str(adjacent.get("area_id") or "")
+                adjacent_state = room_states.get(adjacent_id, {})
+                adjacent_temp = adjacent_state.get("current_temp_raw", adjacent_state.get("current_temp"))
+                if not isinstance(adjacent_temp, (int, float)) or isinstance(adjacent_temp, bool):
+                    continue
+                if previous is None or self.outdoor_temp_effective is None:
+                    continue
+                prev_temp, prev_ts = previous
+                dt_h = max((now - prev_ts) / 3600.0, 1e-6)
+                if dt_h > 1.0:
+                    continue
+                model = self._model_manager.get_model(area_id)
+                self._room_coupling.update(
+                    room_id=area_id,
+                    adjacent_room_id=adjacent_id,
+                    room_temp=float(temp),
+                    adjacent_temp=float(adjacent_temp),
+                    room_slope_c_per_h=(float(temp) - prev_temp) / dt_h,
+                    outdoor_temp=self.outdoor_temp_effective,
+                    outdoor_alpha=model.U / max(model.C, 0.001),
+                    gate=self._adjacent_gate(adjacent),
+                )
+            self._room_coupling_last_temps[area_id] = (float(temp), now)
+
+        for area_id, room in rooms.items():
+            if area_id not in room_states:
+                continue
+            room_states[area_id]["coupling_status"] = self._build_coupling_terms(area_id, room)
+
+    def _rapid_recovery_mode(
+        self,
+        room: dict,
+        settings: dict,
+        *,
+        current_temp: float | None,
+        targets: TargetTemps,
+        night_active: bool,
+    ) -> str | None:
+        """Return fast pull-down / warm-up mode when it is safe and allowed."""
+        if current_temp is None:
+            return None
+        if night_active and not room.get("night_allow_rapid_recovery", True):
+            return None
+
+        delta = max(0.5, float(room.get("rapid_recovery_delta_c") or 2.0))
+        climate_mode = room.get("climate_mode", "auto")
+        can_cool = climate_mode != CLIMATE_MODE_HEAT_ONLY and targets.cool is not None
+        can_heat = climate_mode != CLIMATE_MODE_COOL_ONLY and targets.heat is not None
+
+        outdoor_temp = self.outdoor_temp_effective
+        if outdoor_temp is not None:
+            outdoor_cooling_min = float(settings.get("outdoor_cooling_min", DEFAULT_OUTDOOR_COOLING_MIN))
+            outdoor_heating_max = float(settings.get("outdoor_heating_max", DEFAULT_OUTDOOR_HEATING_MAX))
+            if can_cool and outdoor_temp < outdoor_cooling_min:
+                can_cool = False
+            if can_heat and outdoor_temp > outdoor_heating_max:
+                can_heat = False
+
+        if can_cool and targets.cool is not None and current_temp - targets.cool >= delta:
+            return MODE_COOLING
+        if can_heat and targets.heat is not None and targets.heat - current_temp >= delta:
+            return MODE_HEATING
+        return None
+
     async def _evaluate_mold_risk(
         self,
         area_id: str,
@@ -596,6 +774,12 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 "airflow_plan_level": 0.0,
                 "airflow_devices_status": [],
                 "airflow_command_status": [],
+                "hvac_output_status": None,
+                "night_mode": {"active": False},
+                "night_control_status": [],
+                "rapid_recovery_active": False,
+                "effective_control_target": room.get("control_target", "air_temperature"),
+                "coupling_status": [],
                 "blind_position": None,
                 "cover_auto_paused": False,
                 "cover_forced_reason": "",
@@ -657,6 +841,14 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             mold_prevention_delta=mold_prevention_temp_delta,
         )
 
+        night_mode_active = self._is_night_active(room)
+        sleep_ramp_c = max(0.0, float(room.get("sleep_temp_ramp_c") or 0.0))
+        if night_mode_active and sleep_ramp_c > 0:
+            targets = self._apply_sleep_ramp_to_targets(targets, sleep_ramp_c)
+            target_resolver = self._wrap_target_resolver_for_night(
+                target_resolver, night_active=night_mode_active, ramp_c=sleep_ramp_c
+            )
+
         # --- Compute residual heat from previous cycle state ---
         system_type = room.get("heating_system_type", "")
         q_residual = self._residual_tracker.get_q_residual(
@@ -684,6 +876,9 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             status.available and status.role == AIRFLOW_ROLE_VENTILATION for status in airflow.statuses
         )
         airflow_mix_score = max(airflow.q_fan_mix, airflow_sensor_conflict(temperature_observations))
+        airflow_capacity_curve = self._select_airflow_curve(room, "fan_capacity_curve")
+        airflow_power_curve = self._select_airflow_curve(room, "fan_power_curve")
+        coupling_terms = self._build_coupling_terms(area_id, room)
 
         # Determine and apply mode with MPC controller
         controller = MPCController(
@@ -712,6 +907,13 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             airflow_has_ventilation=airflow_has_ventilation,
             airflow_has_hvac_fan=airflow.has_hvac_fan_control,
             airflow_mix_score=airflow_mix_score,
+            airflow_capacity_curve=airflow_capacity_curve,
+            airflow_power_curve=airflow_power_curve,
+            control_target=room.get("control_target", "air_temperature"),
+            current_humidity=current_humidity,
+            night_active=night_mode_active,
+            night_quiet_penalty=0.35,
+            coupling_terms=coupling_terms,
         )
         mode, power_fraction = await controller.async_evaluate(current_temp, targets)
 
@@ -729,10 +931,24 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             else:
                 target_temp = targets.heat if targets.heat is not None else targets.cool
 
+        rapid_recovery_mode = self._rapid_recovery_mode(
+            room,
+            settings,
+            current_temp=current_temp,
+            targets=targets,
+            night_active=night_mode_active,
+        )
+        rapid_recovery_active = rapid_recovery_mode is not None
+        if rapid_recovery_mode:
+            mode = rapid_recovery_mode
+            power_fraction = 1.0
+            target_temp = targets.cool if mode == MODE_COOLING else targets.heat
+
         # Force idle when target resolved to "off" (presence away or schedule off)
         if force_off:
             mode = MODE_IDLE
             power_fraction = 0.0
+            rapid_recovery_active = False
 
         # Store MPC prediction forecast for analytics
         if controller.last_plan and len(controller.last_plan.temperatures) > 1:
@@ -756,12 +972,21 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         if window_open:
             mode = MODE_IDLE
             power_fraction = 0.0
+            rapid_recovery_active = False
 
         climate_active = settings.get("climate_control_active", True) and room.get("climate_control_enabled", True)
         airflow_mix_plan_level = 0.0 if window_open or force_off else controller.last_airflow_mix_level
         airflow_vent_plan_level = 0.0 if window_open or force_off else controller.last_airflow_vent_level
+        if rapid_recovery_active and not window_open and not force_off and mode in (MODE_HEATING, MODE_COOLING):
+            airflow_mix_plan_level = max(airflow_mix_plan_level, *(airflow.mix_levels or [1.0]))
+        night_fan_limit = room.get("max_fan_level_night")
+        if night_mode_active and not rapid_recovery_active and night_fan_limit is not None:
+            airflow_mix_plan_level = min(airflow_mix_plan_level, max(0.0, min(1.0, float(night_fan_limit))))
         airflow_plan_level = max(airflow_mix_plan_level, airflow_vent_plan_level)
         airflow_command_status: list[dict[str, Any]] = []
+        runtime_room = dict(room)
+        runtime_room["_night_mode_active"] = night_mode_active
+        runtime_room["_rapid_recovery_active"] = rapid_recovery_active
 
         # Read device temperature limits for dynamic boost targets
         trv_max_temps: list[float] = []
@@ -883,7 +1108,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             try:
                 airflow_command_status = await self._airflow_control.async_apply(
                     area_id,
-                    room,
+                    runtime_room,
                     mix_level=airflow_mix_plan_level,
                     vent_level=airflow_vent_plan_level,
                     mode=mode,
@@ -926,11 +1151,21 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             airflow_plan_level = 0.0
             airflow_command_status = await self._airflow_control.async_apply(
                 area_id,
-                room,
+                runtime_room,
                 mix_level=0.0,
                 vent_level=0.0,
                 mode=MODE_IDLE,
             )
+
+        night_control_status: list[dict[str, Any]] = []
+        try:
+            night_control_status = await self._night_mode_manager.async_apply(
+                area_id,
+                room,
+                active=night_mode_active,
+            )
+        except Exception:  # noqa: BLE001
+            _LOGGER.warning("Room '%s': night-mode accessory control failed", area_id, exc_info=True)
 
         # --- Cover/blind automatic control ---
         has_override = is_override_active(room)
@@ -1033,6 +1268,11 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             airflow_devices_status=airflow.as_status_dicts(),
             airflow_command_status=airflow_command_status,
             hvac_output_status=self._observe_hvac_output(room, airflow.as_status_dicts(), current_temp_raw),
+            night_mode_active=night_mode_active,
+            night_control_status=night_control_status,
+            rapid_recovery_active=rapid_recovery_active,
+            coupling_status=coupling_terms,
+            effective_control_target=room.get("control_target", "air_temperature"),
             cover_eids=cover_eids,
             cover_result=cover_result,
             mpc_active=mpc_active,
@@ -1263,6 +1503,11 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         airflow_devices_status: list[dict],
         airflow_command_status: list[dict],
         hvac_output_status: dict | None,
+        night_mode_active: bool,
+        night_control_status: list[dict],
+        rapid_recovery_active: bool,
+        coupling_status: list[dict],
+        effective_control_target: str,
         cover_eids: list[str],
         cover_result: CoverResult,
         mpc_active: bool,
@@ -1341,6 +1586,16 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             "airflow_devices_status": airflow_devices_status,
             "airflow_command_status": airflow_command_status,
             "hvac_output_status": hvac_output_status,
+            "night_mode": {
+                "active": night_mode_active,
+                "quiet_hours": room.get("quiet_hours"),
+                "sleep_temp_ramp_c": room.get("sleep_temp_ramp_c", 0.0),
+                "max_fan_level": room.get("max_fan_level_night"),
+            },
+            "night_control_status": night_control_status,
+            "rapid_recovery_active": rapid_recovery_active,
+            "effective_control_target": effective_control_target,
+            "coupling_status": coupling_status,
             "n_observations": self._model_manager.get_n_observations(area_id),
             "blind_position": (self._cover_orchestrator.get_current_position(area_id) if cover_eids else None),
             "cover_auto_paused": (self._cover_orchestrator.is_user_override_active(area_id) if cover_eids else False),

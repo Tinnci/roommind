@@ -109,6 +109,10 @@ _ROOM_SAVE_FIELDS = (
     "room_volume_m3",
     "control_target",
     "quiet_hours",
+    "night_mode_enabled",
+    "night_controls",
+    "night_allow_rapid_recovery",
+    "rapid_recovery_delta_c",
     "max_fan_level_night",
     "sleep_temp_ramp_c",
     "adjacent_rooms",
@@ -284,6 +288,11 @@ async def websocket_list_rooms(
             "airflow_devices_status": live.get("airflow_devices_status", []),
             "airflow_command_status": live.get("airflow_command_status", []),
             "hvac_output_status": live.get("hvac_output_status"),
+            "night_mode": live.get("night_mode", {"active": False}),
+            "night_control_status": live.get("night_control_status", []),
+            "rapid_recovery_active": live.get("rapid_recovery_active", False),
+            "effective_control_target": live.get("effective_control_target"),
+            "coupling_status": live.get("coupling_status", []),
             "learning_paused_reason": learning_paused_reason,
         }
         result[area_id] = room_data
@@ -363,7 +372,25 @@ async def websocket_list_rooms(
                 vol.Optional("effect_weight", default=1.0): vol.All(vol.Coerce(float), vol.Range(min=0, max=2)),
                 vol.Optional("airflow_m3h", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0))),
                 vol.Optional("power_sensor_entity", default=""): str,
+                vol.Optional("assumed_state_ttl", default=None): vol.Any(
+                    None, vol.All(vol.Coerce(int), vol.Range(min=0, max=3600))
+                ),
                 vol.Optional("assumed_state_ttl_s", default=120): vol.All(vol.Coerce(int), vol.Range(min=0, max=3600)),
+                vol.Optional("compressor_stage_observer", default="auto"): vol.In(
+                    ["auto", "power_sensor", "thermal_slope", "disabled"]
+                ),
+                vol.Optional("fan_capacity_curve", default=[]): [
+                    {
+                        vol.Required("level"): vol.All(vol.Coerce(float), vol.Range(min=0, max=1)),
+                        vol.Required("capacity_factor"): vol.All(vol.Coerce(float), vol.Range(min=0, max=3)),
+                    }
+                ],
+                vol.Optional("fan_power_curve", default=[]): [
+                    {
+                        vol.Required("level"): vol.All(vol.Coerce(float), vol.Range(min=0, max=1)),
+                        vol.Required("power_w"): vol.All(vol.Coerce(float), vol.Range(min=0, max=2000)),
+                    }
+                ],
             }
         ],
         vol.Optional("humidity_sensor"): str,
@@ -420,13 +447,30 @@ async def websocket_list_rooms(
                 vol.Required("end"): str,
             },
         ),
+        vol.Optional("night_mode_enabled"): bool,
+        vol.Optional("night_controls"): [
+            {
+                vol.Required("entity_id"): str,
+                vol.Optional("role", default="other"): vol.In(
+                    ["indicator_light", "display", "beeper", "sound", "other"]
+                ),
+                vol.Optional("enabled", default=True): bool,
+                vol.Optional("night_value", default=None): vol.Any(None, str, int, float, bool),
+                vol.Optional("day_value", default=None): vol.Any(None, str, int, float, bool),
+                vol.Optional("restore_after_night", default=True): bool,
+            }
+        ],
+        vol.Optional("night_allow_rapid_recovery"): bool,
+        vol.Optional("rapid_recovery_delta_c"): vol.All(vol.Coerce(float), vol.Range(min=0.5, max=10)),
         vol.Optional("max_fan_level_night"): vol.All(vol.Coerce(float), vol.Range(min=0, max=1)),
         vol.Optional("sleep_temp_ramp_c"): vol.All(vol.Coerce(float), vol.Range(min=0, max=5)),
         vol.Optional("adjacent_rooms"): [
             {
                 vol.Required("area_id"): str,
                 vol.Optional("link_sensor_entity", default=""): str,
+                vol.Optional("door_sensor_entity", default=""): str,
                 vol.Optional("coupling_weight", default=0.0): vol.All(vol.Coerce(float), vol.Range(min=0, max=2)),
+                vol.Optional("allow_borrowed_conditioning", default=True): bool,
                 vol.Optional("enabled", default=True): bool,
             }
         ],

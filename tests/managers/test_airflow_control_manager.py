@@ -392,7 +392,7 @@ async def test_climate_preset_is_selected_by_context_and_guarded(hass):
                     "preferred_preset_mode_night": "sleep",
                 }
             ],
-            "quiet_hours": {"start": "22:00", "end": "07:00"},
+            "_night_mode_active": False,
         },
         level=1.0,
         mode="cooling",
@@ -402,3 +402,85 @@ async def test_climate_preset_is_selected_by_context_and_guarded(hass):
     assert ("climate", "set_preset_mode", {"entity_id": "climate.ac", "preset_mode": "boost"}) in calls
     assert statuses[0]["assumed_state_confidence"] in {"assumed", "conflicting", "observed"}
     assert statuses[0]["commanded_level"] == 1.0
+
+
+@pytest.mark.asyncio
+async def test_night_mode_caps_mix_level_and_reports_skip_reasons(hass):
+    hass.states.get.return_value = _state(
+        "on",
+        {
+            "percentage": 0,
+            "supported_features": int(FanEntityFeature.TURN_ON),
+            "preset_modes": ["normal"],
+        },
+    )
+    mgr = AirflowControlManager(hass)
+
+    statuses = await mgr.async_apply(
+        "bedroom",
+        {
+            "_night_mode_active": True,
+            "max_fan_level_night": 0.3,
+            "airflow_devices": [
+                {
+                    "entity_id": "fan.bedroom",
+                    "role": "circulation",
+                    "controllable": True,
+                    "control_enabled": True,
+                    "preferred_oscillating": True,
+                    "preferred_preset_mode": "normal",
+                }
+            ],
+        },
+        mix_level=0.8,
+        vent_level=0.0,
+        mode="cooling",
+    )
+
+    calls = [c.args[:3] for c in hass.services.async_call.call_args_list]
+    assert ("fan", "turn_on", {"entity_id": "fan.bedroom", "percentage": 30}) in calls
+    assert statuses[0]["night_mode_active"] is True
+    assert statuses[0]["night_capped"] is True
+    assert statuses[0]["skipped_services"] == [
+        {"service": "fan.oscillate", "reason": "oscillate_unsupported"},
+        {"service": "fan.set_preset_mode", "reason": "preset_unsupported"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_night_climate_uses_night_preset_preference(hass):
+    hass.states.get.return_value = _state(
+        "cool",
+        {
+            "fan_modes": ["low", "high"],
+            "preset_modes": ["sleep", "boost"],
+            "supported_features": int(ClimateEntityFeature.FAN_MODE | ClimateEntityFeature.PRESET_MODE),
+        },
+    )
+    mgr = AirflowControlManager(hass)
+
+    await mgr.async_apply(
+        "bedroom",
+        {
+            "_night_mode_active": True,
+            "airflow_devices": [
+                {
+                    "entity_id": "climate.bedroom_ac",
+                    "role": "hvac_fan",
+                    "controllable": True,
+                    "control_enabled": True,
+                    "preferred_preset_mode_thermal": "boost",
+                    "preferred_preset_mode_night": "sleep",
+                }
+            ],
+        },
+        mix_level=1.0,
+        mode="cooling",
+    )
+
+    calls = [c.args[:3] for c in hass.services.async_call.call_args_list]
+    assert (
+        "climate",
+        "set_preset_mode",
+        {"entity_id": "climate.bedroom_ac", "preset_mode": "sleep"},
+    ) in calls

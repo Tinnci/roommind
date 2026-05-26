@@ -63,6 +63,11 @@ export interface RoomLiveData {
   airflow_devices_status?: AirflowDeviceStatus[];
   airflow_command_status?: AirflowCommandStatus[];
   hvac_output_status?: HVACOutputStatus | null;
+  night_mode?: NightModeLiveStatus;
+  night_control_status?: NightControlStatus[];
+  rapid_recovery_active?: boolean;
+  effective_control_target?: "air_temperature" | "perceived_temperature" | string;
+  coupling_status?: CouplingStatus[];
 }
 
 export type DeviceType = "trv" | "ac";
@@ -79,6 +84,12 @@ export interface DeviceConfig {
 }
 
 export type AirflowRole = "circulation" | "ventilation" | "hvac_fan";
+
+export interface CurvePoint {
+  level: number;
+  capacity_factor?: number;
+  power_w?: number;
+}
 
 export interface AirflowDeviceConfig {
   entity_id: string;
@@ -97,7 +108,11 @@ export interface AirflowDeviceConfig {
   effect_weight?: number;
   airflow_m3h?: number | null;
   power_sensor_entity?: string;
+  assumed_state_ttl?: number | null;
   assumed_state_ttl_s?: number;
+  compressor_stage_observer?: "auto" | "power_sensor" | "thermal_slope" | "disabled";
+  fan_capacity_curve?: CurvePoint[];
+  fan_power_curve?: CurvePoint[];
 }
 
 export interface AirflowDeviceStatus {
@@ -149,6 +164,8 @@ export interface AirflowCommandStatus {
   assumed_state_confidence?: "observed" | "assumed" | "stale" | "conflicting" | string;
   commanded_level?: number | null;
   commanded_at?: number | null;
+  night_mode_active?: boolean;
+  night_capped?: boolean;
 }
 
 export interface HVACOutputStatus {
@@ -157,6 +174,32 @@ export interface HVACOutputStatus {
   delivered_capacity_factor: number;
   electric_power_w?: number | null;
   confidence: string;
+}
+
+export interface NightModeLiveStatus {
+  active: boolean;
+  quiet_hours?: { start: string; end: string } | null;
+  sleep_temp_ramp_c?: number;
+  max_fan_level?: number | null;
+}
+
+export interface NightControlStatus {
+  entity_id: string;
+  role: "indicator_light" | "display" | "beeper" | "sound" | "other" | string;
+  active: boolean;
+  outcome: string;
+  skip_reason?: string;
+  target_value?: string | number | boolean | null;
+  previous_value?: string | number | boolean | null;
+  restore_after_night?: boolean;
+  last_service?: string | null;
+}
+
+export interface CouplingStatus {
+  area_id: string;
+  temperature: number;
+  k: number;
+  gate: number;
 }
 
 export type ConflictResolution =
@@ -186,6 +229,10 @@ export interface RoomConfig {
   room_volume_m3?: number | null;
   control_target?: "air_temperature" | "perceived_temperature";
   quiet_hours?: { start: string; end: string } | null;
+  night_mode_enabled?: boolean;
+  night_controls?: NightControlConfig[];
+  night_allow_rapid_recovery?: boolean;
+  rapid_recovery_delta_c?: number;
   max_fan_level_night?: number;
   sleep_temp_ramp_c?: number;
   adjacent_rooms?: AdjacentRoomConfig[];
@@ -240,8 +287,19 @@ export interface RoomConfig {
 export interface AdjacentRoomConfig {
   area_id: string;
   link_sensor_entity?: string;
+  door_sensor_entity?: string;
   coupling_weight?: number;
+  allow_borrowed_conditioning?: boolean;
   enabled?: boolean;
+}
+
+export interface NightControlConfig {
+  entity_id: string;
+  role?: "indicator_light" | "display" | "beeper" | "sound" | "other";
+  enabled?: boolean;
+  night_value?: string | number | boolean | null;
+  day_value?: string | number | boolean | null;
+  restore_after_night?: boolean;
 }
 
 export interface GlobalSettings {

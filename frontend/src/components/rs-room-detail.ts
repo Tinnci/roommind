@@ -19,6 +19,7 @@ import "./rs-schedule-settings";
 import "./rs-device-section";
 import "./rs-sensor-section";
 import "./rs-airflow-section";
+import "./rs-comfort-section";
 import "./rs-section-card";
 import "./rs-override-section";
 import "./rs-presence-section";
@@ -41,6 +42,7 @@ type EditableSection =
   | "devices"
   | "sensors"
   | "airflow"
+  | "comfort"
   | "presence"
   | "covers"
   | "heatSource";
@@ -61,6 +63,10 @@ export class RsRoomDetail extends LitElement {
   @state() private _roomVolumeM3: number | null = null;
   @state() private _controlTarget: "air_temperature" | "perceived_temperature" = "air_temperature";
   @state() private _quietHours: { start: string; end: string } | null = null;
+  @state() private _nightModeEnabled = true;
+  @state() private _nightControls: RoomConfig["night_controls"] = [];
+  @state() private _nightAllowRapidRecovery = true;
+  @state() private _rapidRecoveryDeltaC = 2.0;
   @state() private _maxFanLevelNight = 0.5;
   @state() private _sleepTempRampC = 0.0;
   @state() private _adjacentRooms: RoomConfig["adjacent_rooms"] = [];
@@ -266,9 +272,13 @@ export class RsRoomDetail extends LitElement {
       this._roomVolumeM3 = this.config.room_volume_m3 ?? null;
       this._controlTarget = this.config.control_target ?? "air_temperature";
       this._quietHours = this.config.quiet_hours ?? null;
+      this._nightModeEnabled = this.config.night_mode_enabled ?? true;
+      this._nightControls = [...(this.config.night_controls ?? [])];
+      this._nightAllowRapidRecovery = this.config.night_allow_rapid_recovery ?? true;
+      this._rapidRecoveryDeltaC = this.config.rapid_recovery_delta_c ?? 2.0;
       this._maxFanLevelNight = this.config.max_fan_level_night ?? 0.5;
       this._sleepTempRampC = this.config.sleep_temp_ramp_c ?? 0.0;
-      this._adjacentRooms = this.config.adjacent_rooms ?? [];
+      this._adjacentRooms = [...(this.config.adjacent_rooms ?? [])];
       this._selectedTempSensor = this.config.temperature_sensor;
       this._selectedTempSensors = new Set(
         this.config.temperature_sensors?.length
@@ -323,6 +333,10 @@ export class RsRoomDetail extends LitElement {
       this._roomVolumeM3 = null;
       this._controlTarget = "air_temperature";
       this._quietHours = null;
+      this._nightModeEnabled = true;
+      this._nightControls = [];
+      this._nightAllowRapidRecovery = true;
+      this._rapidRecoveryDeltaC = 2.0;
       this._maxFanLevelNight = 0.5;
       this._sleepTempRampC = 0.0;
       this._adjacentRooms = [];
@@ -551,6 +565,7 @@ export class RsRoomDetail extends LitElement {
                     .airflowDevices=${this._airflowDevices}
                     .statuses=${this.config?.live?.airflow_devices_status ?? []}
                     .commandStatuses=${this.config?.live?.airflow_command_status ?? []}
+                    .hvacOutputStatus=${this.config?.live?.hvac_output_status ?? null}
                     .qFanMix=${this.config?.live?.q_fan_mix ?? 0}
                     .qVent=${this.config?.live?.q_vent ?? 0}
                     .airflowAch=${this.config?.live?.airflow_ach ?? 0}
@@ -561,6 +576,38 @@ export class RsRoomDetail extends LitElement {
                     .language=${this.hass.language}
                     @airflow-devices-changed=${this._onAirflowDevicesChanged}
                   ></rs-airflow-section>
+                </rs-section-card>
+
+                <rs-section-card
+                  icon="mdi:weather-night"
+                  .heading=${localize("room.section.comfort", this.hass.language)}
+                  editable
+                  @edit-click=${this._openEdit("comfort")}
+                >
+                  <rs-comfort-section
+                    .hass=${this.hass}
+                    .area=${this.area}
+                    .editing=${false}
+                    .currentTemp=${this.config?.live?.current_temp ?? null}
+                    .perceivedTemp=${this.config?.live?.perceived_temp ?? null}
+                    .currentHumidity=${this.config?.live?.current_humidity ?? null}
+                    .controlTarget=${this._controlTarget}
+                    .roomVolumeM3=${this._roomVolumeM3}
+                    .quietHours=${this._quietHours}
+                    .nightModeEnabled=${this._nightModeEnabled}
+                    .maxFanLevelNight=${this._maxFanLevelNight}
+                    .sleepTempRampC=${this._sleepTempRampC}
+                    .nightAllowRapidRecovery=${this._nightAllowRapidRecovery}
+                    .rapidRecoveryDeltaC=${this._rapidRecoveryDeltaC}
+                    .nightMode=${this.config?.live?.night_mode ?? null}
+                    .nightControls=${this._nightControls ?? []}
+                    .nightControlStatus=${this.config?.live?.night_control_status ?? []}
+                    .adjacentRooms=${this._adjacentRooms ?? []}
+                    .couplingStatus=${this.config?.live?.coupling_status ?? []}
+                    .rapidRecoveryActive=${this.config?.live?.rapid_recovery_active ?? false}
+                    .language=${this.hass.language}
+                    @setting-changed=${this._onComfortSettingChanged}
+                  ></rs-comfort-section>
                 </rs-section-card>
 
                 ${this.presenceEnabled && this.presencePersons.length > 0
@@ -824,6 +871,7 @@ export class RsRoomDetail extends LitElement {
             .airflowDevices=${this._airflowDevices}
             .statuses=${this.config?.live?.airflow_devices_status ?? []}
             .commandStatuses=${this.config?.live?.airflow_command_status ?? []}
+            .hvacOutputStatus=${this.config?.live?.hvac_output_status ?? null}
             .qFanMix=${this.config?.live?.q_fan_mix ?? 0}
             .qVent=${this.config?.live?.q_vent ?? 0}
             .airflowAch=${this.config?.live?.airflow_ach ?? 0}
@@ -834,6 +882,49 @@ export class RsRoomDetail extends LitElement {
             .language=${this.hass.language}
             @airflow-devices-changed=${this._onAirflowDevicesChanged}
           ></rs-airflow-section>
+        </rs-edit-dialog>`;
+      case "comfort":
+        return html`<rs-edit-dialog
+          open
+          icon="mdi:weather-night"
+          .heading=${localize("room.section.comfort", lang)}
+          hasInfo
+          @rs-dialog-closed=${this._closeEdit}
+        >
+          <div slot="info">
+            <b>${localize("comfort.info_title", lang)}</b><br />
+            ${localize("comfort.info_body", lang)}
+            <br /><br />
+            <b>${localize("comfort.info_night_title", lang)}</b><br />
+            ${localize("comfort.info_night_body", lang)}
+            <br /><br />
+            <b>${localize("comfort.info_coupling_title", lang)}</b><br />
+            ${localize("comfort.info_coupling_body", lang)}
+          </div>
+          <rs-comfort-section
+            .hass=${this.hass}
+            .area=${this.area}
+            .editing=${true}
+            .currentTemp=${this.config?.live?.current_temp ?? null}
+            .perceivedTemp=${this.config?.live?.perceived_temp ?? null}
+            .currentHumidity=${this.config?.live?.current_humidity ?? null}
+            .controlTarget=${this._controlTarget}
+            .roomVolumeM3=${this._roomVolumeM3}
+            .quietHours=${this._quietHours}
+            .nightModeEnabled=${this._nightModeEnabled}
+            .maxFanLevelNight=${this._maxFanLevelNight}
+            .sleepTempRampC=${this._sleepTempRampC}
+            .nightAllowRapidRecovery=${this._nightAllowRapidRecovery}
+            .rapidRecoveryDeltaC=${this._rapidRecoveryDeltaC}
+            .nightMode=${this.config?.live?.night_mode ?? null}
+            .nightControls=${this._nightControls ?? []}
+            .nightControlStatus=${this.config?.live?.night_control_status ?? []}
+            .adjacentRooms=${this._adjacentRooms ?? []}
+            .couplingStatus=${this.config?.live?.coupling_status ?? []}
+            .rapidRecoveryActive=${this.config?.live?.rapid_recovery_active ?? false}
+            .language=${this.hass.language}
+            @setting-changed=${this._onComfortSettingChanged}
+          ></rs-comfort-section>
         </rs-edit-dialog>`;
       case "presence":
         return html`<rs-edit-dialog
@@ -1021,6 +1112,23 @@ export class RsRoomDetail extends LitElement {
     this._autoSave();
   }
 
+  private _onComfortSettingChanged(e: CustomEvent<{ key: string; value: unknown }>) {
+    const { key, value } = e.detail;
+    e.stopPropagation();
+    if (key === "room_volume_m3") this._roomVolumeM3 = value as number | null;
+    else if (key === "control_target")
+      this._controlTarget = value as "air_temperature" | "perceived_temperature";
+    else if (key === "quiet_hours") this._quietHours = value as { start: string; end: string };
+    else if (key === "night_mode_enabled") this._nightModeEnabled = value as boolean;
+    else if (key === "night_controls") this._nightControls = value as RoomConfig["night_controls"];
+    else if (key === "night_allow_rapid_recovery") this._nightAllowRapidRecovery = value as boolean;
+    else if (key === "rapid_recovery_delta_c") this._rapidRecoveryDeltaC = value as number;
+    else if (key === "max_fan_level_night") this._maxFanLevelNight = value as number;
+    else if (key === "sleep_temp_ramp_c") this._sleepTempRampC = value as number;
+    else if (key === "adjacent_rooms") this._adjacentRooms = value as RoomConfig["adjacent_rooms"];
+    this._autoSave();
+  }
+
   private _onSensorChanged(e: CustomEvent<{ key: string; value: string | string[] | number }>) {
     const { key, value } = e.detail;
     if (key === "temperature_sensor") {
@@ -1176,9 +1284,13 @@ export class RsRoomDetail extends LitElement {
         room_volume_m3: this._roomVolumeM3,
         control_target: this._controlTarget,
         quiet_hours: this._quietHours,
+        night_mode_enabled: this._nightModeEnabled,
+        night_controls: this._nightControls ?? [],
+        night_allow_rapid_recovery: this._nightAllowRapidRecovery,
+        rapid_recovery_delta_c: this._rapidRecoveryDeltaC,
         max_fan_level_night: this._maxFanLevelNight,
         sleep_temp_ramp_c: this._sleepTempRampC,
-        adjacent_rooms: this._adjacentRooms,
+        adjacent_rooms: this._adjacentRooms ?? [],
         temperature_sensor: this._selectedTempSensor,
         temperature_sensors: this._temperatureSensorIdsForSave(),
         humidity_sensor: this._selectedHumiditySensor,

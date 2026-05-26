@@ -874,3 +874,64 @@ def test_hybrid_ufh_ac_cooling_balance_preserved():
     assert plan_hybrid.actions == plan_baseline.actions
     assert plan_hybrid.temperatures == plan_baseline.temperatures
     assert plan_hybrid.power_fractions == plan_baseline.power_fractions
+
+
+def test_airflow_capacity_curve_overrides_default_hvac_fan_boost():
+    model = RCModel(C=1.0, U=0.5, Q_heat=20.0, Q_cool=20.0)
+    opt = MPCOptimizer(
+        model,
+        airflow_has_hvac_fan=True,
+        airflow_capacity_curve=[
+            {"level": 0.0, "capacity_factor": 1.0},
+            {"level": 1.0, "capacity_factor": 1.5},
+        ],
+    )
+
+    assert opt._effective_hvac_capacity("heating", 0.5) == 25.0
+
+
+def test_perceived_temperature_target_makes_fan_only_useful_in_cooling_comfort():
+    model = RCModel(C=2.0, U=0.1, Q_heat=4.0, Q_cool=4.0)
+    opt = MPCOptimizer(
+        model,
+        can_heat=False,
+        can_cool=False,
+        mix_levels=[0.0, 1.0],
+        airflow_mix_score=0.6,
+        airflow_energy_weight=0.01,
+        airflow_mix_weight=1.0,
+        control_target="perceived_temperature",
+        current_humidity=65.0,
+    )
+
+    plan = opt.optimize(
+        T_room=24.5,
+        T_outdoor_series=[24.5] * 6,
+        heat_target_series=[23.0] * 6,
+        cool_target_series=[24.0] * 6,
+        dt_minutes=5,
+    )
+
+    assert plan.actions[0] == MODE_FAN_ONLY
+    assert plan.get_current_mix_level() == 1.0
+
+
+def test_coupling_terms_pull_prediction_toward_adjacent_room():
+    model = RCModel(C=10.0, U=0.1, Q_heat=0.0, Q_cool=0.0)
+    warmer_neighbor = [{"temperature": 26.0, "k": 0.6, "gate": 1.0}]
+
+    with_coupling = model.predict(
+        T_room=22.0,
+        T_outdoor=22.0,
+        Q_active=0.0,
+        dt_minutes=5,
+        coupling_terms=warmer_neighbor,
+    )
+    without_coupling = model.predict(
+        T_room=22.0,
+        T_outdoor=22.0,
+        Q_active=0.0,
+        dt_minutes=5,
+    )
+
+    assert with_coupling > without_coupling

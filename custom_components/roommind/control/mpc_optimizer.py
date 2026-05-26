@@ -94,6 +94,12 @@ class MPCOptimizer:
     airflow_mix_weight: float = 0.3
     airflow_active_hvac_mix_weight: float = 0.02
     airflow_hvac_power_weight: float = 0.25
+    airflow_capacity_curve: list[dict[str, float]] | None = None
+    airflow_power_curve: list[dict[str, float]] | None = None
+    control_target: str = "air_temperature"
+    current_humidity: float | None = None
+    night_quiet_penalty: float = 0.0
+    coupling_terms: list[dict] | None = None
 
     def __post_init__(self) -> None:
         # Set before optimize() runs so callers / patched optimize() still expose
@@ -269,6 +275,7 @@ class MPCOptimizer:
                 q_residual=qr if Q == 0.0 else 0.0,
                 q_occupancy=qo,
                 q_vent=best_vent,
+                coupling_terms=self.coupling_terms,
             )
             next_temp = max(self.temp_min, min(next_temp, self.temp_max))
 
@@ -419,23 +426,29 @@ class MPCOptimizer:
                 q_residual=qr if block_Q == 0.0 else 0.0,
                 q_occupancy=qo,
                 q_vent=qv,
+                coupling_terms=self.coupling_terms,
             )
             # Clamp temperature in lookahead to prevent cost explosion
             # from implausible model predictions
             T = max(self.temp_min, min(self.temp_max, T))
             h_tgt = future_heat_targets[j] if j < len(future_heat_targets) else heat_target
             c_tgt = future_cool_targets[j] if j < len(future_cool_targets) else cool_target
-            # Dead-band-aware comfort cost: zero inside the band
-            if T < h_tgt:
-                total_cost += self.w_comfort * (T - h_tgt) ** 2
-            elif T > c_tgt:
-                total_cost += self.w_comfort * (T - c_tgt) ** 2
+            # Dead-band-aware comfort cost. When configured, compare targets
+            # against perceived temperature so airflow can be valued for comfort
+            # without needing to overcool/overheat the actual room air.
+            comfort_temp = self._comfort_temperature(T, action, mix_level)
+            if comfort_temp < h_tgt:
+                total_cost += self.w_comfort * (comfort_temp - h_tgt) ** 2
+            elif comfort_temp > c_tgt:
+                total_cost += self.w_comfort * (comfort_temp - c_tgt) ** 2
             # else: inside dead band, no comfort cost
             # Energy cost: proportional to HVAC power for min_run blocks
             if j < self.min_run_blocks and action != MODE_IDLE:
                 total_cost += self.w_energy * abs(Q) / 1000.0
             if mix_level > 0.0:
-                total_cost += self.w_energy * self.airflow_energy_weight * mix_level
+                airflow_energy = self._airflow_power_cost(mix_level)
+                total_cost += self.w_energy * airflow_energy
+                total_cost += self.night_quiet_penalty * mix_level
                 total_cost -= self.airflow_mix_weight * max(0.0, min(1.0, self.airflow_mix_score)) * mix_level
                 if action != MODE_IDLE:
                     total_cost -= self.airflow_active_hvac_mix_weight * mix_level
@@ -540,7 +553,54 @@ class MPCOptimizer:
         if not self.airflow_has_hvac_fan:
             return base
         mix = max(0.0, min(1.0, mix_level))
+        curve_factor = self._curve_value(self.airflow_capacity_curve, mix, "capacity_factor")
+        if curve_factor is not None:
+            return base * max(0.0, curve_factor)
         return base * (1.0 + self.airflow_hvac_power_weight * mix)
+
+    def _comfort_temperature(self, temp: float, action: str, mix_level: float) -> float:
+        if self.control_target != "perceived_temperature":
+            return temp
+        q = max(0.0, min(1.0, mix_level))
+        humidity_penalty = 0.0
+        if self.current_humidity is not None:
+            humidity_penalty = max(0.0, float(self.current_humidity) - 60.0) * 0.03
+        if action == MODE_COOLING:
+            return temp - 1.2 * math.sqrt(q) + humidity_penalty
+        if action == MODE_HEATING:
+            return temp - 0.6 * math.sqrt(q)
+        return temp - 0.8 * math.sqrt(q) + humidity_penalty
+
+    def _airflow_power_cost(self, mix_level: float) -> float:
+        power_w = self._curve_value(self.airflow_power_curve, mix_level, "power_w")
+        if power_w is not None:
+            return max(0.0, power_w) / 1000.0
+        return self.airflow_energy_weight * mix_level
+
+    @staticmethod
+    def _curve_value(curve: list[dict[str, float]] | None, level: float, key: str) -> float | None:
+        points: list[tuple[float, float]] = []
+        for item in curve or []:
+            try:
+                x = max(0.0, min(1.0, float(item.get("level", 0.0))))
+                y = float(item[key])
+            except (KeyError, TypeError, ValueError):
+                continue
+            points.append((x, y))
+        if not points:
+            return None
+        points.sort(key=lambda item: item[0])
+        x = max(0.0, min(1.0, level))
+        if x <= points[0][0]:
+            return points[0][1]
+        if x >= points[-1][0]:
+            return points[-1][1]
+        for (x0, y0), (x1, y1) in zip(points, points[1:], strict=False):
+            if x0 <= x <= x1:
+                if abs(x1 - x0) < 1e-9:
+                    return y1
+                return y0 + (y1 - y0) * ((x - x0) / (x1 - x0))
+        return points[-1][1]
 
     def _normalized_mix_levels(self) -> list[float]:
         levels = self.mix_levels if self.mix_levels is not None else self.airflow_levels
