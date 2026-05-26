@@ -22,5 +22,53 @@
         }
       }
     }
+  },
+  "notifications": {
+    "common": {
+      "not_configured": "未配置"
+    },
+    "outdoor_unavailable": {
+      "title": "RoomMind：室外温度不可用",
+      "message": "RoomMind 无法读取室外温度。在有效来源恢复前，所有房间的热模型学习已暂停。\n\n• 室外传感器：`{sensor_id}`\n• 天气实体：`{weather_entity}`\n\n请检查传感器是否在线，或在“设置 → 室外”中配置天气实体。"
+    },
+    "mold_risk": {
+      "title": "RoomMind：霉菌风险预警",
+      "message": "{area_name} 存在霉菌风险：湿度 {humidity}%，估计表面相对湿度 {surface_rh}%。"
+    },
+    "mold_prevention": {
+      "title": "RoomMind：防霉保护",
+      "message": "{area_name} 的防霉保护已启动：温度已提高 {delta}{unit}。"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "target_temperature": {
+        "name": "{room} 目标温度"
+      },
+      "mode": {
+        "name": "{room} 模式"
+      }
+    },
+    "binary_sensor": {
+      "cover_paused": {
+        "name": "{room} 窗帘控制已暂停"
+      }
+    },
+    "switch": {
+      "cover_auto": {
+        "name": "{room} 窗帘自动控制"
+      },
+      "climate_control": {
+        "name": "{room} 温控"
+      },
+      "vacation_mode": {
+        "name": "度假模式"
+      }
+    },
+    "climate": {
+      "override": {
+        "name": "{room} 手动覆盖"
+      }
+    }
   }
 }

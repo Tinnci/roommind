@@ -11,6 +11,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import RoomMindCoordinator
+from .utils.entity_translation import room_translation_placeholders
 
 
 def _create_room_entities(coordinator: RoomMindCoordinator, area_id: str) -> list[SensorEntity]:
@@ -60,7 +61,8 @@ class _RoomMindBaseSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._area_id = area_id
         self._attr_unique_id = f"{DOMAIN}_{area_id}_{suffix}"
-        self._attr_name = f"{area_id} {name_label}"
+        self._attr_translation_key = suffix
+        self._attr_translation_placeholders = room_translation_placeholders(coordinator, area_id)
         self.entity_id = f"sensor.{DOMAIN}_{area_id}_{suffix}"
 
     @property
@@ -80,7 +82,9 @@ class RoomMindTargetTemperatureSensor(_RoomMindBaseSensor):
     _data_key = "target_temp"
 
     def __init__(self, coordinator: RoomMindCoordinator, area_id: str) -> None:
-        super().__init__(coordinator, area_id, "target_temp", "Target Temperature")
+        super().__init__(coordinator, area_id, "target_temperature", "Target Temperature")
+        self._attr_unique_id = f"{DOMAIN}_{area_id}_target_temp"
+        self.entity_id = f"sensor.{DOMAIN}_{area_id}_target_temp"
 
 
 class RoomMindModeSensor(_RoomMindBaseSensor):

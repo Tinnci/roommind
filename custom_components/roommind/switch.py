@@ -13,6 +13,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, VACATION_SENTINEL_UNTIL
 from .coordinator import RoomMindCoordinator
+from .utils.entity_translation import room_translation_placeholders
 
 
 def _create_room_switches(
@@ -56,7 +57,8 @@ class RoomMindCoverAutoSwitch(CoordinatorEntity, SwitchEntity):
         super().__init__(coordinator)
         self._area_id = area_id
         self._attr_unique_id = f"{DOMAIN}_{area_id}_cover_auto"
-        self._attr_name = f"{area_id} Cover Auto"
+        self._attr_translation_key = "cover_auto"
+        self._attr_translation_placeholders = room_translation_placeholders(coordinator, area_id)
         self._attr_icon = "mdi:blinds-horizontal"
         self.entity_id = f"switch.{DOMAIN}_{area_id}_cover_auto"
 
@@ -87,7 +89,8 @@ class RoomMindClimateControlSwitch(CoordinatorEntity, SwitchEntity):
         super().__init__(coordinator)
         self._area_id = area_id
         self._attr_unique_id = f"{DOMAIN}_{area_id}_climate_control"
-        self._attr_name = f"{area_id} Climate Control"
+        self._attr_translation_key = "climate_control"
+        self._attr_translation_placeholders = room_translation_placeholders(coordinator, area_id)
         self._attr_icon = "mdi:thermostat"
         self.entity_id = f"switch.{DOMAIN}_{area_id}_climate_control"
 
@@ -116,7 +119,7 @@ class RoomMindVacationSwitch(CoordinatorEntity, SwitchEntity):
     def __init__(self, coordinator: RoomMindCoordinator) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{DOMAIN}_vacation"
-        self._attr_name = "Vacation Mode"
+        self._attr_translation_key = "vacation_mode"
         self._attr_icon = "mdi:beach"
         self.entity_id = f"switch.{DOMAIN}_vacation"
 

@@ -4,6 +4,7 @@ import { customElement, property, state } from "lit/decorators.js";
 @customElement("rs-info-icon")
 export class RsInfoIcon extends LitElement {
   @property({ type: String }) public text = "";
+  @property({ type: String }) public label = "";
   @property({ type: String }) public icon = "mdi:information-outline";
 
   @state() private _open = false;
@@ -113,7 +114,7 @@ export class RsInfoIcon extends LitElement {
         type="button"
         class=${this._open ? "open" : ""}
         @click=${this._toggle}
-        aria-label="Info"
+        aria-label=${this.label || this.text || this.icon}
         aria-expanded=${this._open ? "true" : "false"}
       >
         <ha-icon .icon=${this.icon}></ha-icon>

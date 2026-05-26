@@ -452,7 +452,10 @@ export class RsRoomDetail extends LitElement {
                   icon="mdi:cog"
                   .heading=${localize("room.section.climate_mode", this.hass.language)}
                 >
-                  <rs-info-icon slot="header-extras">
+                  <rs-info-icon
+                    slot="header-extras"
+                    .label=${localize("common.info", this.hass.language)}
+                  >
                     <b>${localize("mode.auto", this.hass.language)}</b> —
                     ${localize("mode.auto_desc", this.hass.language)}<br />
                     <b>${localize("mode.heat_only", this.hass.language)}</b> —
@@ -738,7 +741,7 @@ export class RsRoomDetail extends LitElement {
               ${unsafeHTML(
                 '<span class="yaml-key">schedule</span>:\n' +
                   '  <span class="yaml-key">living_room_heating</span>:\n' +
-                  '    <span class="yaml-key">name</span>: <span class="yaml-value">Living Room Heating</span>\n' +
+                  `    <span class="yaml-key">name</span>: <span class="yaml-value">${localize("schedule.example_name", lang)}</span>\n` +
                   '    <span class="yaml-key">monday</span>:\n' +
                   '      - <span class="yaml-key">from</span>: <span class="yaml-value">"06:00:00"</span>\n' +
                   '        <span class="yaml-key">to</span>: <span class="yaml-value">"08:00:00"</span>\n' +
@@ -971,7 +974,7 @@ export class RsRoomDetail extends LitElement {
               ${unsafeHTML(
                 '<span class="yaml-key">schedule</span>:\n' +
                   '  <span class="yaml-key">cover_evening</span>:\n' +
-                  '    <span class="yaml-key">name</span>: <span class="yaml-value">Cover Evening</span>\n' +
+                  `    <span class="yaml-key">name</span>: <span class="yaml-value">${localize("covers.example_name", lang)}</span>\n` +
                   '    <span class="yaml-key">monday</span>:\n' +
                   '      - <span class="yaml-key">from</span>: <span class="yaml-value">"20:00:00"</span>\n' +
                   '        <span class="yaml-key">to</span>: <span class="yaml-value">"06:00:00"</span>\n' +

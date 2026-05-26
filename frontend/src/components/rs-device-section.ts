@@ -639,7 +639,7 @@ export class RsDeviceSection extends LitElement {
 
       <div class="detail-field">
         <ha-select
-          .label=${localize("devices.type_label", lang) || "Type"}
+          .label=${localize("devices.type_label", lang)}
           .value=${this._getDeviceDisplayType(entityId)}
           .options=${[
             { value: "thermostat", label: localize("devices.type_thermostat", lang) },

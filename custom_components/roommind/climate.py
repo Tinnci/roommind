@@ -18,6 +18,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DEFAULT_COMFORT_TEMP, DOMAIN, OVERRIDE_CUSTOM
 from .coordinator import RoomMindCoordinator
+from .utils.entity_translation import room_translation_placeholders
 
 
 def _create_room_climates(
@@ -64,7 +65,8 @@ class RoomMindOverrideClimate(CoordinatorEntity, ClimateEntity):
         super().__init__(coordinator)
         self._area_id = area_id
         self._attr_unique_id = f"{DOMAIN}_{area_id}_override"
-        self._attr_name = f"{area_id} Override"
+        self._attr_translation_key = "override"
+        self._attr_translation_placeholders = room_translation_placeholders(coordinator, area_id)
         self.entity_id = f"climate.{DOMAIN}_{area_id}_override"
 
     def _is_override_active(self) -> bool:

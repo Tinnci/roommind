@@ -10,6 +10,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import RoomMindCoordinator
+from .utils.entity_translation import room_translation_placeholders
 
 
 def _create_room_binary_sensors(
@@ -48,7 +49,8 @@ class RoomMindCoverPausedSensor(CoordinatorEntity, BinarySensorEntity):
         super().__init__(coordinator)
         self._area_id = area_id
         self._attr_unique_id = f"{DOMAIN}_{area_id}_cover_paused"
-        self._attr_name = f"{area_id} Cover Paused"
+        self._attr_translation_key = "cover_paused"
+        self._attr_translation_placeholders = room_translation_placeholders(coordinator, area_id)
         self._attr_icon = "mdi:hand-back-right"
         self.entity_id = f"binary_sensor.{DOMAIN}_{area_id}_cover_paused"
 

@@ -19,6 +19,7 @@ from ..const import (
     MOLD_RISK_WARNING,
     MOLD_SURFACE_RH_WARNING,
 )
+from ..utils.i18n import get_translation
 from ..utils.mold_utils import calculate_mold_risk, mold_prevention_delta
 from ..utils.notification_utils import (
     NotificationThrottler,
@@ -115,17 +116,20 @@ class MoldManager:
                     cooldown,
                 ):
                     targets = settings.get("mold_notification_targets", [])
+                    surface_rh_value = surface_rh if surface_rh is not None else current_humidity
                     await async_send_mold_notification(
                         self.hass,
                         area_id,
                         area_name,
                         targets,
-                        message=(
-                            f"Mold risk in {area_name}: "
-                            f"{current_humidity:.0f}% humidity, "
-                            f"estimated surface RH {surface_rh:.0f}%"
+                        message=get_translation(
+                            self.hass,
+                            "notifications.mold_risk.message",
+                            area_name=area_name,
+                            humidity=f"{current_humidity:.0f}",
+                            surface_rh=f"{surface_rh_value:.0f}",
                         ),
-                        title="RoomMind: Mold Risk Warning",
+                        title=get_translation(self.hass, "notifications.mold_risk.title"),
                         tag_suffix="risk",
                     )
                     self._throttler.record_sent(f"detect_{area_id}")
@@ -152,12 +156,17 @@ class MoldManager:
                             area_id,
                             area_name,
                             prev_targets,
-                            message=(
-                                f"Mold prevention active in {area_name}: "
-                                f"temperature raised by "
-                                f"{celsius_delta_to_ha_fn(result.prevention_delta):.0f}{ha_temp_unit_str_fn()}"
+                            message=get_translation(
+                                self.hass,
+                                "notifications.mold_prevention.message",
+                                area_name=area_name,
+                                delta=f"{celsius_delta_to_ha_fn(result.prevention_delta):.0f}",
+                                unit=ha_temp_unit_str_fn(),
                             ),
-                            title="RoomMind: Mold Prevention",
+                            title=get_translation(
+                                self.hass,
+                                "notifications.mold_prevention.title",
+                            ),
                             tag_suffix="prevention",
                         )
                         self._throttler.record_sent(

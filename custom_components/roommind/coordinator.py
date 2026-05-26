@@ -88,6 +88,7 @@ from .utils.device_utils import (
     room_contributes_to_group,
 )
 from .utils.history_store import HistoryStore
+from .utils.i18n import get_translation
 from .utils.night_utils import is_quiet_hours_now
 from .utils.schedule_utils import resolve_schedule_index
 from .utils.sensor_utils import read_sensor_value
@@ -520,15 +521,14 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         if not settings.get("outdoor_unavailable_notify", True):
             return
 
-        sensor_id = settings.get("outdoor_temp_sensor") or "(not configured)"
-        weather_eid = settings.get("weather_entity") or "(not configured)"
-        message = (
-            "RoomMind cannot read an outdoor temperature. Thermal model "
-            "learning is paused for all rooms until a valid source returns.\n\n"
-            f"• Outdoor sensor: `{sensor_id}`\n"
-            f"• Weather entity: `{weather_eid}`\n\n"
-            "Check that the sensor is online or configure a weather entity in "
-            "Settings → Outdoor."
+        not_configured = get_translation(self.hass, "notifications.common.not_configured")
+        sensor_id = settings.get("outdoor_temp_sensor") or not_configured
+        weather_eid = settings.get("weather_entity") or not_configured
+        message = get_translation(
+            self.hass,
+            "notifications.outdoor_unavailable.message",
+            sensor_id=sensor_id,
+            weather_entity=weather_eid,
         )
         _LOGGER.warning(
             "Outdoor temperature unavailable for %d cycles — EKF learning paused",
@@ -537,7 +537,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         async_create_notification(
             self.hass,
             message,
-            title="RoomMind: outdoor temperature unavailable",
+            title=get_translation(self.hass, "notifications.outdoor_unavailable.title"),
             notification_id=OUTDOOR_UNAVAILABLE_NOTIFICATION_ID,
         )
         self._outdoor_warning_sent = True

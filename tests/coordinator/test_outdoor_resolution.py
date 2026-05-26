@@ -245,6 +245,34 @@ async def test_notification_fires_after_threshold(hass, mock_config_entry, monke
 
 
 @pytest.mark.asyncio
+async def test_notification_uses_configured_language(hass, mock_config_entry, monkeypatch):
+    """Outdoor unavailable persistent notification is translated at send time."""
+    hass.config.language = "de"
+    create_mock = MagicMock()
+    monkeypatch.setattr(
+        "custom_components.roommind.coordinator.async_create_notification",
+        create_mock,
+    )
+
+    store = _make_store_mock(rooms={"living_room_abc12345": SAMPLE_ROOM})
+    store.get_settings.return_value = _settings_with(outdoor_temp_sensor="", weather_entity="")
+    hass.data = {"roommind": {"store": store}}
+    hass.states.get = MagicMock(side_effect=make_mock_states_get(outdoor_temp=None))
+    hass.services.async_call = AsyncMock()
+
+    coordinator = _create_coordinator(hass, mock_config_entry)
+    for _ in range(OUTDOOR_UNAVAILABLE_NOTIFY_CYCLES):
+        await coordinator._async_update_data()
+
+    message = create_mock.call_args.args[1]
+    title = create_mock.call_args.kwargs["title"]
+    assert title == "RoomMind: Außentemperatur nicht verfügbar"
+    assert "Außentemperatur" in message
+    assert "nicht konfiguriert" in message
+    assert "outdoor temperature unavailable" not in title.lower()
+
+
+@pytest.mark.asyncio
 async def test_notification_disabled_by_setting(hass, mock_config_entry, monkeypatch):
     """outdoor_unavailable_notify=False suppresses the notification entirely."""
     create_mock = MagicMock()

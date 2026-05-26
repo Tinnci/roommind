@@ -54,6 +54,7 @@ def test_binary_sensor_unique_id_and_entity_id(mock_coordinator):
     sensor = RoomMindCoverPausedSensor(mock_coordinator, "living_room")
     assert sensor.unique_id == "roommind_living_room_cover_paused"
     assert sensor.entity_id == "binary_sensor.roommind_living_room_cover_paused"
+    assert sensor._attr_translation_key == "cover_paused"
 
 
 def test_create_room_binary_sensors(mock_coordinator):

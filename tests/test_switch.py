@@ -75,6 +75,7 @@ def test_switch_unique_id_and_entity_id(mock_coordinator):
     switch = RoomMindCoverAutoSwitch(coordinator, "living_room")
     assert switch.unique_id == "roommind_living_room_cover_auto"
     assert switch.entity_id == "switch.roommind_living_room_cover_auto"
+    assert switch._attr_translation_key == "cover_auto"
 
 
 def test_create_room_switches(mock_coordinator):
@@ -128,6 +129,7 @@ async def test_async_setup_entry_creates_entities_for_rooms_with_covers():
     climate_switches = [e for e in entities if isinstance(e, RoomMindClimateControlSwitch)]
     cover_switches = [e for e in entities if isinstance(e, RoomMindCoverAutoSwitch)]
     assert len(climate_switches) == 2
+    assert {switch._attr_translation_key for switch in climate_switches} == {"climate_control"}
     assert len(cover_switches) == 1
     assert "living_room" in coordinator._switch_entity_areas
     assert "bedroom" not in coordinator._switch_entity_areas
@@ -179,7 +181,7 @@ def test_vacation_switch_unique_id_and_entity_id(mock_vacation_coordinator):
     assert switch.unique_id == "roommind_vacation"
     assert switch.entity_id == "switch.roommind_vacation"
     assert switch.icon == "mdi:beach"
-    assert switch.name == "Vacation Mode"
+    assert switch._attr_translation_key == "vacation_mode"
 
 
 def test_vacation_switch_is_on_active(mock_vacation_coordinator):

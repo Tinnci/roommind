@@ -238,6 +238,45 @@ async def test_detection_notification_sent_on_risk(mm):
     assert mock_notify.call_args.kwargs["tag_suffix"] == "risk"
 
 
+@pytest.mark.asyncio
+async def test_detection_notification_uses_configured_language(mm):
+    """Mold risk notifications should not be hardcoded in English."""
+    mm.hass.config.language = "zh-Hans"
+    settings = {
+        "mold_detection_enabled": True,
+        "mold_prevention_enabled": False,
+        "mold_notifications_enabled": True,
+        "mold_humidity_threshold": 70.0,
+        "mold_sustained_minutes": 0,
+    }
+
+    with (
+        patch(
+            "custom_components.roommind.managers.mold_manager.calculate_mold_risk",
+            return_value=("warning", 81.0),
+        ),
+        patch(
+            "custom_components.roommind.managers.mold_manager.async_send_mold_notification",
+            new_callable=AsyncMock,
+        ) as mock_notify,
+    ):
+        await mm.evaluate(
+            area_id="bedroom",
+            area_name="卧室",
+            current_temp=18.0,
+            current_humidity=72.0,
+            outdoor_temp=-5.0,
+            settings=settings,
+        )
+
+    assert mock_notify.call_args.kwargs["title"] == "RoomMind：霉菌风险预警"
+    message = mock_notify.call_args.kwargs["message"]
+    assert "卧室" in message
+    assert "72%" in message
+    assert "81%" in message
+    assert "Mold risk" not in message
+
+
 # --- hysteresis deactivation ---
 
 

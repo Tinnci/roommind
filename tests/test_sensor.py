@@ -141,6 +141,8 @@ def test_sensor_unique_id():
     mode_sensor = RoomMindModeSensor(coordinator, "room_a")
     assert temp_sensor.unique_id == f"{DOMAIN}_room_a_target_temp"
     assert mode_sensor.unique_id == f"{DOMAIN}_room_a_mode"
+    assert temp_sensor._attr_translation_key == "target_temperature"
+    assert mode_sensor._attr_translation_key == "mode"
 
 
 def test_sensor_entity_id():

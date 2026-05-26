@@ -41,6 +41,7 @@ def test_unique_id_and_entity_id(mock_coordinator):
     entity = RoomMindOverrideClimate(coordinator, "living_room")
     assert entity.unique_id == "roommind_living_room_override"
     assert entity.entity_id == "climate.roommind_living_room_override"
+    assert entity._attr_translation_key == "override"
 
 
 def test_hvac_mode_off_when_no_override(mock_coordinator):

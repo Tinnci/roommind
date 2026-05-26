@@ -18,6 +18,28 @@ import "./shared/rs-master-detail";
 
 const KEEP = "";
 
+const SKIP_REASON_TRANSLATION_KEYS: Record<string, TranslationKey> = {
+  control_disabled: "airflow.skip_reason_control_disabled",
+  unsupported_domain: "airflow.skip_reason_unsupported_domain",
+  service_error: "airflow.skip_reason_service_error",
+  direction_unsupported: "airflow.skip_reason_direction_unsupported",
+  oscillate_unsupported: "airflow.skip_reason_oscillate_unsupported",
+  preset_unsupported: "airflow.skip_reason_preset_unsupported",
+  fan_mode_unsupported: "airflow.skip_reason_fan_mode_unsupported",
+  swing_unsupported: "airflow.skip_reason_swing_unsupported",
+  swing_horizontal_unsupported: "airflow.skip_reason_swing_horizontal_unsupported",
+  fan_only_not_supported: "airflow.skip_reason_fan_only_not_supported",
+  fan_only_not_roommind_owned: "airflow.skip_reason_fan_only_not_roommind_owned",
+  climate_off: "airflow.skip_reason_climate_off",
+  idle_climate_airflow_requires_fan_only:
+    "airflow.skip_reason_idle_climate_airflow_requires_fan_only",
+  entity_unavailable: "airflow.skip_reason_entity_unavailable",
+  no_target_value: "airflow.skip_reason_no_target_value",
+  invalid_target_state: "airflow.skip_reason_invalid_target_state",
+  invalid_option: "airflow.skip_reason_invalid_option",
+  invalid_number: "airflow.skip_reason_invalid_number",
+};
+
 @customElement("rs-airflow-section")
 export class RsAirflowSection extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
@@ -313,7 +335,7 @@ export class RsAirflowSection extends LitElement {
               >
             `}
         ${showWarning
-          ? html`<span class="pill warning" title=${command?.skip_reason ?? ""}
+          ? html`<span class="pill warning" title=${this._skipReasonLabel(command?.skip_reason)}
               >${commandLabel}</span
             >`
           : nothing}
@@ -329,7 +351,7 @@ export class RsAirflowSection extends LitElement {
           ? html`<span
               class="pill warning"
               title=${command.skipped_services
-                .map((item) => `${item.service}: ${item.reason}`)
+                .map((item) => `${item.service}: ${this._skipReasonLabel(item.reason)}`)
                 .join("\n")}
               >${command.skipped_services.length} ${localize("airflow.skipped", lang)}</span
             >`
@@ -931,6 +953,12 @@ export class RsAirflowSection extends LitElement {
               ? "airflow.confidence_observed"
               : "airflow.confidence_unknown";
     return localize(key, this.language);
+  }
+
+  private _skipReasonLabel(value: string | null | undefined): string {
+    if (!value) return "";
+    const key = SKIP_REASON_TRANSLATION_KEYS[value];
+    return key ? localize(key, this.language) : value;
   }
 
   private _curveToText(
