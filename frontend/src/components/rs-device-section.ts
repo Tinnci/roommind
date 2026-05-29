@@ -64,7 +64,7 @@ export class RsDeviceSection extends LitElement {
         color: var(--secondary-text-color);
         margin: 12px 0 8px 0;
         text-transform: uppercase;
-        letter-spacing: 0.4px;
+        letter-spacing: 0;
       }
 
       .section-subtitle:first-child {
@@ -96,7 +96,7 @@ export class RsDeviceSection extends LitElement {
         padding: 8px 14px;
         font-size: 14px;
         color: var(--primary-text-color);
-        border-radius: 10px;
+        border-radius: 8px;
         margin-bottom: 2px;
         transition: background 0.15s;
       }
@@ -160,8 +160,8 @@ export class RsDeviceSection extends LitElement {
         color: var(--warning-color, #ff9800);
         background: rgba(255, 152, 0, 0.1);
         padding: 2px 8px;
-        border-radius: 10px;
-        letter-spacing: 0.3px;
+        border-radius: 8px;
+        letter-spacing: 0;
         text-transform: uppercase;
         flex-shrink: 0;
       }

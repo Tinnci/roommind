@@ -76,10 +76,17 @@ export class RoomMindPanel extends LitElement {
       /* Round the corners of all MDC-based inputs (ha-textfield, ha-select,
          ha-entity-picker, ha-combo-box) to match the rest of the design.
          The bottom corners are rounded via inputStyles in each component. */
-      --mdc-shape-small: 8px;
-      --mdc-shape-medium: 8px;
-      --md-filled-text-field-container-shape: 8px;
-      --md-outlined-text-field-container-shape: 8px;
+      --mdc-shape-small: var(--roommind-radius-control);
+      --mdc-shape-medium: var(--roommind-radius-control);
+      --md-filled-text-field-container-shape: var(--roommind-radius-control);
+      --md-outlined-text-field-container-shape: var(--roommind-radius-control);
+      --roommind-radius-card: 8px;
+      --roommind-radius-control: 8px;
+      --roommind-radius-small: 4px;
+      --roommind-border-subtle: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
+      --roommind-border-faint: 1px solid var(--divider-color, rgba(0, 0, 0, 0.06));
+      --roommind-shadow-soft: 0 2px 10px rgba(0, 0, 0, 0.08);
+      --roommind-header-min-height: 44px;
     }
 
     .toolbar {
@@ -175,7 +182,7 @@ export class RoomMindPanel extends LitElement {
     }
 
     .content {
-      padding: 24px;
+      padding: 20px;
       max-width: 1200px;
       margin: 0 auto;
       box-sizing: border-box;
@@ -210,7 +217,7 @@ export class RoomMindPanel extends LitElement {
     .area-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr));
-      gap: 16px;
+      gap: 14px;
     }
 
     .loading {
@@ -234,9 +241,12 @@ export class RoomMindPanel extends LitElement {
       display: flex;
       align-items: center;
       flex-wrap: wrap;
-      gap: 12px 24px;
-      margin-bottom: 20px;
-      padding: 12px 16px;
+      gap: 10px 18px;
+      margin-bottom: 18px;
+      padding: 12px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
+      box-shadow: none;
     }
 
     .stats-actions {
@@ -253,8 +263,11 @@ export class RoomMindPanel extends LitElement {
     }
 
     .hidden-rooms-panel {
-      margin-bottom: 20px;
+      margin-bottom: 18px;
       padding: 12px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
+      box-shadow: none;
     }
 
     .hidden-rooms-header {
@@ -280,6 +293,7 @@ export class RoomMindPanel extends LitElement {
       display: flex;
       flex-direction: column;
       gap: 2px;
+      min-width: 54px;
     }
 
     .stat-value {
@@ -298,7 +312,7 @@ export class RoomMindPanel extends LitElement {
       font-size: 12px;
       color: var(--secondary-text-color);
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 0;
     }
 
     .floor-heading {
@@ -306,7 +320,7 @@ export class RoomMindPanel extends LitElement {
       font-weight: 500;
       color: var(--secondary-text-color);
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 0;
       margin: 20px 0 8px 0;
     }
 

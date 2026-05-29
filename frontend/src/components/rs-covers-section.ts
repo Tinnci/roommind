@@ -83,7 +83,7 @@ export class RsCoverSection extends LitElement {
         border-radius: 8px;
         background: rgba(255, 255, 255, 0.05);
         color: var(--secondary-text-color);
-        letter-spacing: 0.3px;
+        letter-spacing: 0;
         text-transform: uppercase;
         flex-shrink: 0;
       }
@@ -188,7 +188,7 @@ export class RsCoverSection extends LitElement {
         font-weight: 500;
         color: var(--secondary-text-color);
         text-transform: uppercase;
-        letter-spacing: 0.3px;
+        letter-spacing: 0;
         padding-bottom: 4px;
         border-bottom: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
       }
@@ -224,7 +224,7 @@ export class RsCoverSection extends LitElement {
         font-size: 10px;
         font-weight: 500;
         padding: 1px 6px;
-        border-radius: 10px;
+        border-radius: 8px;
         background: var(--divider-color, rgba(0, 0, 0, 0.08));
         color: var(--secondary-text-color);
         white-space: nowrap;
@@ -237,7 +237,7 @@ export class RsCoverSection extends LitElement {
         gap: 14px;
         padding: 14px 16px;
         border: 1px solid var(--divider-color);
-        border-radius: 12px;
+        border-radius: 8px;
         background: var(--card-background-color);
         transition:
           border-color 0.2s ease,
@@ -274,7 +274,7 @@ export class RsCoverSection extends LitElement {
       .group-card {
         margin-top: 16px;
         border: 1px solid var(--divider-color);
-        border-radius: 12px;
+        border-radius: 8px;
         background: var(--card-background-color);
         padding: 14px 16px;
         display: flex;
@@ -289,7 +289,7 @@ export class RsCoverSection extends LitElement {
         font-size: 12px;
         font-weight: 600;
         text-transform: uppercase;
-        letter-spacing: 0.4px;
+        letter-spacing: 0;
         color: var(--secondary-text-color);
         cursor: pointer;
         user-select: none;

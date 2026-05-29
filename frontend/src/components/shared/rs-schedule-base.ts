@@ -166,7 +166,7 @@ export abstract class RsScheduleBase extends LitElement {
       color: var(--secondary-text-color);
       margin-bottom: 6px;
       text-transform: uppercase;
-      letter-spacing: 0.3px;
+      letter-spacing: 0;
     }
 
     .selector-section {

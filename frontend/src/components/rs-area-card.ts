@@ -31,15 +31,20 @@ export class RsAreaCard extends LitElement {
         cursor: pointer;
         transition:
           box-shadow 0.2s ease,
-          transform 0.15s ease;
+          transform 0.15s ease,
+          border-color 0.15s ease;
         overflow: hidden;
         position: relative;
         height: 100%;
         box-sizing: border-box;
+        border-radius: 8px;
+        border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
+        box-shadow: none;
       }
 
       ha-card:hover {
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+        border-color: rgba(var(--rgb-primary-color, 3, 169, 244), 0.34);
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
         transform: translateY(-1px);
       }
 
@@ -88,7 +93,7 @@ export class RsAreaCard extends LitElement {
       }
 
       .card-inner {
-        padding: 20px 20px 16px;
+        padding: 18px 18px 14px;
       }
 
       /* Header row: name + badge */
@@ -96,14 +101,19 @@ export class RsAreaCard extends LitElement {
         display: flex;
         align-items: center;
         justify-content: space-between;
+        gap: 10px;
+        min-width: 0;
       }
 
       .area-name {
         font-size: 15px;
-        font-weight: 500;
+        font-weight: 600;
         color: var(--primary-text-color);
         margin: 0;
-        letter-spacing: 0.01em;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       /* Card-specific mode-pill overrides (smaller than default) */
@@ -111,7 +121,7 @@ export class RsAreaCard extends LitElement {
         gap: 5px;
         font-size: 12px;
         padding: 3px 10px;
-        border-radius: 12px;
+        border-radius: 8px;
       }
 
       .mode-dot {
@@ -144,6 +154,7 @@ export class RsAreaCard extends LitElement {
         font-size: 13px;
         color: var(--secondary-text-color);
         margin-left: auto;
+        white-space: nowrap;
       }
 
       .target-value {
@@ -175,8 +186,9 @@ export class RsAreaCard extends LitElement {
       /* Footer row: humidity + MPC status */
       .card-footer {
         display: flex;
-        align-items: center;
+        align-items: flex-end;
         justify-content: space-between;
+        gap: 10px;
         margin-top: 8px;
         min-height: 20px;
       }
@@ -193,7 +205,7 @@ export class RsAreaCard extends LitElement {
         font-size: 11px;
         font-weight: 500;
         padding: 2px 8px 2px 6px;
-        border-radius: 10px;
+        border-radius: 8px;
         --mdc-icon-size: 14px;
       }
 
@@ -214,7 +226,7 @@ export class RsAreaCard extends LitElement {
         font-size: 11px;
         font-weight: 500;
         padding: 2px 8px 2px 6px;
-        border-radius: 10px;
+        border-radius: 8px;
         --mdc-icon-size: 14px;
       }
 
@@ -240,7 +252,7 @@ export class RsAreaCard extends LitElement {
         font-size: 11px;
         font-weight: 500;
         padding: 2px 8px 2px 6px;
-        border-radius: 10px;
+        border-radius: 8px;
         --mdc-icon-size: 14px;
         color: var(--success-color, #4caf50);
         background: rgba(76, 175, 80, 0.12);
@@ -250,6 +262,7 @@ export class RsAreaCard extends LitElement {
         display: flex;
         gap: 6px;
         flex-wrap: wrap;
+        justify-content: flex-end;
       }
 
       .no-temp {

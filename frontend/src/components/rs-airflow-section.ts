@@ -82,7 +82,7 @@ export class RsAirflowSection extends LitElement {
 
       .summary {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
         gap: 8px;
         margin-bottom: 10px;
       }
@@ -92,6 +92,7 @@ export class RsAirflowSection extends LitElement {
         padding: 8px 10px;
         border-radius: 8px;
         background: rgba(255, 255, 255, 0.04);
+        border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.06));
       }
 
       .summary-label {
@@ -99,7 +100,7 @@ export class RsAirflowSection extends LitElement {
         font-weight: 600;
         color: var(--secondary-text-color);
         text-transform: uppercase;
-        letter-spacing: 0.4px;
+        letter-spacing: 0;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -117,9 +118,11 @@ export class RsAirflowSection extends LitElement {
         display: flex;
         align-items: center;
         gap: 10px;
-        padding: 6px 0;
+        padding: 8px 0;
         font-size: 14px;
         color: var(--primary-text-color);
+        min-width: 0;
+        border-top: 1px solid var(--divider-color, rgba(0, 0, 0, 0.06));
       }
 
       .view-name {
@@ -149,7 +152,7 @@ export class RsAirflowSection extends LitElement {
         border-radius: 8px;
         background: rgba(255, 255, 255, 0.05);
         color: var(--secondary-text-color);
-        letter-spacing: 0.3px;
+        letter-spacing: 0;
         text-transform: uppercase;
         flex-shrink: 0;
       }
@@ -242,8 +245,13 @@ export class RsAirflowSection extends LitElement {
       }
 
       @media (max-width: 520px) {
-        .summary {
-          grid-template-columns: 1fr;
+        .view-row {
+          align-items: flex-start;
+          flex-wrap: wrap;
+        }
+
+        .view-name {
+          flex-basis: 100%;
         }
       }
     `,

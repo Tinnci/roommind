@@ -218,7 +218,7 @@ export class RsAnalyticsChart extends LitElement {
         gap: 6px;
         padding: 4px 10px;
         border: none;
-        border-radius: 12px;
+        border-radius: 8px;
         background: transparent;
         color: var(--primary-text-color);
         font-size: 12px;

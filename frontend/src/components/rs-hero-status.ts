@@ -39,9 +39,12 @@ export class RsHeroStatus extends LitElement {
       }
 
       ha-card {
-        padding: 28px 24px;
+        padding: 24px;
         position: relative;
         overflow: hidden;
+        border-radius: 8px;
+        border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
+        box-shadow: none;
       }
 
       .hero-accent {
@@ -72,20 +75,23 @@ export class RsHeroStatus extends LitElement {
         display: flex;
         align-items: center;
         justify-content: space-between;
+        gap: 16px;
         margin-bottom: 16px;
       }
 
       .area-name {
         font-size: 22px;
-        font-weight: 400;
+        font-weight: 600;
         color: var(--primary-text-color);
         margin: 0;
+        line-height: 1.2;
       }
 
       .hero-temps {
         display: flex;
         align-items: baseline;
         gap: 8px;
+        min-width: 0;
       }
 
       .hero-current {
@@ -104,13 +110,14 @@ export class RsHeroStatus extends LitElement {
       .hero-target {
         margin-left: auto;
         text-align: right;
+        min-width: 128px;
       }
 
       .hero-target-label {
         font-size: 12px;
         color: var(--secondary-text-color);
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        letter-spacing: 0;
       }
 
       .hero-target-value {
@@ -144,12 +151,18 @@ export class RsHeroStatus extends LitElement {
       }
 
       .hero-metric {
-        display: flex;
+        display: inline-flex;
         align-items: center;
-        gap: 4px;
-        font-size: 14px;
+        gap: 6px;
+        min-height: 28px;
+        padding: 4px 9px;
+        border-radius: 8px;
+        font-size: 13px;
+        line-height: 1.25;
         color: var(--secondary-text-color);
-        margin-top: 6px;
+        background: rgba(var(--rgb-primary-text-color, 0, 0, 0), 0.04);
+        border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.06));
+        box-sizing: border-box;
       }
 
       .hero-metric ha-icon {
@@ -159,14 +172,31 @@ export class RsHeroStatus extends LitElement {
 
       .hero-metric.warning {
         color: var(--warning-color, #ff9800);
+        background: rgba(255, 152, 0, 0.1);
+        border-color: rgba(255, 152, 0, 0.22);
       }
 
       .hero-metric.critical {
         color: var(--error-color, #db4437);
+        background: rgba(219, 68, 55, 0.1);
+        border-color: rgba(219, 68, 55, 0.22);
       }
 
       .hero-metric.info {
         color: var(--info-color, #2196f3);
+        background: rgba(33, 150, 243, 0.1);
+        border-color: rgba(33, 150, 243, 0.2);
+      }
+
+      .hero-metrics {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .hero-metrics:empty {
+        display: none;
       }
 
       .hero-no-data {
@@ -256,8 +286,34 @@ export class RsHeroStatus extends LitElement {
         display: flex;
         flex-direction: column;
         align-items: flex-end;
-        gap: 2px;
+        gap: 4px;
         flex-shrink: 0;
+      }
+
+      @media (max-width: 620px) {
+        ha-card {
+          padding: 20px 16px;
+        }
+
+        .hero-header {
+          align-items: flex-start;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .hero-status-pills {
+          align-items: flex-start;
+        }
+
+        .hero-temps {
+          flex-wrap: wrap;
+        }
+
+        .hero-target {
+          margin-left: 0;
+          text-align: left;
+          width: 100%;
+        }
       }
       .control-mode-badge {
         display: inline-flex;
@@ -577,97 +633,99 @@ export class RsHeroStatus extends LitElement {
                   : html`<span class="hero-current" style="opacity: 0.3">--</span>`}
                 ${!this.isOutdoor ? this._renderTargetSection(live) : nothing}
               </div>
-              ${live.current_humidity !== null
-                ? html`<div class="hero-metric">
-                    <ha-icon icon="mdi:water-percent"></ha-icon>
-                    ${localize("hero.humidity", this.hass?.language ?? "en", {
-                      value: live.current_humidity.toFixed(0),
-                    })}
-                  </div>`
-                : nothing}
-              ${live.perceived_temp != null && !this.isOutdoor
-                ? html`<div class="hero-metric info">
-                    <ha-icon icon="mdi:human-handsup"></ha-icon>
-                    ${localize("hero.perceived_temp", this.hass?.language ?? "en", {
-                      value: formatTemp(live.perceived_temp, this.hass),
-                      unit: tempUnit(this.hass),
-                    })}
-                  </div>`
-                : nothing}
-              ${live.night_mode?.active && !this.isOutdoor
-                ? html`<div class="hero-metric warning">
-                    <ha-icon icon="mdi:weather-night"></ha-icon>
-                    ${localize("hero.night_mode_active", this.hass?.language ?? "en")}
-                  </div>`
-                : nothing}
-              ${live.rapid_recovery_active && !this.isOutdoor
-                ? html`<div class="hero-metric warning">
-                    <ha-icon icon="mdi:rocket-launch-outline"></ha-icon>
-                    ${localize("hero.rapid_recovery_active", this.hass?.language ?? "en")}
-                  </div>`
-                : nothing}
-              ${live.device_setpoint != null && !this.isOutdoor
-                ? html`<div class="hero-metric">
-                    <ha-icon
-                      icon=${live.mode === "cooling" ? "mdi:snowflake" : "mdi:radiator"}
-                    ></ha-icon>
-                    ${localize("hero.device_setpoint", this.hass?.language ?? "en", {
-                      value: formatTemp(live.device_setpoint, this.hass),
-                      unit: tempUnit(this.hass),
-                    })}
-                  </div>`
-                : nothing}
-              ${live.active_heat_sources && live.active_heat_sources !== "none" && !this.isOutdoor
-                ? html`<div class="hero-metric">
-                    <ha-icon icon="mdi:swap-horizontal"></ha-icon>
-                    ${live.active_heat_sources === "primary"
-                      ? localize("hero.heat_source_primary", this.hass?.language ?? "en")
-                      : live.active_heat_sources === "secondary"
-                        ? localize("hero.heat_source_secondary", this.hass?.language ?? "en")
-                        : localize("hero.heat_source_both", this.hass?.language ?? "en")}
-                  </div>`
-                : nothing}
-              ${live.mold_surface_rh != null && !this.isOutdoor
-                ? html`<div
-                    class="hero-metric ${live.mold_risk_level === "critical"
-                      ? "critical"
-                      : live.mold_risk_level === "warning"
-                        ? "warning"
-                        : ""}"
-                  >
-                    <ha-icon icon="mdi:water-alert"></ha-icon>
-                    ${localize("room.mold_surface_rh", this.hass?.language ?? "en", {
-                      value: String(live.mold_surface_rh.toFixed(0)),
-                    })}
-                  </div>`
-                : nothing}
-              ${live.mold_prevention_active && !this.isOutdoor
-                ? html`<div class="hero-metric info">
-                    <ha-icon icon="mdi:shield-check"></ha-icon>
-                    ${localize("card.mold_prevention", this.hass?.language ?? "en", {
-                      delta: toDisplayDelta(live.mold_prevention_delta, this.hass).toFixed(0),
-                      unit: tempUnit(this.hass),
-                    })}
-                  </div>`
-                : nothing}
-              ${live.learning_paused_reason === "outdoor_unavailable" && !this.isOutdoor
-                ? html`<div class="hero-metric warning learning-paused">
-                    <ha-icon icon="mdi:school-outline"></ha-icon>
-                    ${localize("hero.mpc_learning_paused", this.hass?.language ?? "en")}
-                    <rs-info-icon
-                      icon="mdi:information-outline"
-                      .text=${localize(
-                        "hero.mpc_learning_paused.outdoor_unavailable",
-                        this.hass?.language ?? "en",
-                      )}
-                    ></rs-info-icon>
-                  </div>`
-                : nothing}
-              ${!this.climateControlActive && !this.isOutdoor
-                ? html`<div class="uncontrolled-hint">
-                    ${localize("card.not_controlled", this.hass?.language ?? "en")}
-                  </div>`
-                : nothing}
+              <div class="hero-metrics">
+                ${live.current_humidity !== null
+                  ? html`<div class="hero-metric">
+                      <ha-icon icon="mdi:water-percent"></ha-icon>
+                      ${localize("hero.humidity", this.hass?.language ?? "en", {
+                        value: live.current_humidity.toFixed(0),
+                      })}
+                    </div>`
+                  : nothing}
+                ${live.perceived_temp != null && !this.isOutdoor
+                  ? html`<div class="hero-metric info">
+                      <ha-icon icon="mdi:human-handsup"></ha-icon>
+                      ${localize("hero.perceived_temp", this.hass?.language ?? "en", {
+                        value: formatTemp(live.perceived_temp, this.hass),
+                        unit: tempUnit(this.hass),
+                      })}
+                    </div>`
+                  : nothing}
+                ${live.night_mode?.active && !this.isOutdoor
+                  ? html`<div class="hero-metric warning">
+                      <ha-icon icon="mdi:weather-night"></ha-icon>
+                      ${localize("hero.night_mode_active", this.hass?.language ?? "en")}
+                    </div>`
+                  : nothing}
+                ${live.rapid_recovery_active && !this.isOutdoor
+                  ? html`<div class="hero-metric warning">
+                      <ha-icon icon="mdi:rocket-launch-outline"></ha-icon>
+                      ${localize("hero.rapid_recovery_active", this.hass?.language ?? "en")}
+                    </div>`
+                  : nothing}
+                ${live.device_setpoint != null && !this.isOutdoor
+                  ? html`<div class="hero-metric">
+                      <ha-icon
+                        icon=${live.mode === "cooling" ? "mdi:snowflake" : "mdi:radiator"}
+                      ></ha-icon>
+                      ${localize("hero.device_setpoint", this.hass?.language ?? "en", {
+                        value: formatTemp(live.device_setpoint, this.hass),
+                        unit: tempUnit(this.hass),
+                      })}
+                    </div>`
+                  : nothing}
+                ${live.active_heat_sources && live.active_heat_sources !== "none" && !this.isOutdoor
+                  ? html`<div class="hero-metric">
+                      <ha-icon icon="mdi:swap-horizontal"></ha-icon>
+                      ${live.active_heat_sources === "primary"
+                        ? localize("hero.heat_source_primary", this.hass?.language ?? "en")
+                        : live.active_heat_sources === "secondary"
+                          ? localize("hero.heat_source_secondary", this.hass?.language ?? "en")
+                          : localize("hero.heat_source_both", this.hass?.language ?? "en")}
+                    </div>`
+                  : nothing}
+                ${live.mold_surface_rh != null && !this.isOutdoor
+                  ? html`<div
+                      class="hero-metric ${live.mold_risk_level === "critical"
+                        ? "critical"
+                        : live.mold_risk_level === "warning"
+                          ? "warning"
+                          : ""}"
+                    >
+                      <ha-icon icon="mdi:water-alert"></ha-icon>
+                      ${localize("room.mold_surface_rh", this.hass?.language ?? "en", {
+                        value: String(live.mold_surface_rh.toFixed(0)),
+                      })}
+                    </div>`
+                  : nothing}
+                ${live.mold_prevention_active && !this.isOutdoor
+                  ? html`<div class="hero-metric info">
+                      <ha-icon icon="mdi:shield-check"></ha-icon>
+                      ${localize("card.mold_prevention", this.hass?.language ?? "en", {
+                        delta: toDisplayDelta(live.mold_prevention_delta, this.hass).toFixed(0),
+                        unit: tempUnit(this.hass),
+                      })}
+                    </div>`
+                  : nothing}
+                ${live.learning_paused_reason === "outdoor_unavailable" && !this.isOutdoor
+                  ? html`<div class="hero-metric warning learning-paused">
+                      <ha-icon icon="mdi:school-outline"></ha-icon>
+                      ${localize("hero.mpc_learning_paused", this.hass?.language ?? "en")}
+                      <rs-info-icon
+                        icon="mdi:information-outline"
+                        .text=${localize(
+                          "hero.mpc_learning_paused.outdoor_unavailable",
+                          this.hass?.language ?? "en",
+                        )}
+                      ></rs-info-icon>
+                    </div>`
+                  : nothing}
+                ${!this.climateControlActive && !this.isOutdoor
+                  ? html`<div class="hero-metric uncontrolled-hint">
+                      ${localize("card.not_controlled", this.hass?.language ?? "en")}
+                    </div>`
+                  : nothing}
+              </div>
             `
           : this.config
             ? html`<div class="hero-no-data">

@@ -32,7 +32,7 @@ export const masterDetailStyles = css`
     align-items: center;
     gap: 10px;
     padding: 8px 10px;
-    border-radius: 10px;
+    border-radius: var(--roommind-radius-control, 8px);
     cursor: pointer;
     transition:
       background 0.15s,
@@ -92,8 +92,8 @@ export const masterDetailStyles = css`
     font-size: 10px;
     font-weight: 500;
     padding: 1px 8px;
-    border-radius: 8px;
-    letter-spacing: 0.3px;
+    border-radius: var(--roommind-radius-control, 8px);
+    letter-spacing: 0;
     text-transform: uppercase;
     color: var(--secondary-text-color);
     background: rgba(255, 255, 255, 0.05);
@@ -113,8 +113,8 @@ export const masterDetailStyles = css`
     color: var(--warning-color, #ff9800);
     background: rgba(255, 152, 0, 0.1);
     padding: 2px 8px;
-    border-radius: 10px;
-    letter-spacing: 0.3px;
+    border-radius: var(--roommind-radius-control, 8px);
+    letter-spacing: 0;
     text-transform: uppercase;
     flex-shrink: 0;
   }
@@ -125,8 +125,11 @@ export const masterDetailStyles = css`
     gap: 12px;
     padding: 12px 16px;
     background: rgba(255, 255, 255, 0.02);
-    border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.08));
-    border-radius: 12px;
+    border: var(
+      --roommind-border-subtle,
+      1px solid var(--divider-color, rgba(255, 255, 255, 0.08))
+    );
+    border-radius: var(--roommind-radius-card, 8px);
     min-width: 0;
     min-height: 200px;
   }
@@ -247,7 +250,7 @@ export const masterDetailStyles = css`
     font-weight: 500;
     color: var(--secondary-text-color);
     text-transform: uppercase;
-    letter-spacing: 0.4px;
+    letter-spacing: 0;
     margin-bottom: 8px;
   }
 

@@ -6,9 +6,12 @@ to catch regressions during future coordinator decomposition.
 
 from __future__ import annotations
 
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
+from custom_components.roommind.utils import night_utils
 
 from .conftest import (
     MANAGED_ROOM,
@@ -194,6 +197,30 @@ class TestProcessRoomSnapshot:
         # At target, bang-bang controller should be idle
         assert result["mode"] == "idle"
         assert result["heating_power"] == 0
+
+    @pytest.mark.asyncio
+    async def test_saved_default_quiet_hours_make_night_mode_active(self, hass, mock_config_entry, monkeypatch):
+        """Default quiet hours saved by the frontend should activate backend night mode."""
+        room = {
+            **SAMPLE_ROOM,
+            "quiet_hours": {"start": "22:00", "end": "07:00"},
+            "night_mode_enabled": True,
+        }
+        coordinator, store = _setup_coordinator(
+            hass,
+            mock_config_entry,
+            {"living_room_abc12345": room},
+        )
+        monkeypatch.setattr(night_utils.dt_util, "now", lambda: datetime(2026, 5, 25, 23, 15))
+        hass.states.get = MagicMock(
+            side_effect=make_mock_states_get(temp="21.0", humidity="55.0"),
+        )
+
+        settings = store.get_settings()
+        result = await coordinator._async_process_room(room, settings, [])
+
+        assert result["night_mode"]["active"] is True
+        assert result["night_mode"]["quiet_hours"] == {"start": "22:00", "end": "07:00"}
 
     @pytest.mark.asyncio
     async def test_window_open(self, hass, mock_config_entry):

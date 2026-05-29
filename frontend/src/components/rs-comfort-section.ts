@@ -13,6 +13,11 @@ import { inputStyles } from "../styles/input-styles";
 import { getSelectValue, openEntityInfo } from "../utils/events";
 import { localize, type TranslationKey } from "../utils/localize";
 
+const DEFAULT_QUIET_HOURS = {
+  start: "22:00",
+  end: "07:00",
+} as const;
+
 @customElement("rs-comfort-section")
 export class RsComfortSection extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
@@ -46,7 +51,7 @@ export class RsComfortSection extends LitElement {
 
       .summary-grid {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
         gap: 8px;
         margin-bottom: 12px;
       }
@@ -54,7 +59,7 @@ export class RsComfortSection extends LitElement {
       .summary-item,
       .config-card,
       .list-item {
-        border-radius: 10px;
+        border-radius: 8px;
         background: rgba(255, 255, 255, 0.04);
         border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
       }
@@ -69,7 +74,7 @@ export class RsComfortSection extends LitElement {
         font-weight: 600;
         color: var(--secondary-text-color);
         text-transform: uppercase;
-        letter-spacing: 0.35px;
+        letter-spacing: 0;
       }
 
       .summary-value {
@@ -100,7 +105,7 @@ export class RsComfortSection extends LitElement {
 
       .config-grid {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
         gap: 12px;
       }
 
@@ -184,6 +189,7 @@ export class RsComfortSection extends LitElement {
         font-size: 10px;
         font-weight: 600;
         text-transform: uppercase;
+        letter-spacing: 0;
         color: var(--secondary-text-color);
         background: rgba(255, 255, 255, 0.06);
       }
@@ -318,20 +324,19 @@ export class RsComfortSection extends LitElement {
             </div>
             <ha-switch
               .checked=${this.nightModeEnabled}
-              @change=${(e: Event) =>
-                this._emit("night_mode_enabled", (e.target as HTMLInputElement).checked)}
+              @change=${(e: Event) => this._toggleNightMode((e.target as HTMLInputElement).checked)}
             ></ha-switch>
           </div>
           <div class="field-row">
             <ha-textfield
               .label=${localize("comfort.quiet_start", lang)}
-              .value=${this.quietHours?.start ?? "22:00"}
+              .value=${this.quietHours?.start ?? DEFAULT_QUIET_HOURS.start}
               @input=${(e: Event) =>
                 this._updateQuiet("start", (e.target as HTMLInputElement).value)}
             ></ha-textfield>
             <ha-textfield
               .label=${localize("comfort.quiet_end", lang)}
-              .value=${this.quietHours?.end ?? "07:00"}
+              .value=${this.quietHours?.end ?? DEFAULT_QUIET_HOURS.end}
               @input=${(e: Event) => this._updateQuiet("end", (e.target as HTMLInputElement).value)}
             ></ha-textfield>
           </div>
@@ -606,11 +611,18 @@ export class RsComfortSection extends LitElement {
 
   private _updateQuiet(part: "start" | "end", value: string) {
     const next = {
-      start: this.quietHours?.start ?? "22:00",
-      end: this.quietHours?.end ?? "07:00",
+      start: this.quietHours?.start ?? DEFAULT_QUIET_HOURS.start,
+      end: this.quietHours?.end ?? DEFAULT_QUIET_HOURS.end,
       [part]: value,
     };
     this._emit("quiet_hours", next);
+  }
+
+  private _toggleNightMode(enabled: boolean) {
+    if (enabled && !this.quietHours) {
+      this._emit("quiet_hours", { ...DEFAULT_QUIET_HOURS });
+    }
+    this._emit("night_mode_enabled", enabled);
   }
 
   private _addNightControl = () => {

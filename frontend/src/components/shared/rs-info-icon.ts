@@ -89,7 +89,7 @@ export class RsInfoIcon extends LitElement {
       font-size: 12px;
       font-weight: 400;
       line-height: 1.5;
-      letter-spacing: normal;
+      letter-spacing: 0;
       text-transform: none;
       color: var(--primary-text-color);
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);

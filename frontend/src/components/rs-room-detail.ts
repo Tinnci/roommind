@@ -126,27 +126,31 @@ export class RsRoomDetail extends LitElement {
     .detail-layout {
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 14px;
     }
 
     .detail-grid {
-      column-count: 3;
-      column-width: 360px;
-      column-gap: 16px;
-      column-fill: balance;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
+      gap: 14px;
+      align-items: start;
     }
 
     .detail-grid > * {
       display: block;
       width: 100%;
-      break-inside: avoid;
-      page-break-inside: avoid;
-      margin-bottom: 16px;
     }
 
     @media (min-width: 1900px) {
       .detail-grid {
-        column-count: 4;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 760px) {
+      .detail-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
       }
     }
 

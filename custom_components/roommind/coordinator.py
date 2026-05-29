@@ -19,8 +19,6 @@ from .const import (
     AC_HEATING_BOOST_TARGET,
     CLIMATE_MODE_COOL_ONLY,
     CLIMATE_MODE_HEAT_ONLY,
-    DEFAULT_COMFORT_COOL,
-    DEFAULT_COMFORT_HEAT,
     DEFAULT_ECO_COOL,
     DEFAULT_ECO_HEAT,
     DEFAULT_OUTDOOR_COOLING_MIN,
@@ -36,7 +34,6 @@ from .const import (
     MODE_IDLE,
     OUTDOOR_UNAVAILABLE_NOTIFICATION_ID,
     OUTDOOR_UNAVAILABLE_NOTIFY_CYCLES,
-    SCHEDULE_STATE_ON,
     THERMAL_SAVE_CYCLES,
     UPDATE_INTERVAL,
     TargetTemps,
@@ -89,9 +86,17 @@ from .utils.device_utils import (
 )
 from .utils.history_store import HistoryStore
 from .utils.i18n import get_translation
-from .utils.night_utils import is_quiet_hours_now
-from .utils.schedule_utils import resolve_schedule_index
+from .utils.night_utils import (
+    apply_sleep_ramp_to_targets,
+    is_night_mode_active,
+    wrap_target_resolver_for_sleep_ramp,
+)
+from .utils.notification_payloads import build_outdoor_unavailable_payload
+from .utils.schedule_utils import (
+    resolve_schedule_index,
+)
 from .utils.sensor_utils import read_sensor_value
+from .utils.target_resolution import resolve_room_targets
 from .utils.temp_utils import celsius_delta_to_ha, ha_temp_to_celsius, ha_temp_unit_str
 
 _LOGGER = logging.getLogger(__name__)
@@ -524,9 +529,8 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         not_configured = get_translation(self.hass, "notifications.common.not_configured")
         sensor_id = settings.get("outdoor_temp_sensor") or not_configured
         weather_eid = settings.get("weather_entity") or not_configured
-        message = get_translation(
-            self.hass,
-            "notifications.outdoor_unavailable.message",
+        payload = build_outdoor_unavailable_payload(
+            lambda key, **placeholders: get_translation(self.hass, key, **placeholders),
             sensor_id=sensor_id,
             weather_entity=weather_eid,
         )
@@ -536,39 +540,15 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         )
         async_create_notification(
             self.hass,
-            message,
-            title=get_translation(self.hass, "notifications.outdoor_unavailable.title"),
+            payload.message,
+            title=payload.title,
             notification_id=OUTDOOR_UNAVAILABLE_NOTIFICATION_ID,
         )
         self._outdoor_warning_sent = True
 
     def _is_night_active(self, room: dict) -> bool:
         """Return whether room-level night mode should currently apply."""
-        return bool(room.get("night_mode_enabled", True)) and is_quiet_hours_now(room.get("quiet_hours"))
-
-    @staticmethod
-    def _apply_sleep_ramp_to_targets(targets: TargetTemps, ramp_c: float) -> TargetTemps:
-        """Relax targets at night: slightly cooler heating and warmer cooling."""
-        if ramp_c <= 0:
-            return targets
-        return TargetTemps(
-            heat=(targets.heat - ramp_c if targets.heat is not None else None),
-            cool=(targets.cool + ramp_c if targets.cool is not None else None),
-        )
-
-    def _wrap_target_resolver_for_night(self, resolver: Any, *, night_active: bool, ramp_c: float) -> Any:
-        if not night_active or ramp_c <= 0:
-            return resolver
-
-        def _resolver(ts: float) -> TargetTemps | float | None:
-            result = resolver(ts)
-            if isinstance(result, TargetTemps):
-                return self._apply_sleep_ramp_to_targets(result, ramp_c)
-            if result is None:
-                return None
-            return float(result) + ramp_c
-
-        return _resolver
+        return is_night_mode_active(room)
 
     def _select_airflow_curve(self, room: dict, key: str) -> list[dict[str, float]]:
         """Merge airflow curves from configured climate/HVAC fan devices."""
@@ -844,10 +824,8 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         night_mode_active = self._is_night_active(room)
         sleep_ramp_c = max(0.0, float(room.get("sleep_temp_ramp_c") or 0.0))
         if night_mode_active and sleep_ramp_c > 0:
-            targets = self._apply_sleep_ramp_to_targets(targets, sleep_ramp_c)
-            target_resolver = self._wrap_target_resolver_for_night(
-                target_resolver, night_active=night_mode_active, ramp_c=sleep_ramp_c
-            )
+            targets = apply_sleep_ramp_to_targets(targets, sleep_ramp_c)
+            target_resolver = wrap_target_resolver_for_sleep_ramp(target_resolver, sleep_ramp_c)
 
         # --- Compute residual heat from previous cycle state ---
         system_type = room.get("heating_system_type", "")
@@ -1840,128 +1818,46 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         held in the store but skipped here so the room follows the presence-away
         branch instead.
         """
-        from .utils.schedule_utils import find_active_block
+        now = time.time()
+        presence_away_now = not room.get("ignore_presence", False) and self._is_presence_away(room, settings)
 
-        # 1. Override — single-point target (suppressed when presence-away clears it)
-        override_temp = room.get("override_temp")
-        override_until = room.get("override_until")
-        if override_temp is not None:
-            if override_until is None or time.time() < override_until:
-                presence_away_now = not room.get("ignore_presence", False) and self._is_presence_away(room, settings)
-                if not (presence_away_now and bool(settings.get("presence_clears_override", False))):
-                    t = float(override_temp)
-                    return TargetTemps(heat=t, cool=t)
-            else:
-                # Timed override has expired — auto-clear
-                area_id = room.get("area_id", "unknown")
-                store = self.hass.data[DOMAIN]["store"]
-                self.hass.async_create_task(
-                    store.async_update_room(
-                        area_id,
-                        {
-                            "override_temp": None,
-                            "override_until": None,
-                            "override_type": None,
-                        },
-                    )
+        state = self.hass.states.get(schedule_entity_id) if schedule_entity_id else None
+        result = resolve_room_targets(
+            now=now,
+            room=room,
+            settings=settings,
+            presence_away=presence_away_now,
+            schedule_entity_id=schedule_entity_id,
+            schedule_state=state.state if state is not None else None,
+            schedule_attributes=dict(state.attributes) if state is not None else None,
+            schedule_blocks=schedule_blocks,
+            block_temp_converter=lambda value: ha_temp_to_celsius(self.hass, value),
+        )
+
+        if result.clear_expired_override:
+            area_id = room.get("area_id", "unknown")
+            store = self.hass.data[DOMAIN]["store"]
+            self.hass.async_create_task(
+                store.async_update_room(
+                    area_id,
+                    {
+                        "override_temp": None,
+                        "override_until": None,
+                        "override_type": None,
+                    },
                 )
-
-        # 2. Vacation — heat setback, cooling stays at eco_cool
-        vacation_until = settings.get("vacation_until")
-        if vacation_until is not None:
-            if time.time() < vacation_until:
-                vacation_temp = settings.get("vacation_temp")
-                if vacation_temp is not None:
-                    t = float(vacation_temp)
-                    eco_cool = room.get("eco_cool", DEFAULT_ECO_COOL)
-                    return TargetTemps(heat=t, cool=max(t, eco_cool))
-            else:
-                self.hass.async_create_task(
-                    self.hass.data[DOMAIN]["store"].async_save_settings(
-                        {
-                            "vacation_until": None,
-                        }
-                    )
-                )
-
-        # 2.5 Presence-based eco or off (skip if room ignores presence)
-        if not room.get("ignore_presence", False) and self._is_presence_away(room, settings):
-            if settings.get("presence_away_action", "eco") == "off":
-                return TargetTemps(heat=None, cool=None)
-            return TargetTemps(
-                heat=room.get("eco_heat", room.get("eco_temp", DEFAULT_ECO_HEAT)),
-                cool=room.get("eco_cool", DEFAULT_ECO_COOL),
             )
 
-        # 3. Schedule / comfort / eco
-        comfort_heat = room.get("comfort_heat", room.get("comfort_temp", DEFAULT_COMFORT_HEAT))
-        comfort_cool = room.get("comfort_cool", DEFAULT_COMFORT_COOL)
-        eco_heat = room.get("eco_heat", room.get("eco_temp", DEFAULT_ECO_HEAT))
-        eco_cool = room.get("eco_cool", DEFAULT_ECO_COOL)
+        if result.clear_expired_vacation:
+            self.hass.async_create_task(
+                self.hass.data[DOMAIN]["store"].async_save_settings(
+                    {
+                        "vacation_until": None,
+                    }
+                )
+            )
 
-        # schedule_entity_id is pre-resolved by the caller (_async_process_room) to avoid
-        # a second resolve_schedule_index() call that could diverge if selector state changes.
-        if not schedule_entity_id:
-            return TargetTemps(heat=comfort_heat, cool=comfort_cool)
-
-        state = self.hass.states.get(schedule_entity_id)
-        state_unavailable = state is None or state.state in ("unavailable", "unknown")
-
-        if state_unavailable:
-            # #308 follow-up: when the schedule entity briefly flickers to
-            # unavailable/unknown, derive on/off from cached blocks instead of
-            # jumping to comfort_heat. Without cached blocks we have no signal,
-            # so comfort_heat remains the last-resort fallback.
-            if schedule_blocks is None:
-                return TargetTemps(heat=comfort_heat, cool=comfort_cool)
-            if find_active_block(schedule_blocks, time.time()) is None:
-                if settings.get("schedule_off_action", "eco") == "off":
-                    return TargetTemps(heat=None, cool=None)
-                return TargetTemps(heat=eco_heat, cool=eco_cool)
-            # Block is active right now: fall through to block resolution below.
-
-        if state_unavailable or state.state == SCHEDULE_STATE_ON:
-            if schedule_blocks is not None:
-                # Read all temperature fields from block data.
-                # HA does not expose custom data keys (heat_temperature, cool_temperature)
-                # as entity state attributes, so schedule.get_schedule is required.
-                block_data = find_active_block(schedule_blocks, time.time()) or {}
-                heat_temp = block_data.get("heat_temperature")
-                cool_temp = block_data.get("cool_temperature")
-                block_temp = block_data.get("temperature")
-            else:
-                # Fallback when schedule.get_schedule is unavailable (non-schedule.* entity
-                # or service failure). Works for temperature; heat/cool split will not resolve.
-                heat_temp = state.attributes.get("heat_temperature")
-                cool_temp = state.attributes.get("cool_temperature")
-                block_temp = state.attributes.get("temperature")
-
-            if heat_temp is not None or cool_temp is not None:
-                h = comfort_heat
-                c = comfort_cool
-                if heat_temp is not None:
-                    try:
-                        h = ha_temp_to_celsius(self.hass, float(heat_temp))
-                    except (ValueError, TypeError):
-                        pass
-                if cool_temp is not None:
-                    try:
-                        c = ha_temp_to_celsius(self.hass, float(cool_temp))
-                    except (ValueError, TypeError):
-                        pass
-                return TargetTemps(heat=h, cool=c)
-            if block_temp is not None:
-                try:
-                    t = ha_temp_to_celsius(self.hass, float(block_temp))
-                    return TargetTemps(heat=t, cool=t)  # single-point
-                except (ValueError, TypeError):
-                    pass
-            return TargetTemps(heat=comfort_heat, cool=comfort_cool)
-
-        # Schedule is "off" -> eco or off
-        if settings.get("schedule_off_action", "eco") == "off":
-            return TargetTemps(heat=None, cool=None)
-        return TargetTemps(heat=eco_heat, cool=eco_cool)
+        return result.targets
 
     async def async_room_added(self, room: dict) -> None:
         """Create entity platform entities for a newly added/updated room and refresh data."""

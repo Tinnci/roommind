@@ -32,7 +32,7 @@ export class RsPresenceSection extends LitElement {
       gap: 8px;
       padding: 8px 12px 8px 6px;
       border: 1px solid var(--divider-color);
-      border-radius: 10px;
+      border-radius: 8px;
       background: var(--card-background-color);
       cursor: pointer;
       transition:

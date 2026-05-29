@@ -43,15 +43,20 @@ export class RsSettingsPanel extends LitElement {
       gap: 10px;
       --mdc-icon-size: 20px;
       color: var(--secondary-text-color);
+      min-width: 0;
     }
 
     .panel-header span {
       color: var(--primary-text-color);
-      font-weight: 500;
+      font-weight: 600;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .panel-content {
-      padding: 16px 16px 16px;
+      padding: 14px 16px 16px;
     }
 
     .section-intro {
@@ -59,8 +64,10 @@ export class RsSettingsPanel extends LitElement {
       font-size: 13px;
       line-height: 1.5;
       margin: 0 0 16px;
-      padding: 2px 0 2px 12px;
-      border-left: 3px solid var(--divider-color);
+      padding: 10px 12px;
+      border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
+      border-radius: 8px;
+      background: rgba(var(--rgb-primary-text-color, 0, 0, 0), 0.03);
     }
   `;
 }

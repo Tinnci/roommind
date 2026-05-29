@@ -290,7 +290,7 @@ export class RsAnalyticsModel extends LitElement {
         gap: 6px;
         margin-top: 8px;
         padding: 4px 12px;
-        border-radius: 12px;
+        border-radius: 8px;
         font-size: 12px;
         font-weight: 500;
         --mdc-icon-size: 14px;

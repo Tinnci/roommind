@@ -89,6 +89,44 @@ def resolve_target_at_time(
     return eco_temp
 
 
+def resolve_targets_from_schedule_data(
+    data: dict[str, Any],
+    comfort_heat: float,
+    comfort_cool: float,
+    block_temp_converter: Callable[[float], float] | None = None,
+) -> TargetTemps:
+    """Resolve split heat/cool targets from schedule block data or attributes."""
+    heat_temp_raw = data.get("heat_temperature")
+    cool_temp_raw = data.get("cool_temperature")
+    if heat_temp_raw is not None or cool_temp_raw is not None:
+        heat = comfort_heat
+        cool = comfort_cool
+        if heat_temp_raw is not None:
+            try:
+                val = float(heat_temp_raw)
+                heat = block_temp_converter(val) if block_temp_converter else val
+            except (ValueError, TypeError):
+                pass
+        if cool_temp_raw is not None:
+            try:
+                val = float(cool_temp_raw)
+                cool = block_temp_converter(val) if block_temp_converter else val
+            except (ValueError, TypeError):
+                pass
+        return TargetTemps(heat=heat, cool=cool)
+
+    block_temp = data.get("temperature")
+    if block_temp is not None:
+        try:
+            val = float(block_temp)
+            temp = block_temp_converter(val) if block_temp_converter else val
+            return TargetTemps(heat=temp, cool=temp)
+        except (ValueError, TypeError):
+            pass
+
+    return TargetTemps(heat=comfort_heat, cool=comfort_cool)
+
+
 def resolve_targets_at_time(
     ts: float,
     schedule_blocks: dict | None,
@@ -129,33 +167,7 @@ def resolve_targets_at_time(
         return TargetTemps(heat=comfort_heat, cool=comfort_cool)
     data = find_active_block(schedule_blocks, ts)
     if data is not None:
-        heat_temp_raw = data.get("heat_temperature")
-        cool_temp_raw = data.get("cool_temperature")
-        if heat_temp_raw is not None or cool_temp_raw is not None:
-            h = comfort_heat
-            c = comfort_cool
-            if heat_temp_raw is not None:
-                try:
-                    val = float(heat_temp_raw)
-                    h = block_temp_converter(val) if block_temp_converter else val
-                except (ValueError, TypeError):
-                    pass
-            if cool_temp_raw is not None:
-                try:
-                    val = float(cool_temp_raw)
-                    c = block_temp_converter(val) if block_temp_converter else val
-                except (ValueError, TypeError):
-                    pass
-            return TargetTemps(heat=h, cool=c)
-        block_temp = data.get("temperature")
-        if block_temp is not None:
-            try:
-                val = float(block_temp)
-                t = block_temp_converter(val) if block_temp_converter else val
-                return TargetTemps(heat=t, cool=t)
-            except (ValueError, TypeError):
-                pass
-        return TargetTemps(heat=comfort_heat, cool=comfort_cool)
+        return resolve_targets_from_schedule_data(data, comfort_heat, comfort_cool, block_temp_converter)
     # Not in any block → eco or off
     if schedule_off_action == "off":
         return TargetTemps(heat=None, cool=None)

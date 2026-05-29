@@ -13,23 +13,26 @@ export const inputStyles = css`
   ha-select,
   ha-entity-picker,
   ha-combo-box {
-    --mdc-shape-small: 8px;
-    --mdc-shape-medium: 8px;
-    --md-filled-text-field-container-shape: 8px;
-    --md-outlined-text-field-container-shape: 8px;
+    --mdc-shape-small: var(--roommind-radius-control, 8px);
+    --mdc-shape-medium: var(--roommind-radius-control, 8px);
+    --md-filled-text-field-container-shape: var(--roommind-radius-control, 8px);
+    --md-outlined-text-field-container-shape: var(--roommind-radius-control, 8px);
     display: block;
-    border-radius: 8px;
+    border-radius: var(--roommind-radius-control, 8px);
     overflow: hidden;
     isolation: isolate;
     /* clip-path is more reliable than overflow:hidden for shape clipping
        on the bottom corners of MDC filled inputs. */
-    clip-path: inset(0 round 8px);
+    clip-path: inset(0 round var(--roommind-radius-control, 8px));
   }
 
   /* ha-entity-picker wraps an inner ha-combo-box that doesn't always
      reach the host's bottom edge. Use a tighter clip so the visible
      input's bottom matches the inner's top radius. */
   ha-entity-picker {
-    clip-path: inset(0 round 8px 8px 4px 4px);
+    clip-path: inset(
+      0 round var(--roommind-radius-control, 8px) var(--roommind-radius-control, 8px)
+        var(--roommind-radius-small, 4px) var(--roommind-radius-small, 4px)
+    );
   }
 `;

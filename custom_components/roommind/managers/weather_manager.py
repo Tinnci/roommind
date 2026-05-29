@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 
 from homeassistant.core import HomeAssistant
 
@@ -68,10 +69,22 @@ class WeatherManager:
         """Convert forecast temperatures from HA units to Celsius."""
         result = []
         for f in forecasts:
-            if "temperature" in f:
-                result.append({**f, "temperature": ha_temp_to_celsius(self.hass, f["temperature"])})
-            else:
+            if "temperature" not in f:
                 result.append(f)
+                continue
+            converted = dict(f)
+            try:
+                raw_temp = float(f["temperature"])
+            except (TypeError, ValueError):
+                converted.pop("temperature", None)
+                result.append(converted)
+                continue
+            if not math.isfinite(raw_temp):
+                converted.pop("temperature", None)
+                result.append(converted)
+                continue
+            converted["temperature"] = ha_temp_to_celsius(self.hass, raw_temp)
+            result.append(converted)
         return result
 
     @staticmethod
@@ -85,5 +98,13 @@ class WeatherManager:
         series: list[float | None] = []
         for entry in forecast:
             cc = entry.get("cloud_coverage")
-            series.append(float(cc) if cc is not None else None)
+            if cc is None:
+                series.append(None)
+                continue
+            try:
+                value = float(cc)
+            except (TypeError, ValueError):
+                series.append(None)
+                continue
+            series.append(value if math.isfinite(value) else None)
         return series if any(v is not None for v in series) else None

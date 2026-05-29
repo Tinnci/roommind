@@ -21,7 +21,6 @@ class NightModeManager:
     def __init__(self, hass: HomeAssistant) -> None:
         self.hass = hass
         self._previous_values: dict[str, Any] = {}
-        self._last_targets: dict[tuple[str, str], Any] = {}
 
     async def async_apply(self, area_id: str, room: dict, *, active: bool) -> list[dict[str, Any]]:
         """Apply or restore configured night-mode accessory controls."""
@@ -171,10 +170,6 @@ class NightModeManager:
         return {"outcome": "unsupported", "skip_reason": "unsupported_domain", "last_service": None}
 
     async def _call(self, area_id: str, domain: str, service: str, data: dict[str, Any]) -> bool:
-        signature = (domain, service, tuple(sorted(data.items())))
-        cache_key = (str(data.get("entity_id", "")), f"{domain}.{service}")
-        if self._last_targets.get(cache_key) == signature:
-            return False
         result = self.hass.services.async_call(
             domain,
             service,
@@ -184,6 +179,5 @@ class NightModeManager:
         )
         if inspect.isawaitable(result):
             await result
-        self._last_targets[cache_key] = signature
         _LOGGER.debug("Room '%s': night mode %s.%s %s", area_id, domain, service, data)
         return True

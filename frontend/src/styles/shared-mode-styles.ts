@@ -12,7 +12,7 @@ export const modeStyles = css`
     font-size: 13px;
     font-weight: 500;
     padding: 4px 14px;
-    border-radius: 16px;
+    border-radius: var(--roommind-radius-control, 8px);
   }
 
   .mode-dot {

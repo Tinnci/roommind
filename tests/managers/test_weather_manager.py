@@ -82,6 +82,18 @@ def test_extract_cloud_series_missing_key():
     assert result == [30.0, None, 70.0]
 
 
+def test_extract_cloud_series_invalid_values_are_missing():
+    """Invalid cloud_coverage values should not enter solar math."""
+    forecast = [
+        {"cloud_coverage": 30},
+        {"cloud_coverage": "bad"},
+        {"cloud_coverage": float("nan")},
+        {"cloud_coverage": 70},
+    ]
+    result = WeatherManager.extract_cloud_series(forecast)
+    assert result == [30.0, None, None, 70.0]
+
+
 def test_extract_cloud_series_all_missing_returns_none():
     """If no entry has cloud_coverage, returns None (clear-sky fallback)."""
     forecast = [
@@ -122,6 +134,26 @@ async def test_service_response_converts_fahrenheit():
     result = await mgr.async_read_forecast({"weather_entity": "weather.home"})
 
     assert abs(result[0]["temperature"] - 10.0) < 0.01
+
+
+def test_convert_forecast_temps_omits_invalid_temperature():
+    """Bad forecast temperature values should not abort weather ingestion."""
+    hass = _make_hass(fahrenheit=True)
+    mgr = WeatherManager(hass)
+
+    result = mgr._convert_forecast_temps(
+        [
+            {"temperature": 50.0, "cloud_coverage": 10},
+            {"temperature": None, "cloud_coverage": 20},
+            {"temperature": "bad", "cloud_coverage": 30},
+        ]
+    )
+
+    assert abs(result[0]["temperature"] - 10.0) < 0.01
+    assert "temperature" not in result[1]
+    assert "temperature" not in result[2]
+    assert result[1]["cloud_coverage"] == 20
+    assert result[2]["cloud_coverage"] == 30
 
 
 @pytest.mark.asyncio

@@ -22,7 +22,7 @@ export class RsBadge extends LitElement {
       background: color-mix(in srgb, var(--primary-color) 12%, transparent);
       padding: 2px 6px;
       border-radius: 4px;
-      letter-spacing: 0.5px;
+      letter-spacing: 0;
       text-transform: uppercase;
       cursor: default;
     }

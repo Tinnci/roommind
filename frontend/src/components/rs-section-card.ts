@@ -21,13 +21,21 @@ export class RsSectionCard extends LitElement {
     ha-card {
       overflow: hidden;
       min-width: 0;
+      border-radius: var(--roommind-radius-card, 8px);
+      border: var(--roommind-border-subtle, 1px solid var(--divider-color, rgba(0, 0, 0, 0.08)));
+      box-shadow: none;
     }
 
     .section-header {
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 16px 20px 12px;
+      min-height: var(--roommind-header-min-height, 44px);
+      padding: 12px 16px 10px;
+      border-bottom: var(
+        --roommind-border-faint,
+        1px solid var(--divider-color, rgba(0, 0, 0, 0.06))
+      );
     }
 
     .section-icon {
@@ -37,10 +45,14 @@ export class RsSectionCard extends LitElement {
 
     .section-title {
       font-size: 15px;
-      font-weight: 500;
+      font-weight: 600;
       color: var(--primary-text-color);
       margin: 0;
       flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .edit-btn {
@@ -48,22 +60,23 @@ export class RsSectionCard extends LitElement {
       --mdc-icon-size: 18px;
       color: var(--secondary-text-color);
       margin: -4px -8px -4px 0;
-      transition: opacity 0.15s ease;
+      opacity: 0.58;
+      transition:
+        opacity 0.15s ease,
+        color 0.15s ease,
+        background 0.15s ease;
     }
 
     @media (hover: hover) {
-      .edit-btn {
-        opacity: 0;
-      }
-
       ha-card:hover .edit-btn,
       ha-card:focus-within .edit-btn {
         opacity: 1;
+        color: var(--primary-color);
       }
     }
 
     .section-body {
-      padding: 0 20px 20px;
+      padding: 14px 16px 16px;
     }
   `;
 
@@ -82,6 +95,7 @@ export class RsSectionCard extends LitElement {
                 <ha-icon-button
                   class="edit-btn"
                   .path=${PENCIL_PATH}
+                  .label=${`Edit ${this.heading}`}
                   @click=${this._onEditClick}
                 ></ha-icon-button>
               `

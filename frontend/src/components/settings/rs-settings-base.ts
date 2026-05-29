@@ -25,19 +25,22 @@ export class RsSettingsBase extends LitElement {
     ha-select,
     ha-entity-picker,
     ha-combo-box {
-      --mdc-shape-small: 8px;
-      --mdc-shape-medium: 8px;
-      --md-filled-text-field-container-shape: 8px;
-      --md-outlined-text-field-container-shape: 8px;
+      --mdc-shape-small: var(--roommind-radius-control, 8px);
+      --mdc-shape-medium: var(--roommind-radius-control, 8px);
+      --md-filled-text-field-container-shape: var(--roommind-radius-control, 8px);
+      --md-outlined-text-field-container-shape: var(--roommind-radius-control, 8px);
       display: block;
-      border-radius: 8px;
+      border-radius: var(--roommind-radius-control, 8px);
       overflow: hidden;
       isolation: isolate;
-      clip-path: inset(0 round 8px);
+      clip-path: inset(0 round var(--roommind-radius-control, 8px));
     }
 
     ha-entity-picker {
-      clip-path: inset(0 round 8px 8px 4px 4px);
+      clip-path: inset(
+        0 round var(--roommind-radius-control, 8px) var(--roommind-radius-control, 8px)
+          var(--roommind-radius-small, 4px) var(--roommind-radius-small, 4px)
+      );
     }
 
     .settings-section {

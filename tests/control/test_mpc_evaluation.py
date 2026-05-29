@@ -219,6 +219,29 @@ class TestBuildOutdoorSeries:
         # Padding should also use the fallback
         assert all(v == DEFAULT_OUTDOOR_TEMP_FALLBACK for v in series)
 
+    def test_invalid_forecast_temperatures_fall_back_to_last_valid(self):
+        """Null/non-numeric forecast temps should not enter MPC math."""
+        hass = build_hass()
+        room = make_room()
+        model_mgr = RoomModelManager()
+        forecast = [
+            {"temperature": 5.0},
+            {"temperature": None},
+            {"temperature": "bad"},
+            {"temperature": 8.0},
+        ]
+        ctrl = MPCController(
+            hass,
+            room,
+            model_manager=model_mgr,
+            outdoor_temp=10.0,
+            outdoor_forecast=forecast,
+            settings={},
+            has_external_sensor=True,
+        )
+        series = ctrl._build_outdoor_series(4)
+        assert series == [5.0, 5.0, 5.0, 8.0]
+
 
 # ---------------------------------------------------------------------------
 # _evaluate_mpc edge cases

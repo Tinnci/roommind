@@ -15,8 +15,8 @@ export class RsClimateModeSelector extends LitElement {
 
     .mode-grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 10px;
+      grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+      gap: 8px;
     }
 
     .mode-card {
@@ -26,7 +26,7 @@ export class RsClimateModeSelector extends LitElement {
       gap: 8px;
       padding: 14px 8px;
       border: 2px solid var(--divider-color, #e0e0e0);
-      border-radius: 12px;
+      border-radius: 8px;
       cursor: pointer;
       transition:
         border-color 0.2s,

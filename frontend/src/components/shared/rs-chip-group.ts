@@ -29,7 +29,7 @@ export class RsChipGroup extends LitElement {
       gap: 4px;
       cursor: pointer;
       border: 1px solid var(--divider-color);
-      border-radius: 16px;
+      border-radius: 8px;
       padding: 4px 12px;
       font-size: 13px;
       font-family: inherit;

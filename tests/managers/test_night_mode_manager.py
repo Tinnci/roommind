@@ -44,6 +44,27 @@ async def test_night_mode_turns_light_off_and_restores_previous_state(hass):
 
 
 @pytest.mark.asyncio
+async def test_night_mode_reapplies_if_user_changes_target_during_night(hass):
+    states = {"light.ac_display": _state("on")}
+
+    def _get_state(entity_id: str):
+        return states.get(entity_id)
+
+    hass.states.get.side_effect = _get_state
+    manager = NightModeManager(hass)
+    room = {"night_controls": [{"entity_id": "light.ac_display", "role": "display_light"}]}
+
+    await manager.async_apply("bedroom", room, active=True)
+    states["light.ac_display"] = _state("on")
+    status = await manager.async_apply("bedroom", room, active=True)
+
+    assert status[0]["outcome"] == "applied"
+    assert [call.args[:3] for call in hass.services.async_call.call_args_list].count(
+        ("light", "turn_off", {"entity_id": "light.ac_display"})
+    ) == 2
+
+
+@pytest.mark.asyncio
 async def test_night_mode_select_uses_quiet_fallback(hass):
     hass.states.get.return_value = _state("normal", {"options": ["normal", "quiet", "loud"]})
     manager = NightModeManager(hass)

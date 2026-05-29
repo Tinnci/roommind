@@ -42,7 +42,7 @@ export class RsHeatSourceSection extends LitElement {
         gap: 14px;
         padding: 14px 16px;
         border: 1px solid var(--divider-color);
-        border-radius: 12px;
+        border-radius: 8px;
         background: var(--card-background-color);
         transition:
           border-color 0.2s ease,
@@ -95,7 +95,7 @@ export class RsHeatSourceSection extends LitElement {
         gap: 8px;
         padding: 12px 14px;
         border: 1px solid var(--divider-color);
-        border-radius: 10px;
+        border-radius: 8px;
         background: var(--card-background-color);
       }
 

@@ -344,17 +344,17 @@ export class RsAnalyticsToolbar extends LitElement {
 
       .range-bar {
         display: inline-flex;
-        border-radius: 12px;
+        border-radius: 8px;
         border: 1px solid var(--divider-color);
         background: var(--card-background-color);
       }
 
       .range-bar > :first-child {
-        border-radius: 12px 0 0 12px;
+        border-radius: 8px 0 0 8px;
       }
 
       .range-bar > :last-child {
-        border-radius: 0 12px 12px 0;
+        border-radius: 0 8px 8px 0;
       }
 
       .range-chip {
@@ -430,7 +430,7 @@ export class RsAnalyticsToolbar extends LitElement {
         gap: 4px;
         padding: 7px 14px;
         border: 1px solid var(--divider-color);
-        border-radius: 12px;
+        border-radius: 8px;
         background: var(--card-background-color);
         color: var(--secondary-text-color);
         font-size: 12px;

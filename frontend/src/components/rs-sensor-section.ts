@@ -41,7 +41,7 @@ export class RsSensorSection extends LitElement {
         padding: 12px 14px;
         background: rgba(255, 255, 255, 0.02);
         border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.08));
-        border-radius: 12px;
+        border-radius: 8px;
       }
 
       .sensor-block + .sensor-block {
@@ -90,7 +90,7 @@ export class RsSensorSection extends LitElement {
         font-size: 13px;
         font-weight: 500;
         color: var(--primary-text-color);
-        letter-spacing: 0.2px;
+        letter-spacing: 0;
         flex: 1;
       }
 
@@ -98,7 +98,7 @@ export class RsSensorSection extends LitElement {
         font-size: 11px;
         font-weight: 500;
         padding: 1px 7px;
-        border-radius: 10px;
+        border-radius: 8px;
         background: rgba(255, 255, 255, 0.06);
         color: var(--secondary-text-color);
       }
@@ -158,7 +158,7 @@ export class RsSensorSection extends LitElement {
         font-size: 10px;
         color: var(--secondary-text-color);
         text-transform: uppercase;
-        letter-spacing: 0.4px;
+        letter-spacing: 0;
         min-width: 28px;
       }
 
@@ -205,7 +205,7 @@ export class RsSensorSection extends LitElement {
         background: rgba(255, 152, 0, 0.1);
         padding: 1px 6px;
         border-radius: 8px;
-        letter-spacing: 0.3px;
+        letter-spacing: 0;
         text-transform: uppercase;
         flex-shrink: 0;
       }
@@ -215,7 +215,7 @@ export class RsSensorSection extends LitElement {
         font-size: 12px;
         font-weight: 500;
         padding: 3px 9px;
-        border-radius: 10px;
+        border-radius: 8px;
         background: rgba(255, 255, 255, 0.05);
         color: var(--primary-text-color);
         font-variant-numeric: tabular-nums;
@@ -381,7 +381,7 @@ export class RsSensorSection extends LitElement {
         color: var(--secondary-text-color);
         margin: 12px 0 4px 0;
         text-transform: uppercase;
-        letter-spacing: 0.4px;
+        letter-spacing: 0;
       }
 
       .section-subtitle:first-child {

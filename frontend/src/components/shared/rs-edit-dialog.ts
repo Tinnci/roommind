@@ -62,7 +62,7 @@ export class RsEditDialog extends LitElement {
     .dialog {
       background: var(--card-background-color, #1c1c1c);
       color: var(--primary-text-color);
-      border-radius: 14px;
+      border-radius: var(--roommind-radius-card, 8px);
       box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
       width: 100%;
       max-width: 760px;
@@ -91,7 +91,10 @@ export class RsEditDialog extends LitElement {
       align-items: center;
       gap: 4px;
       padding: 18px 24px;
-      border-bottom: 1px solid var(--divider-color, rgba(255, 255, 255, 0.08));
+      border-bottom: var(
+        --roommind-border-subtle,
+        1px solid var(--divider-color, rgba(255, 255, 255, 0.08))
+      );
     }
 
     .dialog-icon {
@@ -149,7 +152,7 @@ export class RsEditDialog extends LitElement {
       padding: 12px 14px;
       background: rgba(3, 169, 244, 0.06);
       border: 1px solid rgba(3, 169, 244, 0.18);
-      border-radius: 10px;
+      border-radius: var(--roommind-radius-card, 8px);
       font-size: 13px;
       line-height: 1.6;
       color: var(--primary-text-color);

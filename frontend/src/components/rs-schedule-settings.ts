@@ -97,7 +97,7 @@ export class RsScheduleSettings extends RsScheduleBase {
         font-weight: 600;
         color: var(--secondary-text-color);
         text-transform: uppercase;
-        letter-spacing: 0.3px;
+        letter-spacing: 0;
         text-align: center;
       }
       .temp-grid-row-label {

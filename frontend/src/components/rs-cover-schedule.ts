@@ -16,7 +16,7 @@ export class RsCoverSchedule extends RsScheduleBase {
       .pos-badge {
         font-size: 0.8em;
         padding: 1px 6px;
-        border-radius: 10px;
+        border-radius: 8px;
         background: var(--primary-color);
         color: var(--text-primary-color);
         flex-shrink: 0;
@@ -24,7 +24,7 @@ export class RsCoverSchedule extends RsScheduleBase {
       .gate-badge {
         font-size: 0.8em;
         padding: 1px 6px;
-        border-radius: 10px;
+        border-radius: 8px;
         background: var(--accent-color, var(--primary-color));
         color: var(--text-primary-color);
         opacity: 0.8;

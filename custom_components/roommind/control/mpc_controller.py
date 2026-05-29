@@ -40,6 +40,7 @@ from ..utils.device_utils import (
     has_reliable_hvac_modes,
 )
 from ..utils.temp_utils import celsius_to_ha_temp
+from .forecast_series import build_outdoor_temperature_series
 from .mpc_optimizer import MPCOptimizer, MPCPlan
 from .residual_heat import get_min_run_blocks
 from .thermal_model import RoomModelManager
@@ -1165,15 +1166,12 @@ class MPCController:
 
     def _build_outdoor_series(self, n_blocks: int) -> list[float]:
         """Build outdoor temperature series from forecast or current value."""
-        if self.outdoor_forecast:
-            series = [
-                f.get("temperature", self.outdoor_temp or DEFAULT_OUTDOOR_TEMP_FALLBACK) for f in self.outdoor_forecast
-            ]
-            while len(series) < n_blocks:
-                series.append(series[-1] if series else (self.outdoor_temp or DEFAULT_OUTDOOR_TEMP_FALLBACK))
-            return series[:n_blocks]
-        T = self.outdoor_temp if self.outdoor_temp is not None else DEFAULT_OUTDOOR_TEMP_FALLBACK
-        return [T] * n_blocks
+        return build_outdoor_temperature_series(
+            self.outdoor_forecast,
+            self.outdoor_temp,
+            n_blocks,
+            fallback=DEFAULT_OUTDOOR_TEMP_FALLBACK,
+        )
 
     def _build_solar_series(self, n_blocks: int) -> list[float]:
         """Build solar irradiance series for MPC horizon from forecast cloud data."""

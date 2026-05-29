@@ -21,6 +21,7 @@ from ..const import (
 )
 from ..utils.i18n import get_translation
 from ..utils.mold_utils import calculate_mold_risk, mold_prevention_delta
+from ..utils.notification_payloads import build_mold_prevention_payload, build_mold_risk_payload
 from ..utils.notification_utils import (
     NotificationThrottler,
     async_send_mold_notification,
@@ -72,6 +73,9 @@ class MoldManager:
         if current_humidity is None or current_temp is None:
             return result
 
+        def translate(key: str, **placeholders: object) -> str:
+            return get_translation(self.hass, key, **placeholders)
+
         risk_level, surface_rh = calculate_mold_risk(
             current_temp,
             current_humidity,
@@ -117,20 +121,20 @@ class MoldManager:
                 ):
                     targets = settings.get("mold_notification_targets", [])
                     surface_rh_value = surface_rh if surface_rh is not None else current_humidity
+                    payload = build_mold_risk_payload(
+                        translate,
+                        area_name=area_name,
+                        humidity=current_humidity,
+                        surface_rh=surface_rh_value,
+                    )
                     await async_send_mold_notification(
                         self.hass,
                         area_id,
                         area_name,
                         targets,
-                        message=get_translation(
-                            self.hass,
-                            "notifications.mold_risk.message",
-                            area_name=area_name,
-                            humidity=f"{current_humidity:.0f}",
-                            surface_rh=f"{surface_rh_value:.0f}",
-                        ),
-                        title=get_translation(self.hass, "notifications.mold_risk.title"),
-                        tag_suffix="risk",
+                        message=payload.message,
+                        title=payload.title,
+                        tag_suffix=payload.tag_suffix,
                     )
                     self._throttler.record_sent(f"detect_{area_id}")
 
@@ -151,23 +155,20 @@ class MoldManager:
                             "mold_prevention_notify_targets",
                             [],
                         )
+                        payload = build_mold_prevention_payload(
+                            translate,
+                            area_name=area_name,
+                            delta=celsius_delta_to_ha_fn(result.prevention_delta),
+                            unit=ha_temp_unit_str_fn(),
+                        )
                         await async_send_mold_notification(
                             self.hass,
                             area_id,
                             area_name,
                             prev_targets,
-                            message=get_translation(
-                                self.hass,
-                                "notifications.mold_prevention.message",
-                                area_name=area_name,
-                                delta=f"{celsius_delta_to_ha_fn(result.prevention_delta):.0f}",
-                                unit=ha_temp_unit_str_fn(),
-                            ),
-                            title=get_translation(
-                                self.hass,
-                                "notifications.mold_prevention.title",
-                            ),
-                            tag_suffix="prevention",
+                            message=payload.message,
+                            title=payload.title,
+                            tag_suffix=payload.tag_suffix,
                         )
                         self._throttler.record_sent(
                             f"prevent_{area_id}",

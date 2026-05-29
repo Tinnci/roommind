@@ -14,6 +14,7 @@ from ..const import (
     MODE_IDLE,
 )
 from ..utils.device_utils import get_ac_eids, get_trv_eids
+from .forecast_series import build_outdoor_temperature_series
 from .mpc_controller import get_can_heat_cool
 from .mpc_optimizer import MPCOptimizer
 from .residual_heat import build_residual_series, get_min_run_blocks
@@ -26,12 +27,7 @@ def build_forecast_outdoor_series(
     n_blocks: int,
 ) -> list[float]:
     """Build outdoor temperature series from weather forecast or fallback."""
-    if forecast:
-        series = [f.get("temperature", current_outdoor) for f in forecast]
-        while len(series) < n_blocks:
-            series.append(series[-1] if series else current_outdoor)
-        return series[:n_blocks]
-    return [current_outdoor] * n_blocks
+    return build_outdoor_temperature_series(forecast, current_outdoor, n_blocks, fallback=current_outdoor)
 
 
 def build_forecast_solar_series(

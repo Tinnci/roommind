@@ -146,6 +146,17 @@ class TestBuildForecastOutdoorSeries:
         result = build_forecast_outdoor_series(forecast, 10.0, 3)
         assert result == [5.0, 10.0, 7.0]
 
+    def test_invalid_temperature_values_fall_back_to_last_valid(self):
+        """Null/non-numeric forecast temperatures should not enter simulation."""
+        forecast = [
+            {"temperature": 5.0},
+            {"temperature": None},
+            {"temperature": "bad"},
+            {"temperature": 8.0},
+        ]
+        result = build_forecast_outdoor_series(forecast, 10.0, 4)
+        assert result == [5.0, 5.0, 5.0, 8.0]
+
     def test_none_forecast_same_as_empty(self):
         """None forecast treated like empty list."""
         result = build_forecast_outdoor_series(None, 8.0, 4)
