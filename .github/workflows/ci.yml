@@ -11,7 +11,7 @@ jobs:
     name: Tests
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       pull-requests: write
     steps:
       - uses: actions/checkout@v6
@@ -19,15 +19,18 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
+        run: uv sync --locked --group dev
 
       - name: Run tests with coverage
-        run: pytest tests/ -v --cov=custom_components/roommind --cov-report=term --cov-fail-under=95
+        run: uv run pytest tests/ -v --cov=custom_components/roommind --cov-report=term --cov-fail-under=95
 
       - name: Coverage badge
         uses: py-cov-action/python-coverage-comment-action@v3
@@ -47,7 +50,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: frontend
-        run: bun install
+        run: bun install --frozen-lockfile
 
       - name: Type check
         working-directory: frontend
@@ -61,6 +64,10 @@ jobs:
         working-directory: frontend
         run: bun run format:check
 
+      - name: Build frontend
+        working-directory: frontend
+        run: bun --bun vite build
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -70,19 +77,27 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version: "3.13"
 
-      - name: Install Python tools
-        run: pip install ruff mypy
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked --group dev
 
       - name: Ruff check
-        run: ruff check custom_components/ tests/
+        run: uv run ruff check .
 
       - name: Ruff format check
-        run: ruff format --check custom_components/ tests/
+        run: uv run ruff format --check custom_components/ tests/
 
       - name: mypy
-        run: mypy custom_components/roommind/
+        run: uv run mypy --explicit-package-bases custom_components/roommind
+
+      - name: Package smoke test
+        run: uv run python scripts/build_release_package.py --output dist/roommind.zip
 
   hacs:
     name: HACS validation
