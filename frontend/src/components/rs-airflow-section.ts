@@ -15,6 +15,11 @@ import { getSelectValue, openEntityInfo } from "../utils/events";
 import { localize, type TranslationKey } from "../utils/localize";
 import { masterDetailStyles } from "../styles/master-detail-styles";
 import { inputStyles } from "../styles/input-styles";
+import {
+  airflowBehaviorPreferenceCount,
+  airflowModelingPreferenceCount,
+} from "../utils/airflow-settings-layout";
+import { toAirflowDeviceUiSchema } from "../utils/airflow-device-profile";
 import "./shared/rs-master-detail";
 
 const KEEP = "";
@@ -242,6 +247,49 @@ export class RsAirflowSection extends LitElement {
       .detail-field + .detail-toggle-row,
       .detail-toggle-row + .detail-toggle-row,
       .detail-toggle-row + .detail-field {
+        margin-top: 12px;
+      }
+
+      .detail-group {
+        margin-top: 14px;
+        border-top: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
+        padding-top: 12px;
+      }
+
+      .detail-group summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        cursor: pointer;
+        color: var(--primary-text-color);
+        font-size: 13px;
+        font-weight: 600;
+        list-style: none;
+      }
+
+      .detail-group summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .detail-group summary::after {
+        content: "v";
+        color: var(--secondary-text-color);
+        transition: transform 120ms ease;
+      }
+
+      .detail-group:not([open]) summary::after {
+        transform: rotate(-90deg);
+      }
+
+      .group-count {
+        margin-left: auto;
+        color: var(--secondary-text-color);
+        font-size: 11px;
+        font-weight: 500;
+      }
+
+      .detail-group-body {
         margin-top: 12px;
       }
 
@@ -542,11 +590,74 @@ export class RsAirflowSection extends LitElement {
             </div>
           `
         : nothing}
-      ${isFan ? this._renderFanPrefs(entityId, device, presetModes) : nothing}
-      ${isClimate
-        ? this._renderClimatePrefs(entityId, device, presetModes, swingModes, swingHorizontalModes)
-        : nothing}
-      ${this._renderAdvancedPrefs(entityId, device)}
+      ${this._renderBehaviorGroup(
+        entityId,
+        device,
+        isFan,
+        isClimate,
+        presetModes,
+        swingModes,
+        swingHorizontalModes,
+      )}
+      ${this._renderModelingGroup(entityId, device)}
+    `;
+  }
+
+  private _renderBehaviorGroup(
+    entityId: string,
+    device: AirflowDeviceConfig,
+    isFan: boolean,
+    isClimate: boolean,
+    presetModes: string[],
+    swingModes: string[],
+    swingHorizontalModes: string[],
+  ) {
+    const hasClimatePrefs =
+      isClimate &&
+      (presetModes.length > 0 || swingModes.length > 0 || swingHorizontalModes.length > 0);
+    if (!isFan && !hasClimatePrefs) return nothing;
+    const profile = toAirflowDeviceUiSchema(device);
+
+    return html`
+      <details class="detail-group">
+        <summary>
+          ${localize("airflow.behavior_preferences", this.language)}
+          <span class="group-count">
+            ${localize("airflow.configured_count", this.language, {
+              count: airflowBehaviorPreferenceCount(profile.behavior_preferences),
+            })}
+          </span>
+        </summary>
+        <div class="detail-group-body">
+          ${isFan ? this._renderFanPrefs(entityId, device, presetModes) : nothing}
+          ${hasClimatePrefs
+            ? this._renderClimatePrefs(
+                entityId,
+                device,
+                presetModes,
+                swingModes,
+                swingHorizontalModes,
+              )
+            : nothing}
+        </div>
+      </details>
+    `;
+  }
+
+  private _renderModelingGroup(entityId: string, device: AirflowDeviceConfig) {
+    const profile = toAirflowDeviceUiSchema(device);
+    return html`
+      <details class="detail-group">
+        <summary>
+          ${localize("airflow.advanced_modeling", this.language)}
+          <span class="group-count">
+            ${localize("airflow.configured_count", this.language, {
+              count: airflowModelingPreferenceCount(profile.modeling_profile),
+            })}
+          </span>
+        </summary>
+        <div class="detail-group-body">${this._renderAdvancedPrefs(entityId, device)}</div>
+      </details>
     `;
   }
 

@@ -21,6 +21,7 @@ export class RsSettingsControl extends RsSettingsBase {
   @property({ type: Number }) public outdoorHeatingMax = 22;
   @property({ type: Boolean }) public predictionEnabled = true;
   @property({ type: String }) public scheduleOffAction: "eco" | "off" = "eco";
+  @property({ type: String }) public optimizerStrategy: "greedy" | "horizon_search" = "greedy";
 
   override render() {
     const l = this.hass.language;
@@ -134,6 +135,37 @@ export class RsSettingsControl extends RsSettingsBase {
           <ha-list-item value="off">${localize("schedule.off_action_off", l)}</ha-list-item>
         </ha-select>
       </div>
+
+      <details class="settings-section advanced-section">
+        <summary>${localize("settings.advanced_control_tuning", l)}</summary>
+        <div class="advanced-body">
+          <ha-select
+            .label=${localize("settings.optimizer_strategy", l)}
+            .value=${this.optimizerStrategy}
+            .options=${[
+              { value: "greedy", label: localize("settings.optimizer_strategy_greedy", l) },
+              {
+                value: "horizon_search",
+                label: localize("settings.optimizer_strategy_horizon_search", l),
+              },
+            ]}
+            fixedMenuPosition
+            @selected=${(e: Event) => {
+              const val = getSelectValue(e) as "greedy" | "horizon_search";
+              if (val && val !== this.optimizerStrategy) this._fire("optimizerStrategy", val);
+            }}
+            @closed=${(e: Event) => e.stopPropagation()}
+          >
+            <ha-list-item value="greedy"
+              >${localize("settings.optimizer_strategy_greedy", l)}</ha-list-item
+            >
+            <ha-list-item value="horizon_search"
+              >${localize("settings.optimizer_strategy_horizon_search", l)}</ha-list-item
+            >
+          </ha-select>
+          <p class="hint helper-text">${localize("settings.optimizer_strategy_hint", l)}</p>
+        </div>
+      </details>
     `;
   }
 
@@ -195,6 +227,31 @@ export class RsSettingsControl extends RsSettingsBase {
       }
       .helper-link:hover {
         text-decoration: underline;
+      }
+      .advanced-section {
+        padding-top: 12px;
+      }
+      .advanced-section summary {
+        cursor: pointer;
+        color: var(--primary-text-color);
+        font-size: 14px;
+        font-weight: 500;
+        list-style: none;
+      }
+      .advanced-section summary::-webkit-details-marker {
+        display: none;
+      }
+      .advanced-section summary::after {
+        content: "v";
+        float: right;
+        color: var(--secondary-text-color);
+        transition: transform 120ms ease;
+      }
+      .advanced-section:not([open]) summary::after {
+        transform: rotate(-90deg);
+      }
+      .advanced-body {
+        margin-top: 12px;
       }
     `,
   ];

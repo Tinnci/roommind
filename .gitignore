@@ -211,6 +211,7 @@ __marimo__/
 frontend/node_modules/
 frontend/dist/
 frontend/bun.lock
+frontend/.preview-artifacts/
 custom_components/roommind/frontend/roommind-panel.js
 
 # IDE

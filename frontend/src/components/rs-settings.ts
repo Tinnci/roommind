@@ -41,6 +41,7 @@ export class RsSettings extends LitElement {
   @state() private _outdoorCoolingMin = 16;
   @state() private _outdoorHeatingMax = 22;
   @state() private _controlMode: "mpc" | "bangbang" = "mpc";
+  @state() private _optimizerStrategy: "greedy" | "horizon_search" = "greedy";
   @state() private _comfortWeight = 70;
   @state() private _weatherEntity = "";
   @state() private _outdoorUnavailableNotify = true;
@@ -94,6 +95,7 @@ export class RsSettings extends LitElement {
       this._outdoorCoolingMin = s.outdoor_cooling_min ?? 16;
       this._outdoorHeatingMax = s.outdoor_heating_max ?? 22;
       this._controlMode = s.control_mode ?? "mpc";
+      this._optimizerStrategy = s.optimizer_strategy ?? "greedy";
       this._comfortWeight = s.comfort_weight ?? 70;
       this._weatherEntity = s.weather_entity ?? "";
       this._outdoorUnavailableNotify = s.outdoor_unavailable_notify ?? true;
@@ -176,6 +178,7 @@ export class RsSettings extends LitElement {
         <rs-settings-control
           .hass=${this.hass}
           .controlMode=${this._controlMode}
+          .optimizerStrategy=${this._optimizerStrategy}
           .comfortWeight=${this._comfortWeight}
           .outdoorCoolingMin=${this._outdoorCoolingMin}
           .outdoorHeatingMax=${this._outdoorHeatingMax}
@@ -338,6 +341,7 @@ export class RsSettings extends LitElement {
         outdoor_cooling_min: this._outdoorCoolingMin,
         outdoor_heating_max: this._outdoorHeatingMax,
         control_mode: this._controlMode,
+        optimizer_strategy: this._optimizerStrategy,
         comfort_weight: this._comfortWeight,
         weather_entity: this._weatherEntity,
         outdoor_unavailable_notify: this._outdoorUnavailableNotify,

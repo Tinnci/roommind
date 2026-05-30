@@ -217,6 +217,42 @@ export class RsComfortSection extends LitElement {
         margin-top: 6px;
       }
 
+      .settings-group {
+        margin-top: 16px;
+        border-top: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
+        padding-top: 12px;
+      }
+
+      .settings-group summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        cursor: pointer;
+        list-style: none;
+        color: var(--primary-text-color);
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .settings-group summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .settings-group summary::after {
+        content: "v";
+        color: var(--secondary-text-color);
+        transition: transform 120ms ease;
+      }
+
+      .settings-group:not([open]) summary::after {
+        transform: rotate(-90deg);
+      }
+
+      .settings-group-body {
+        margin-top: 12px;
+      }
+
       @media (max-width: 720px) {
         .summary-grid,
         .config-grid,
@@ -340,24 +376,6 @@ export class RsComfortSection extends LitElement {
               @input=${(e: Event) => this._updateQuiet("end", (e.target as HTMLInputElement).value)}
             ></ha-textfield>
           </div>
-          <div class="field-row">
-            ${this._numberField(
-              "comfort.max_fan_level_night",
-              "max_fan_level_night",
-              this.maxFanLevelNight,
-              0,
-              1,
-              0.05,
-            )}
-            ${this._numberField(
-              "comfort.sleep_temp_ramp",
-              "sleep_temp_ramp_c",
-              this.sleepTempRampC,
-              0,
-              4,
-              0.1,
-            )}
-          </div>
         </div>
 
         <div class="config-card">
@@ -375,6 +393,12 @@ export class RsComfortSection extends LitElement {
               >${localize("comfort.control_target_perceived", lang)}</ha-list-item
             >
           </ha-select>
+        </div>
+      </div>
+
+      <details class="settings-group">
+        <summary>${localize("comfort.advanced_constraints", lang)}</summary>
+        <div class="settings-group-body">
           <div class="field-row">
             ${this._numberField(
               "comfort.room_volume",
@@ -385,11 +409,29 @@ export class RsComfortSection extends LitElement {
               1,
             )}
             ${this._numberField(
+              "comfort.max_fan_level_night",
+              "max_fan_level_night",
+              this.maxFanLevelNight,
+              0,
+              1,
+              0.05,
+            )}
+          </div>
+          <div class="field-row">
+            ${this._numberField(
               "comfort.rapid_recovery_delta",
               "rapid_recovery_delta_c",
               this.rapidRecoveryDeltaC,
               0.5,
               6,
+              0.1,
+            )}
+            ${this._numberField(
+              "comfort.sleep_temp_ramp",
+              "sleep_temp_ramp_c",
+              this.sleepTempRampC,
+              0,
+              4,
               0.1,
             )}
           </div>
@@ -409,27 +451,35 @@ export class RsComfortSection extends LitElement {
             ></ha-switch>
           </div>
         </div>
-      </div>
+      </details>
 
-      <div class="section-title">${localize("comfort.night_controls", lang)}</div>
-      <div class="list">
-        ${this.nightControls.length
-          ? this.nightControls.map((item, index) => this._renderNightControlEdit(item, index))
-          : html`<div class="empty">${localize("comfort.no_night_controls", lang)}</div>`}
-      </div>
-      <button class="add-btn" @click=${this._addNightControl}>
-        + ${localize("comfort.add_night_control", lang)}
-      </button>
+      <details class="settings-group">
+        <summary>${localize("comfort.night_controls", lang)}</summary>
+        <div class="settings-group-body">
+          <div class="list">
+            ${this.nightControls.length
+              ? this.nightControls.map((item, index) => this._renderNightControlEdit(item, index))
+              : html`<div class="empty">${localize("comfort.no_night_controls", lang)}</div>`}
+          </div>
+          <button class="add-btn" @click=${this._addNightControl}>
+            + ${localize("comfort.add_night_control", lang)}
+          </button>
+        </div>
+      </details>
 
-      <div class="section-title">${localize("comfort.adjacent_rooms", lang)}</div>
-      <div class="list">
-        ${this.adjacentRooms.length
-          ? this.adjacentRooms.map((item, index) => this._renderAdjacentEdit(item, index))
-          : html`<div class="empty">${localize("comfort.no_adjacent_rooms", lang)}</div>`}
-      </div>
-      <button class="add-btn" @click=${this._addAdjacent}>
-        + ${localize("comfort.add_adjacent_room", lang)}
-      </button>
+      <details class="settings-group">
+        <summary>${localize("comfort.adjacent_rooms", lang)}</summary>
+        <div class="settings-group-body">
+          <div class="list">
+            ${this.adjacentRooms.length
+              ? this.adjacentRooms.map((item, index) => this._renderAdjacentEdit(item, index))
+              : html`<div class="empty">${localize("comfort.no_adjacent_rooms", lang)}</div>`}
+          </div>
+          <button class="add-btn" @click=${this._addAdjacent}>
+            + ${localize("comfort.add_adjacent_room", lang)}
+          </button>
+        </div>
+      </details>
     `;
   }
 
