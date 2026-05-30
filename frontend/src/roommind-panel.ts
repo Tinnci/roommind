@@ -763,6 +763,7 @@ export class RoomMindPanel extends LitElement {
         room_order: string[];
         group_by_floor: boolean;
         control_mode: "mpc" | "bangbang";
+        optimizer_strategy?: "greedy" | "horizon_search";
         climate_control_active: boolean;
         presence_enabled: boolean;
         anyone_home: boolean;

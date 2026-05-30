@@ -6,6 +6,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from ..const import EKF_UPDATE_MIN_DT
+from ..control.solar import SolarExposure
 
 if TYPE_CHECKING:
     from ..control.thermal_model import RoomModelManager, TemperatureObservation
@@ -48,6 +49,7 @@ class EkfTrainingManager:
         pf = self._accumulated_pf.pop(area_id, 1.0)
         vent = self._accumulated_q_vent.pop(area_id, q_vent)
         if accumulated > 0 and prev_mode is not None:
+            shaded_solar = SolarExposure(raw_solar=q_solar, shading_factor=shading_factor).shaded_solar
             self._update_model(
                 area_id=area_id,
                 current_temp=current_temp,
@@ -58,7 +60,7 @@ class EkfTrainingManager:
                 can_heat=can_heat,
                 can_cool=can_cool,
                 power_fraction=pf,
-                q_solar=q_solar * shading_factor,
+                q_solar=shaded_solar,
                 q_residual=q_residual,
                 q_occupancy=q_occupancy,
                 q_vent=vent,
@@ -164,6 +166,7 @@ class EkfTrainingManager:
             if self._accumulated_dt[area_id] >= EKF_UPDATE_MIN_DT:
                 pf = self._accumulated_pf.pop(area_id, 1.0)
                 vent = self._accumulated_q_vent.pop(area_id, q_vent)
+                shaded_solar = SolarExposure(raw_solar=q_solar, shading_factor=shading_factor).shaded_solar
                 self._update_model(
                     area_id=area_id,
                     current_temp=current_temp,
@@ -174,7 +177,7 @@ class EkfTrainingManager:
                     can_heat=can_heat,
                     can_cool=can_cool,
                     power_fraction=pf,
-                    q_solar=q_solar * shading_factor,
+                    q_solar=shaded_solar,
                     q_residual=q_residual,
                     q_occupancy=q_occupancy,
                     q_vent=vent,

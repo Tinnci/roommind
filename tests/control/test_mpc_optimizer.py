@@ -36,6 +36,28 @@ def test_optimizer_heats_when_cold():
     assert plan.actions[0] == "heating"
 
 
+def test_optimizer_horizon_search_strategy_uses_experimental_path(monkeypatch):
+    model = RCModel(C=2.0, U=50.0, Q_heat=1000.0, Q_cool=1500.0)
+    calls = []
+
+    def fake_horizon_search(self, *args, **kwargs):
+        calls.append((args, kwargs))
+        return MPCPlan(actions=["idle"], temperatures=[20.0, 20.0])
+
+    monkeypatch.setattr(MPCOptimizer, "_optimize_horizon_search", fake_horizon_search)
+    opt = MPCOptimizer(model, optimizer_strategy="horizon_search")
+
+    plan = opt.optimize(
+        T_room=20.0,
+        T_outdoor_series=[20.0],
+        heat_target_series=[20.0],
+        dt_minutes=5,
+    )
+
+    assert calls
+    assert plan.actions == ["idle"]
+
+
 def test_optimizer_cools_when_hot():
     """When above target, plan should start cooling."""
     # Use moderate Q_cool so one block doesn't overshoot wildly

@@ -77,6 +77,7 @@ async def test_list_rooms_empty(ws_hass, store, connection):
             "room_order": [],
             "group_by_floor": False,
             "control_mode": "bangbang",
+            "optimizer_strategy": "greedy",
             "climate_control_active": True,
             "presence_enabled": False,
             "presence_persons": [],
@@ -1061,6 +1062,23 @@ async def test_save_settings(ws_hass, store, connection):
     connection.send_result.assert_called_once()
     result = connection.send_result.call_args[0][1]
     assert result["settings"]["outdoor_temp_sensor"] == "sensor.outdoor"
+
+
+@pytest.mark.asyncio
+async def test_save_settings_optimizer_strategy(ws_hass, store, connection):
+    """Saving optimizer_strategy persists and returns updated settings."""
+    await store.async_load()
+
+    msg = {
+        "id": 111,
+        "type": "roommind/settings/save",
+        "optimizer_strategy": "horizon_search",
+    }
+    await _save_settings(ws_hass, connection, msg)
+
+    connection.send_result.assert_called_once()
+    result = connection.send_result.call_args[0][1]
+    assert result["settings"]["optimizer_strategy"] == "horizon_search"
 
 
 # ---------------------------------------------------------------------------

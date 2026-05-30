@@ -20,6 +20,7 @@ from ..const import (
     TargetTemps,
 )
 from ..control.solar import (
+    SolarExposure,
     build_oriented_solar_series,
     build_solar_series,
     solar_azimuth,
@@ -113,8 +114,10 @@ class CoverOrchestrator:
         q_solar: float,
         predicted_peak_temp: float | None,
         has_override: bool,
+        solar_exposure: SolarExposure | None = None,
     ) -> CoverResult:
         """Process cover control for a room: MPC check, schedule, prediction, evaluate, apply."""
+        raw_solar = solar_exposure.raw_solar if solar_exposure is not None else q_solar
         # Early exit: when auto control is disabled, do nothing.
         # Schedule, night close and MPC are all suppressed — covers stay wherever they are.
         if not room.get("covers_auto_enabled", False):
@@ -210,18 +213,23 @@ class CoverOrchestrator:
         # hitting that side, suppress solar deployment. Covers can't help against heat
         # coming through other windows. Uses the current oriented q_solar, not the
         # lookahead prediction — if the sun isn't on this side NOW, covers stay open.
-        _oriented_q_solar = q_solar
-        if _surface_azimuths and q_solar > 0:
+        _oriented_q_solar = raw_solar
+        if _surface_azimuths and raw_solar > 0:
             _now = time.time()
             _sun_az = solar_azimuth(self.hass.config.latitude, self.hass.config.longitude, _now)
             _sun_el = solar_elevation(self.hass.config.latitude, self.hass.config.longitude, _now)
             _factors = [surface_irradiance_factor(_sun_az, _sun_el, az) for az in _surface_azimuths]
-            _oriented_q_solar = q_solar * (sum(_factors) / len(_factors))
+            _orientation_factor = sum(_factors) / len(_factors)
+            _oriented_q_solar = SolarExposure(
+                raw_solar=raw_solar,
+                shading_factor=solar_exposure.shading_factor if solar_exposure is not None else 1.0,
+                orientation_factor=_orientation_factor,
+            ).oriented_solar
 
         _cover_predicted_peak = predicted_peak_temp
         if _cover_predicted_peak is None:
             _cover_predicted_peak = self._estimate_solar_peak_temp(
-                area_id, current_temp, cover_target, q_solar, outdoor_temp, _surface_azimuths
+                area_id, current_temp, cover_target, raw_solar, outdoor_temp, _surface_azimuths
             )
 
         if _oriented_q_solar < COVER_SOLAR_MIN and _surface_azimuths:
@@ -242,7 +250,7 @@ class CoverOrchestrator:
             covers_snap_deploy=room.get("covers_snap_deploy", False),
             predicted_peak_temp=_cover_predicted_peak,
             target_temp=cover_target,
-            q_solar=q_solar,
+            q_solar=_oriented_q_solar,
             has_active_override=has_override,
             forced_position=_forced_position,
             forced_reason=_forced_reason,

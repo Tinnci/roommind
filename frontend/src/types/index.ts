@@ -308,6 +308,7 @@ export interface GlobalSettings {
   outdoor_cooling_min?: number;
   outdoor_heating_max?: number;
   control_mode?: "mpc" | "bangbang";
+  optimizer_strategy?: "greedy" | "horizon_search";
   comfort_weight?: number;
   weather_entity?: string;
   outdoor_unavailable_notify?: boolean;

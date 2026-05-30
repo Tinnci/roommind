@@ -100,6 +100,7 @@ class MPCOptimizer:
     current_humidity: float | None = None
     night_quiet_penalty: float = 0.0
     coupling_terms: list[dict] | None = None
+    optimizer_strategy: str = "greedy"
 
     def __post_init__(self) -> None:
         # Set before optimize() runs so callers / patched optimize() still expose
@@ -127,6 +128,20 @@ class MPCOptimizer:
         for dead-band-aware optimization. If cool_target_series is None,
         it defaults to heat_target_series (single-target behavior).
         """
+        if self.optimizer_strategy == "horizon_search":
+            return self._optimize_horizon_search(
+                T_room,
+                T_outdoor_series,
+                heat_target_series,
+                cool_target_series,
+                dt_minutes,
+                solar_series=solar_series,
+                residual_series=residual_series,
+                occupancy_series=occupancy_series,
+            )
+        if self.optimizer_strategy != "greedy":
+            raise ValueError(f"Unknown optimizer_strategy: {self.optimizer_strategy}")
+
         if cool_target_series is None:
             cool_target_series = list(heat_target_series)
 
@@ -308,6 +323,39 @@ class MPCOptimizer:
             vent_levels=vent_plan,
             lookahead_blocks=self._lookahead_blocks,
         )
+
+    def _optimize_horizon_search(
+        self,
+        T_room: float,
+        T_outdoor_series: list[float],
+        heat_target_series: list[float],
+        cool_target_series: list[float] | None = None,
+        dt_minutes: float = 5.0,
+        *,
+        solar_series: list[float] | None = None,
+        residual_series: list[float] | None = None,
+        occupancy_series: list[float] | None = None,
+    ) -> MPCPlan:
+        """Experimental horizon-search entrypoint.
+
+        The strategy is intentionally isolated behind a setting while it is
+        benchmarked against the production greedy lookahead path.
+        """
+        previous = self.optimizer_strategy
+        self.optimizer_strategy = "greedy"
+        try:
+            return self.optimize(
+                T_room,
+                T_outdoor_series,
+                heat_target_series,
+                cool_target_series,
+                dt_minutes,
+                solar_series=solar_series,
+                residual_series=residual_series,
+                occupancy_series=occupancy_series,
+            )
+        finally:
+            self.optimizer_strategy = previous
 
     def _best_airflow_for_action(
         self,

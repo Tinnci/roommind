@@ -6,6 +6,7 @@ import logging
 import math
 import time
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, cast
 
 from homeassistant.core import HomeAssistant
@@ -40,9 +41,11 @@ from ..utils.device_utils import (
     has_reliable_hvac_modes,
 )
 from ..utils.temp_utils import celsius_to_ha_temp
+from .climate_command_executor import ClimateCommandExecutor
 from .forecast_series import build_outdoor_temperature_series
 from .mpc_optimizer import MPCOptimizer, MPCPlan
 from .residual_heat import get_min_run_blocks
+from .solar import SolarExposure
 from .thermal_model import RoomModelManager
 
 if TYPE_CHECKING:
@@ -58,6 +61,24 @@ _SENTINEL: object = object()  # default marker for backward-compat keyword detec
 # resets on integration reload (module reimport).
 _last_commands: dict[str, dict[str, Any]] = {}
 _setpoint_override_warned: set[str] = set()
+
+
+@dataclass
+class AppliedCommandReport:
+    """Report of device activity implied by actually applied commands."""
+
+    active_eids: set[str] = field(default_factory=set)
+    inactive_eids: set[str] = field(default_factory=set)
+
+    def mark_active(self, entity_id: str) -> None:
+        """Record an entity as commanded active."""
+        self.active_eids.add(entity_id)
+        self.inactive_eids.discard(entity_id)
+
+    def mark_inactive(self, entity_id: str) -> None:
+        """Record an entity as commanded inactive/idle."""
+        self.inactive_eids.add(entity_id)
+        self.active_eids.discard(entity_id)
 
 
 def _cache_entry(service: str, data: dict) -> dict[str, Any]:
@@ -712,6 +733,7 @@ class MPCController:
         has_external_sensor: bool = True,
         target_resolver: Callable[[float], TargetTemps | float] | None = None,
         q_solar: float = 0.0,
+        solar_exposure: SolarExposure | None = None,
         latitude: float = 0.0,
         longitude: float = 0.0,
         cloud_series: list[float | None] | None = None,
@@ -750,14 +772,15 @@ class MPCController:
         self._area_id = room_config.get("area_id", "unknown")
         self._target_resolver = target_resolver
         self.last_plan: MPCPlan | None = None
-        self.q_solar = q_solar
+        self._solar_exposure = solar_exposure or SolarExposure(raw_solar=q_solar, shading_factor=shading_factor)
+        self.q_solar = self._solar_exposure.raw_solar
         self._latitude = latitude
         self._longitude = longitude
         self._cloud_series = cloud_series or []
         self.q_residual = q_residual
         self._heating_system_type = heating_system_type
         self._mode_on_since = mode_on_since
-        self._shading_factor = shading_factor
+        self._shading_factor = self._solar_exposure.shading_factor
         self.q_occupancy = q_occupancy
         self.q_vent = q_vent
         self.airflow_levels = airflow_levels or [0.0]
@@ -789,6 +812,8 @@ class MPCController:
         cw = s.get("comfort_weight", 70)
         self._w_comfort = max(1.0, cw / 10.0)
         self._w_energy = max(1.0, (100 - cw) / 10.0)
+        self._optimizer_strategy = str(s.get("optimizer_strategy", "greedy"))
+        self._command_executor = ClimateCommandExecutor(self)
 
     async def async_evaluate(
         self,
@@ -881,7 +906,7 @@ class MPCController:
             T_out,
             Q_active=0.0,
             dt_minutes=dt_minutes,
-            q_solar=self.q_solar * self._shading_factor,
+            q_solar=self._solar_exposure.shaded_solar,
             q_residual=self.q_residual,
             q_occupancy=self.q_occupancy,
             q_vent=self.q_vent,
@@ -965,6 +990,7 @@ class MPCController:
             current_humidity=self.current_humidity,
             night_quiet_penalty=self.night_quiet_penalty if self.night_active else 0.0,
             coupling_terms=self.coupling_terms,
+            optimizer_strategy=self._optimizer_strategy,
         )
 
         plan = optimizer.optimize(
@@ -1243,8 +1269,45 @@ class MPCController:
         heat_source_plan: HeatSourcePlan | None = None,
         compressor_forced_on: set[str] | None = None,
         compressor_forced_off: set[str] | None = None,
-    ) -> None:
-        """Apply the determined mode with proportional valve control."""
+    ) -> AppliedCommandReport:
+        """Apply a controller intent and return the actual command report."""
+        executor_kwargs: dict[str, Any] = {
+            "power_fraction": power_fraction,
+            "current_temp": current_temp,
+            "exclude_eids": exclude_eids,
+            "heating_boost_target": heating_boost_target,
+            "ac_heating_boost_target": ac_heating_boost_target,
+            "cooling_boost_target": cooling_boost_target,
+            "heat_source_plan": heat_source_plan,
+            "compressor_forced_on": compressor_forced_on,
+            "compressor_forced_off": compressor_forced_off,
+        }
+        if target_temp is not _SENTINEL:
+            executor_kwargs["target_temp"] = target_temp
+        return await self._command_executor.async_apply(
+            mode,
+            targets,
+            **executor_kwargs,
+        )
+
+    async def _async_execute_apply_request(
+        self,
+        mode: str,
+        targets: TargetTemps | float | None = None,
+        power_fraction: float = 1.0,
+        current_temp: float | None = None,
+        exclude_eids: set[str] | None = None,
+        *,
+        target_temp: float | None | object = _SENTINEL,
+        heating_boost_target: float | None = None,
+        ac_heating_boost_target: float | None = None,
+        cooling_boost_target: float | None = None,
+        heat_source_plan: HeatSourcePlan | None = None,
+        compressor_forced_on: set[str] | None = None,
+        compressor_forced_off: set[str] | None = None,
+    ) -> AppliedCommandReport:
+        """Execute HA service calls for a determined mode."""
+        report = AppliedCommandReport()
         _forced_on = compressor_forced_on or set()
         _forced_off = compressor_forced_off or set()
 
@@ -1300,17 +1363,21 @@ class MPCController:
             for eid in thermostats:
                 if eid in _forced_off:
                     await async_idle_device(self.hass, eid, self._devices, area_id=self._area_id, targets=targets)
+                    report.mark_inactive(eid)
                     continue
                 if can_heat and ha_heat_target is not None:
                     await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "heat"})
                     await self._call(
                         "set_temperature", {"entity_id": eid, "temperature": ha_heat_target}, temp_intent="heat"
                     )
+                    report.mark_active(eid)
                 else:
                     await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "off"})
+                    report.mark_inactive(eid)
             for eid in self.acs:
                 if eid in _forced_off:
                     await async_idle_device(self.hass, eid, self._devices, area_id=self._area_id, targets=targets)
+                    report.mark_inactive(eid)
                     continue
                 ac_state = self.hass.states.get(eid)
                 ac_modes = _effective_ac_modes(ac_state)
@@ -1318,6 +1385,7 @@ class MPCController:
                 ac_heat_target = ha_heat_target if ha_heat_target is not None else ha_cool_target
                 if ac_target is None:
                     await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "off"})
+                    report.mark_inactive(eid)
                 elif "heat_cool" in ac_modes:
                     await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "heat_cool"})
                     # Dual-setpoint: send both targets when device uses range mode
@@ -1331,6 +1399,7 @@ class MPCController:
                         )
                     else:
                         await self._call("set_temperature", {"entity_id": eid, "temperature": ac_target})
+                    report.mark_active(eid)
                 elif not thermostats and can_heat and can_cool and "heat" in ac_modes and "cool" in ac_modes:
                     # AC-only room, device supports heat+cool but not heat_cool:
                     # use device's built-in temperature to pick the right mode.
@@ -1342,6 +1411,7 @@ class MPCController:
                             {"entity_id": eid, "temperature": ha_cool_target},
                             temp_intent="cool",
                         )
+                        report.mark_active(eid)
                     else:
                         ac_heat_t = ha_heat_target if ha_heat_target is not None else ha_cool_target
                         await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "heat"})
@@ -1350,24 +1420,29 @@ class MPCController:
                             {"entity_id": eid, "temperature": ac_heat_t},
                             temp_intent="heat",
                         )
+                        report.mark_active(eid)
                 elif can_cool and "cool" in ac_modes:
                     await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "cool"})
                     await self._call(
                         "set_temperature", {"entity_id": eid, "temperature": ac_target}, temp_intent="cool"
                     )
+                    report.mark_active(eid)
                 elif can_heat and "heat" in ac_modes:
                     await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "heat"})
                     await self._call(
                         "set_temperature", {"entity_id": eid, "temperature": ac_heat_target}, temp_intent="heat"
                     )
+                    report.mark_active(eid)
                 elif "auto" in ac_modes:
                     await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "auto"})
                     await self._call(
                         "set_temperature", {"entity_id": eid, "temperature": ac_heat_target}, temp_intent="heat"
                     )
+                    report.mark_active(eid)
                 else:
                     await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "off"})
-            return
+                    report.mark_inactive(eid)
+            return report
 
         if mode == MODE_HEATING and heat_source_plan is not None:
             # Orchestrated heating: route power to specific devices per plan
@@ -1415,11 +1490,13 @@ class MPCController:
                                 {"entity_id": cmd.entity_id, "temperature": ha_t},
                                 temp_intent="heat",
                             )
+                        report.mark_active(cmd.entity_id)
                     continue
                 if cmd.entity_id in _forced_off and cmd.active:
                     await async_idle_device(
                         self.hass, cmd.entity_id, self._devices, area_id=self._area_id, targets=targets
                     )
+                    report.mark_inactive(cmd.entity_id)
                     continue
                 if cmd.active:
                     if cmd.device_type == "thermostat":
@@ -1440,6 +1517,7 @@ class MPCController:
                             {"entity_id": cmd.entity_id, "temperature": ha_t},
                             temp_intent="heat",
                         )
+                        report.mark_active(cmd.entity_id)
                     else:  # ac
                         if self.has_external_sensor and current_temp is not None:
                             t = round(
@@ -1461,6 +1539,7 @@ class MPCController:
                                 {"entity_id": cmd.entity_id, "temperature": ha_t},
                                 temp_intent="heat",
                             )
+                            report.mark_active(cmd.entity_id)
                         elif "heat_cool" in ac_modes:
                             await self._call("set_hvac_mode", {"entity_id": cmd.entity_id, "hvac_mode": "heat_cool"})
                             await self._call(
@@ -1468,6 +1547,7 @@ class MPCController:
                                 {"entity_id": cmd.entity_id, "temperature": ha_t},
                                 temp_intent="heat",
                             )
+                            report.mark_active(cmd.entity_id)
                         elif "auto" in ac_modes:
                             await self._call("set_hvac_mode", {"entity_id": cmd.entity_id, "hvac_mode": "auto"})
                             await self._call(
@@ -1475,8 +1555,10 @@ class MPCController:
                                 {"entity_id": cmd.entity_id, "temperature": ha_t},
                                 temp_intent="heat",
                             )
+                            report.mark_active(cmd.entity_id)
                         else:
                             await self._call("set_hvac_mode", {"entity_id": cmd.entity_id, "hvac_mode": "off"})
+                            report.mark_inactive(cmd.entity_id)
                 else:
                     # Inactive device
                     if cmd.device_type == "thermostat":
@@ -1493,10 +1575,12 @@ class MPCController:
                             area_id=self._area_id,
                             targets=targets,
                         )
+                        report.mark_inactive(cmd.entity_id)
                     else:
                         # ACs can be turned off without boiler cycling concerns
                         await self._call("set_hvac_mode", {"entity_id": cmd.entity_id, "hvac_mode": "off"})
-            return
+                        report.mark_inactive(cmd.entity_id)
+            return report
 
         if mode == MODE_HEATING:
             # Proportional TRV setpoint for Full Control mode
@@ -1516,10 +1600,12 @@ class MPCController:
             for eid in thermostats:
                 if eid in _forced_off:
                     await async_idle_device(self.hass, eid, self._devices, area_id=self._area_id, targets=targets)
+                    report.mark_inactive(eid)
                     continue
                 ha_t = ha_trv_direct if eid in self._direct_eids else ha_trv
                 await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "heat"})
                 await self._call("set_temperature", {"entity_id": eid, "temperature": ha_t}, temp_intent="heat")
+                report.mark_active(eid)
             # ACs: proportional setpoint in Full Control, actual target otherwise
             if self.has_external_sensor and current_temp is not None:
                 ac_heat_target = round(
@@ -1535,6 +1621,7 @@ class MPCController:
             for eid in self.acs:
                 if eid in _forced_off:
                     await async_idle_device(self.hass, eid, self._devices, area_id=self._area_id, targets=targets)
+                    report.mark_inactive(eid)
                     continue
                 ha_t = ha_ac_direct if eid in self._direct_eids else ha_ac_target
                 ac_state = self.hass.states.get(eid)
@@ -1542,14 +1629,18 @@ class MPCController:
                 if "heat" in ac_modes:
                     await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "heat"})
                     await self._call("set_temperature", {"entity_id": eid, "temperature": ha_t}, temp_intent="heat")
+                    report.mark_active(eid)
                 elif "heat_cool" in ac_modes:
                     await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "heat_cool"})
                     await self._call("set_temperature", {"entity_id": eid, "temperature": ha_t}, temp_intent="heat")
+                    report.mark_active(eid)
                 elif "auto" in ac_modes:
                     await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "auto"})
                     await self._call("set_temperature", {"entity_id": eid, "temperature": ha_t}, temp_intent="heat")
+                    report.mark_active(eid)
                 else:
                     await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "off"})
+                    report.mark_inactive(eid)
         elif mode == MODE_COOLING:
             if self.has_external_sensor and current_temp is not None:
                 ac_cool_target = round(
@@ -1565,15 +1656,19 @@ class MPCController:
             for eid in self.acs:
                 if eid in _forced_off:
                     await async_idle_device(self.hass, eid, self._devices, area_id=self._area_id, targets=targets)
+                    report.mark_inactive(eid)
                     continue
                 ha_t = ha_cool_direct if eid in self._direct_eids else ha_target
                 await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "cool"})
                 await self._call("set_temperature", {"entity_id": eid, "temperature": ha_t}, temp_intent="cool")
+                report.mark_active(eid)
             for eid in thermostats:
                 if eid in _forced_off:
                     await async_idle_device(self.hass, eid, self._devices, area_id=self._area_id, targets=targets)
+                    report.mark_inactive(eid)
                     continue
                 await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "off"})
+                report.mark_inactive(eid)
         elif mode == MODE_IDLE:
             for eid in thermostats + self.acs:
                 if eid in _forced_on:
@@ -1615,8 +1710,11 @@ class MPCController:
                         self._area_id,
                         eid,
                     )
+                    report.mark_active(eid)
                     continue
                 await async_idle_device(self.hass, eid, self._devices, area_id=self._area_id, targets=targets)
+                report.mark_inactive(eid)
+        return report
 
     async def _call(self, service: str, data: dict, *, temp_intent: str = "") -> None:
         eid = data.get("entity_id")

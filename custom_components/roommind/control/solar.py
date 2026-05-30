@@ -12,10 +12,41 @@ from __future__ import annotations
 
 import math
 import time
+from dataclasses import dataclass
 from datetime import UTC
 
 # Solar constant (W/m²) — TSI at 1 AU
 _SOLAR_CONSTANT: float = 1361.0
+
+
+@dataclass(frozen=True)
+class SolarExposure:
+    """Named solar values for different consumers.
+
+    raw_solar:
+        Global horizontal irradiance normalized to kW/m2. MPC horizon planning
+        uses this to avoid cover feedback oscillation.
+    shaded_solar:
+        raw_solar after current cover shading. EKF/training uses this because
+        it represents the solar gain that actually reaches the room.
+    oriented_solar:
+        raw_solar after cover/window orientation. Cover decisions use this to
+        decide whether the sun is currently hitting the controlled facade.
+    """
+
+    raw_solar: float
+    shading_factor: float = 1.0
+    orientation_factor: float = 1.0
+
+    @property
+    def shaded_solar(self) -> float:
+        """Solar reaching the room after cover shading."""
+        return self.raw_solar * self.shading_factor
+
+    @property
+    def oriented_solar(self) -> float:
+        """Solar incident on the configured cover/window orientation."""
+        return self.raw_solar * self.orientation_factor
 
 
 def _solar_position(latitude: float, longitude: float, timestamp: float) -> tuple[float, float]:

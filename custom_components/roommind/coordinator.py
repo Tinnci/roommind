@@ -43,15 +43,17 @@ from .const import (
     is_override_suppressed,
     make_roommind_context,
 )
+from .control.constraints import ConstraintInput, ConstraintReducer
 from .control.mpc_controller import (
     DEFAULT_OUTDOOR_TEMP_FALLBACK,
+    AppliedCommandReport,
     MPCController,
     check_acs_can_heat,
     get_can_heat_cool,
     is_mpc_active,
 )
 from .control.perceived_temperature import perceived_temperature
-from .control.solar import compute_q_solar_norm
+from .control.solar import SolarExposure, compute_q_solar_norm
 from .control.thermal_model import RoomModelManager, TemperatureObservation
 from .managers.airflow_control_manager import AirflowControlManager
 from .managers.compressor_group_manager import (
@@ -144,6 +146,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         self._prediction_forecasts: dict[str, list[dict]] = {}
         self._weather_manager = WeatherManager(hass)
         self._current_q_solar: float = 0.0
+        self._constraint_reducer = ConstraintReducer()
         # Valve protection (anti-seize)
         self._valve_manager = ValveManager(hass)
         # Mold risk tracking
@@ -840,6 +843,10 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         cover_eids: list[str] = room.get("covers", [])
         cover_pos_result = self._cover_orchestrator.read_positions(area_id, room)
         shading_factor = cover_pos_result.shading_factor
+        solar_exposure = SolarExposure(
+            raw_solar=self._current_q_solar,
+            shading_factor=shading_factor,
+        )
 
         # Read occupancy sensors for thermal model (OR logic: any sensor "on" → occupied)
         q_occupancy = 0.0
@@ -871,7 +878,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             mode_on_since=self._mode_on_since.get(area_id),
             has_external_sensor=has_external_sensor,
             target_resolver=target_resolver,
-            q_solar=self._current_q_solar,
+            q_solar=solar_exposure.raw_solar,
             latitude=self.hass.config.latitude,
             longitude=self.hass.config.longitude,
             cloud_series=WeatherManager.extract_cloud_series(outdoor_forecast),
@@ -917,19 +924,6 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             targets=targets,
             night_active=night_mode_active,
         )
-        rapid_recovery_active = rapid_recovery_mode is not None
-        if rapid_recovery_mode:
-            mode = rapid_recovery_mode
-            power_fraction = 1.0
-            target_temp = targets.cool if mode == MODE_COOLING else targets.heat
-
-        # Force idle when target resolved to "off" (presence away or schedule off)
-        if force_off:
-            mode = MODE_IDLE
-            power_fraction = 0.0
-            rapid_recovery_active = False
-
-        # Pause climate control when any window/door is open (with configurable delays)
         raw_open = self._is_window_open(room)
         window_open = self._window_manager.update(
             area_id,
@@ -937,10 +931,20 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             room.get("window_open_delay", 0),
             room.get("window_close_delay", 0),
         )
-        if window_open:
-            mode = MODE_IDLE
-            power_fraction = 0.0
-            rapid_recovery_active = False
+        constraint_result = self._constraint_reducer.reduce(
+            ConstraintInput(
+                mode=mode,
+                power_fraction=power_fraction,
+                force_off=force_off,
+                window_open=window_open,
+                rapid_recovery_mode=rapid_recovery_mode,
+            )
+        )
+        mode = constraint_result.mode
+        power_fraction = constraint_result.power_fraction
+        rapid_recovery_active = constraint_result.rapid_recovery_active
+        if rapid_recovery_active:
+            target_temp = targets.cool if mode == MODE_COOLING else targets.heat
 
         climate_active = settings.get("climate_control_active", True) and room.get("climate_control_enabled", True)
         airflow_mix_plan_level = 0.0 if window_open or force_off else controller.last_airflow_mix_level
@@ -1015,31 +1019,32 @@ class RoomMindCoordinator(DataUpdateCoordinator):
 
         # Compressor group constraints
         all_device_eids = get_all_entity_ids(room.get("devices", []))
-        compressor_forced_on: set[str] = set()
-        compressor_forced_off: set[str] = set()
+        compressor_forced_on_f, compressor_forced_off_f = self._constraint_reducer.compressor_constraints(
+            manager=self._compressor_manager,
+            all_device_eids=tuple(all_device_eids),
+            mode=mode,
+            climate_active=climate_active,
+            window_open=window_open,
+            force_off=force_off,
+        )
 
-        if all_device_eids and climate_active and not window_open and not force_off:
-            for eid in all_device_eids:
-                if self._compressor_manager.get_group_for_entity(eid) is None:
-                    continue
-                if mode != MODE_IDLE:
-                    if not self._compressor_manager.check_can_activate(eid):
-                        compressor_forced_off.add(eid)
-                    else:
-                        enforced = self._compressor_manager.get_enforced_action(eid)
-                        if enforced is not None and enforced != "idle":
-                            if (mode == MODE_HEATING and enforced == "cool") or (
-                                mode == MODE_COOLING and enforced == "heat"
-                            ):
-                                compressor_forced_off.add(eid)
-                else:
-                    if self._compressor_manager.check_must_stay_active(eid):
-                        compressor_forced_on.add(eid)
-
-            if compressor_forced_off and compressor_forced_off >= set(all_device_eids):
-                mode = MODE_IDLE
-                power_fraction = 0.0
-                compressor_forced_off.clear()
+        compressor_constraint_result = self._constraint_reducer.reduce(
+            ConstraintInput(
+                mode=mode,
+                power_fraction=power_fraction,
+                force_off=force_off,
+                window_open=window_open,
+                rapid_recovery_active=rapid_recovery_active,
+                all_device_eids=tuple(all_device_eids),
+                compressor_forced_on=compressor_forced_on_f,
+                compressor_forced_off=compressor_forced_off_f,
+            )
+        )
+        mode = compressor_constraint_result.mode
+        power_fraction = compressor_constraint_result.power_fraction
+        rapid_recovery_active = compressor_constraint_result.rapid_recovery_active
+        compressor_forced_on = set(compressor_constraint_result.compressor_forced_on)
+        compressor_forced_off = set(compressor_constraint_result.compressor_forced_off)
 
         # Store the controller forecast only when the final decision still
         # matches the controller proposal. Post-processing constraints such as
@@ -1055,10 +1060,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             plan
             and len(plan.temperatures) > 1
             and plan_action == mode
-            and not window_open
-            and not force_off
-            and not rapid_recovery_active
-            and not compressor_forced_on
+            and compressor_constraint_result.forecast_allowed
         ):
             now_ts = time.time()
             dt_s = plan.dt_minutes * 60
@@ -1080,8 +1082,9 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             )
 
         if climate_active:
+            applied_report: AppliedCommandReport | None = None
             try:
-                await controller.async_apply(
+                applied_report = await controller.async_apply(
                     mode,
                     targets,
                     power_fraction=power_fraction,
@@ -1140,6 +1143,10 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                         "unknown",
                     )
                     self._compressor_manager.update_member(eid, actually_on)
+                elif applied_report is not None and eid in applied_report.inactive_eids:
+                    self._compressor_manager.update_member(eid, False)
+                elif applied_report is not None and eid in applied_report.active_eids:
+                    self._compressor_manager.update_member(eid, True)
                 elif eid in heat_source_commanded_eids:
                     self._compressor_manager.update_member(eid, eid in heat_source_active_eids)
                 elif mode != MODE_IDLE:
@@ -1181,9 +1188,10 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             mode=mode,
             current_temp=current_temp,
             outdoor_temp=self.outdoor_temp_effective,
-            q_solar=self._current_q_solar,
+            q_solar=solar_exposure.raw_solar,
             predicted_peak_temp=controller.predicted_peak_temp,
             has_override=has_override,
+            solar_exposure=solar_exposure,
         )
 
         # Track valve actuation during normal heating (skip excluded entities)

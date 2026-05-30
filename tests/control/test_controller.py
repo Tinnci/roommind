@@ -9,6 +9,7 @@ import pytest
 from custom_components.roommind.control.mpc_controller import (
     MPCController,
 )
+from custom_components.roommind.control.solar import SolarExposure
 from custom_components.roommind.control.thermal_model import RCModel, RoomModelManager
 
 from .conftest import build_hass, make_room
@@ -135,6 +136,35 @@ async def test_mpc_path_when_confident():
     assert mode == "heating"
     assert 0.0 < pf <= 1.0
     model_mgr.get_prediction_std.assert_called_once()
+
+
+def test_controller_uses_solar_exposure_for_raw_and_shaded_solar():
+    hass = build_hass()
+    room = make_room()
+    model_mgr = RoomModelManager()
+    ctrl = MPCController(
+        hass,
+        room,
+        model_manager=model_mgr,
+        outdoor_temp=5.0,
+        settings={},
+        has_external_sensor=True,
+        q_solar=0.9,
+        shading_factor=0.9,
+        solar_exposure=SolarExposure(raw_solar=0.4, shading_factor=0.25),
+    )
+
+    model = model_mgr.get_model("living_room")
+    predicted = ctrl._predict_idle_drift(21.0, 30.0)
+    expected = model.predict(
+        21.0,
+        5.0,
+        Q_active=0.0,
+        dt_minutes=30.0,
+        q_solar=0.1,
+    )
+    assert ctrl.q_solar == 0.4
+    assert predicted == pytest.approx(expected, abs=0.01)
 
 
 @pytest.mark.asyncio
