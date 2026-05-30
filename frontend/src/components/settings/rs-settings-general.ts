@@ -13,7 +13,7 @@ export class RsSettingsGeneral extends RsSettingsBase {
   @property({ type: Boolean }) public groupByFloor = false;
   @property({ type: Boolean }) public climateControlActive = true;
 
-  render() {
+  override render() {
     const l = this.hass.language;
 
     return html`
@@ -52,7 +52,7 @@ export class RsSettingsGeneral extends RsSettingsBase {
     `;
   }
 
-  static styles = [RsSettingsBase.settingsBaseStyles];
+  static override styles = [RsSettingsBase.settingsBaseStyles];
 }
 
 declare global {

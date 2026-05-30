@@ -16,7 +16,7 @@ export class RsAnalyticsModel extends LitElement {
 
   @state() private _expandedStat: string | null = null;
 
-  render() {
+  override render() {
     const l = this.language;
     const hasModel = !!this.data?.model?.model;
     const m = this.data?.model;
@@ -215,7 +215,7 @@ export class RsAnalyticsModel extends LitElement {
     this._expandedStat = this._expandedStat === id ? null : id;
   }
 
-  static styles = [
+  static override styles = [
     infoIconStyles,
     css`
       :host {

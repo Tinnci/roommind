@@ -25,14 +25,14 @@ export class RsAnalytics extends LitElement {
   @state() private _loading = false;
   @state() private _activeQuick: string | null = "24h";
 
-  private _refreshInterval?: ReturnType<typeof setInterval>;
+  private _refreshInterval: ReturnType<typeof setInterval> | undefined;
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
     this._refreshInterval = setInterval(() => this._silentRefresh(), 60_000);
   }
 
-  disconnectedCallback() {
+  override disconnectedCallback() {
     super.disconnectedCallback();
     if (this._refreshInterval) {
       clearInterval(this._refreshInterval);
@@ -40,19 +40,20 @@ export class RsAnalytics extends LitElement {
     }
   }
 
-  protected willUpdate(changedProps: Map<string, unknown>) {
+  protected override willUpdate(changedProps: Map<string, unknown>) {
     if (changedProps.has("initialRoom") && this.initialRoom) {
       this._selectedRoom = this.initialRoom;
     }
     let autoSelected = false;
     if (changedProps.has("rooms") && !this._selectedRoom) {
       const configured = Object.keys(this.rooms);
-      if (configured.length > 0) {
-        this._selectedRoom = configured[0];
+      const firstConfigured = configured[0];
+      if (firstConfigured) {
+        this._selectedRoom = firstConfigured;
         autoSelected = true;
         this.dispatchEvent(
           new CustomEvent("room-selected", {
-            detail: { areaId: configured[0] },
+            detail: { areaId: firstConfigured },
             bubbles: true,
             composed: true,
           }),
@@ -71,7 +72,7 @@ export class RsAnalytics extends LitElement {
     }
   }
 
-  protected render() {
+  protected override render() {
     const l = this.hass.language;
 
     return html`
@@ -178,7 +179,7 @@ export class RsAnalytics extends LitElement {
     }
   }
 
-  static styles = css`
+  static override styles = css`
     :host {
       display: block;
     }

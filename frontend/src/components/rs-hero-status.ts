@@ -5,6 +5,7 @@ import { getModeClass, formatMode } from "../utils/room-state";
 import { modeStyles } from "../styles/shared-mode-styles";
 import { localize } from "../utils/localize";
 import { formatTemp, tempUnit, toDisplayDelta } from "../utils/temperature";
+import { selectHeroMetricIds, type HeroMetricId } from "../utils/hero-metrics";
 import "./shared/rs-info-icon";
 
 const PENCIL_PATH =
@@ -29,9 +30,9 @@ export class RsHeroStatus extends LitElement {
   @state() private _editingName = false;
   @state() private _nameInput = "";
   @state() private _controlModeInfoExpanded = false;
-  private _countdownTimer?: ReturnType<typeof setInterval>;
+  private _countdownTimer: ReturnType<typeof setInterval> | undefined;
 
-  static styles = [
+  static override styles = [
     modeStyles,
     css`
       :host {
@@ -353,12 +354,12 @@ export class RsHeroStatus extends LitElement {
     `,
   ];
 
-  disconnectedCallback(): void {
+  override disconnectedCallback(): void {
     super.disconnectedCallback();
     this._clearCountdownTimer();
   }
 
-  updated(changed: Map<string, unknown>): void {
+  override updated(changed: Map<string, unknown>): void {
     if (changed.has("overrideInfo") || changed.has("config")) {
       this._updateCountdown();
     }
@@ -474,6 +475,86 @@ export class RsHeroStatus extends LitElement {
     return nothing;
   }
 
+  private _renderHeroMetric(metric: HeroMetricId, live: NonNullable<RoomConfig["live"]>) {
+    const l = this.hass?.language ?? "en";
+    switch (metric) {
+      case "humidity":
+        return html`<div class="hero-metric">
+          <ha-icon icon="mdi:water-percent"></ha-icon>
+          ${localize("hero.humidity", l, { value: live.current_humidity!.toFixed(0) })}
+        </div>`;
+      case "perceivedTemp":
+        return html`<div class="hero-metric info">
+          <ha-icon icon="mdi:human-handsup"></ha-icon>
+          ${localize("hero.perceived_temp", l, {
+            value: formatTemp(live.perceived_temp!, this.hass),
+            unit: tempUnit(this.hass),
+          })}
+        </div>`;
+      case "nightMode":
+        return html`<div class="hero-metric warning">
+          <ha-icon icon="mdi:weather-night"></ha-icon>
+          ${localize("hero.night_mode_active", l)}
+        </div>`;
+      case "rapidRecovery":
+        return html`<div class="hero-metric warning">
+          <ha-icon icon="mdi:rocket-launch-outline"></ha-icon>
+          ${localize("hero.rapid_recovery_active", l)}
+        </div>`;
+      case "deviceSetpoint":
+        return html`<div class="hero-metric">
+          <ha-icon icon=${live.mode === "cooling" ? "mdi:snowflake" : "mdi:radiator"}></ha-icon>
+          ${localize("hero.device_setpoint", l, {
+            value: formatTemp(live.device_setpoint!, this.hass),
+            unit: tempUnit(this.hass),
+          })}
+        </div>`;
+      case "activeHeatSources":
+        return html`<div class="hero-metric">
+          <ha-icon icon="mdi:swap-horizontal"></ha-icon>
+          ${live.active_heat_sources === "primary"
+            ? localize("hero.heat_source_primary", l)
+            : live.active_heat_sources === "secondary"
+              ? localize("hero.heat_source_secondary", l)
+              : localize("hero.heat_source_both", l)}
+        </div>`;
+      case "moldRisk":
+        return html`<div
+          class="hero-metric ${live.mold_risk_level === "critical"
+            ? "critical"
+            : live.mold_risk_level === "warning"
+              ? "warning"
+              : ""}"
+        >
+          <ha-icon icon="mdi:water-alert"></ha-icon>
+          ${localize("room.mold_surface_rh", l, {
+            value: String(live.mold_surface_rh!.toFixed(0)),
+          })}
+        </div>`;
+      case "moldPrevention":
+        return html`<div class="hero-metric info">
+          <ha-icon icon="mdi:shield-check"></ha-icon>
+          ${localize("card.mold_prevention", l, {
+            delta: toDisplayDelta(live.mold_prevention_delta, this.hass).toFixed(0),
+            unit: tempUnit(this.hass),
+          })}
+        </div>`;
+      case "learningPaused":
+        return html`<div class="hero-metric warning learning-paused">
+          <ha-icon icon="mdi:school-outline"></ha-icon>
+          ${localize("hero.mpc_learning_paused", l)}
+          <rs-info-icon
+            icon="mdi:information-outline"
+            .text=${localize("hero.mpc_learning_paused.outdoor_unavailable", l)}
+          ></rs-info-icon>
+        </div>`;
+      case "notControlled":
+        return html`<div class="hero-metric uncontrolled-hint">
+          ${localize("card.not_controlled", l)}
+        </div>`;
+    }
+  }
+
   private _toggleControlModeInfo(): void {
     this._controlModeInfoExpanded = !this._controlModeInfoExpanded;
   }
@@ -521,7 +602,7 @@ export class RsHeroStatus extends LitElement {
     this._nameInput = "";
   }
 
-  render() {
+  override render() {
     const live = this.config?.live;
     const mode = live?.mode;
     const accentClass = live
@@ -634,97 +715,11 @@ export class RsHeroStatus extends LitElement {
                 ${!this.isOutdoor ? this._renderTargetSection(live) : nothing}
               </div>
               <div class="hero-metrics">
-                ${live.current_humidity !== null
-                  ? html`<div class="hero-metric">
-                      <ha-icon icon="mdi:water-percent"></ha-icon>
-                      ${localize("hero.humidity", this.hass?.language ?? "en", {
-                        value: live.current_humidity.toFixed(0),
-                      })}
-                    </div>`
-                  : nothing}
-                ${live.perceived_temp != null && !this.isOutdoor
-                  ? html`<div class="hero-metric info">
-                      <ha-icon icon="mdi:human-handsup"></ha-icon>
-                      ${localize("hero.perceived_temp", this.hass?.language ?? "en", {
-                        value: formatTemp(live.perceived_temp, this.hass),
-                        unit: tempUnit(this.hass),
-                      })}
-                    </div>`
-                  : nothing}
-                ${live.night_mode?.active && !this.isOutdoor
-                  ? html`<div class="hero-metric warning">
-                      <ha-icon icon="mdi:weather-night"></ha-icon>
-                      ${localize("hero.night_mode_active", this.hass?.language ?? "en")}
-                    </div>`
-                  : nothing}
-                ${live.rapid_recovery_active && !this.isOutdoor
-                  ? html`<div class="hero-metric warning">
-                      <ha-icon icon="mdi:rocket-launch-outline"></ha-icon>
-                      ${localize("hero.rapid_recovery_active", this.hass?.language ?? "en")}
-                    </div>`
-                  : nothing}
-                ${live.device_setpoint != null && !this.isOutdoor
-                  ? html`<div class="hero-metric">
-                      <ha-icon
-                        icon=${live.mode === "cooling" ? "mdi:snowflake" : "mdi:radiator"}
-                      ></ha-icon>
-                      ${localize("hero.device_setpoint", this.hass?.language ?? "en", {
-                        value: formatTemp(live.device_setpoint, this.hass),
-                        unit: tempUnit(this.hass),
-                      })}
-                    </div>`
-                  : nothing}
-                ${live.active_heat_sources && live.active_heat_sources !== "none" && !this.isOutdoor
-                  ? html`<div class="hero-metric">
-                      <ha-icon icon="mdi:swap-horizontal"></ha-icon>
-                      ${live.active_heat_sources === "primary"
-                        ? localize("hero.heat_source_primary", this.hass?.language ?? "en")
-                        : live.active_heat_sources === "secondary"
-                          ? localize("hero.heat_source_secondary", this.hass?.language ?? "en")
-                          : localize("hero.heat_source_both", this.hass?.language ?? "en")}
-                    </div>`
-                  : nothing}
-                ${live.mold_surface_rh != null && !this.isOutdoor
-                  ? html`<div
-                      class="hero-metric ${live.mold_risk_level === "critical"
-                        ? "critical"
-                        : live.mold_risk_level === "warning"
-                          ? "warning"
-                          : ""}"
-                    >
-                      <ha-icon icon="mdi:water-alert"></ha-icon>
-                      ${localize("room.mold_surface_rh", this.hass?.language ?? "en", {
-                        value: String(live.mold_surface_rh.toFixed(0)),
-                      })}
-                    </div>`
-                  : nothing}
-                ${live.mold_prevention_active && !this.isOutdoor
-                  ? html`<div class="hero-metric info">
-                      <ha-icon icon="mdi:shield-check"></ha-icon>
-                      ${localize("card.mold_prevention", this.hass?.language ?? "en", {
-                        delta: toDisplayDelta(live.mold_prevention_delta, this.hass).toFixed(0),
-                        unit: tempUnit(this.hass),
-                      })}
-                    </div>`
-                  : nothing}
-                ${live.learning_paused_reason === "outdoor_unavailable" && !this.isOutdoor
-                  ? html`<div class="hero-metric warning learning-paused">
-                      <ha-icon icon="mdi:school-outline"></ha-icon>
-                      ${localize("hero.mpc_learning_paused", this.hass?.language ?? "en")}
-                      <rs-info-icon
-                        icon="mdi:information-outline"
-                        .text=${localize(
-                          "hero.mpc_learning_paused.outdoor_unavailable",
-                          this.hass?.language ?? "en",
-                        )}
-                      ></rs-info-icon>
-                    </div>`
-                  : nothing}
-                ${!this.climateControlActive && !this.isOutdoor
-                  ? html`<div class="hero-metric uncontrolled-hint">
-                      ${localize("card.not_controlled", this.hass?.language ?? "en")}
-                    </div>`
-                  : nothing}
+                ${selectHeroMetricIds({
+                  live,
+                  isOutdoor: this.isOutdoor,
+                  climateControlActive: this.climateControlActive,
+                }).map((metric) => this._renderHeroMetric(metric, live))}
               </div>
             `
           : this.config

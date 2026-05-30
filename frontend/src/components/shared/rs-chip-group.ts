@@ -12,7 +12,7 @@ export interface ChipItem {
 export class RsChipGroup extends LitElement {
   @property({ type: Array }) public chips: ChipItem[] = [];
 
-  static styles = css`
+  static override styles = css`
     :host {
       display: block;
     }
@@ -53,7 +53,7 @@ export class RsChipGroup extends LitElement {
     }
   `;
 
-  render() {
+  override render() {
     return html`
       <div class="chips">
         ${this.chips.map(

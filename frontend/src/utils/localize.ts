@@ -10,6 +10,7 @@ const translations: Record<string, Record<string, string>> = {
   "zh-Hans": zhHans,
   zh: zhHans,
 };
+const fallbackTranslations: Record<string, string> = en;
 
 /**
  * Look up a translation key for the given language.
@@ -21,8 +22,9 @@ export function localize(
   language: string,
   params?: Record<string, string | number>,
 ): string {
-  const lang = translations[language] ?? translations[language.split("-")[0]] ?? translations.en;
-  let result = lang[key] ?? translations.en[key] ?? key;
+  const baseLanguage = language.split("-")[0] ?? "en";
+  const lang = translations[language] ?? translations[baseLanguage] ?? fallbackTranslations;
+  let result = lang[key] ?? fallbackTranslations[key] ?? key;
 
   if (params) {
     for (const [k, v] of Object.entries(params)) {

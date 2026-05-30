@@ -30,6 +30,7 @@ from .const import (
     MAX_PREDICTION_DELTA,
     MAX_SENSOR_STALENESS,
     MODE_COOLING,
+    MODE_FAN_ONLY,
     MODE_HEATING,
     MODE_IDLE,
     OUTDOOR_UNAVAILABLE_NOTIFICATION_ID,
@@ -928,17 +929,6 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             power_fraction = 0.0
             rapid_recovery_active = False
 
-        # Store MPC prediction forecast for analytics
-        if controller.last_plan and len(controller.last_plan.temperatures) > 1:
-            plan = controller.last_plan
-            now_ts = time.time()
-            dt_s = plan.dt_minutes * 60
-            self._prediction_forecasts[area_id] = [
-                {"ts": round(now_ts + i * dt_s, 1), "temp": round(t, 2)} for i, t in enumerate(plan.temperatures)
-            ]
-        else:
-            self._prediction_forecasts.pop(area_id, None)
-
         # Pause climate control when any window/door is open (with configurable delays)
         raw_open = self._is_window_open(room)
         window_open = self._window_manager.update(
@@ -1051,6 +1041,33 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 power_fraction = 0.0
                 compressor_forced_off.clear()
 
+        # Store the controller forecast only when the final decision still
+        # matches the controller proposal. Post-processing constraints such as
+        # window-open, rapid recovery, or compressor min-run/off can invalidate
+        # the raw MPC trajectory.
+        plan = controller.last_plan
+        plan_action = None
+        if plan and plan.actions:
+            plan_action = plan.get_current_action()
+            if plan_action == MODE_FAN_ONLY:
+                plan_action = MODE_IDLE
+        if (
+            plan
+            and len(plan.temperatures) > 1
+            and plan_action == mode
+            and not window_open
+            and not force_off
+            and not rapid_recovery_active
+            and not compressor_forced_on
+        ):
+            now_ts = time.time()
+            dt_s = plan.dt_minutes * 60
+            self._prediction_forecasts[area_id] = [
+                {"ts": round(now_ts + i * dt_s, 1), "temp": round(t, 2)} for i, t in enumerate(plan.temperatures)
+            ]
+        else:
+            self._prediction_forecasts.pop(area_id, None)
+
         # --- Residual heat transition tracking ---
         # After compressor constraints may have changed mode to IDLE.
         if climate_active and system_type:
@@ -1098,6 +1115,14 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                     exc_info=True,
                 )
             # Update compressor group member states (always, even after failed apply)
+            heat_source_active_eids = (
+                {command.entity_id for command in heat_source_plan.commands if command.active}
+                if heat_source_plan is not None
+                else set()
+            )
+            heat_source_commanded_eids = (
+                {command.entity_id for command in heat_source_plan.commands} if heat_source_plan is not None else set()
+            )
             for eid in all_device_eids:
                 if self._compressor_manager.get_group_for_entity(eid) is None:
                     continue
@@ -1115,6 +1140,8 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                         "unknown",
                     )
                     self._compressor_manager.update_member(eid, actually_on)
+                elif eid in heat_source_commanded_eids:
+                    self._compressor_manager.update_member(eid, eid in heat_source_active_eids)
                 elif mode != MODE_IDLE:
                     self._compressor_manager.update_member(eid, True)
                 else:

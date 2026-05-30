@@ -11,7 +11,7 @@ export class RsRadioGroup extends LitElement {
   @property({ type: Array }) public options: RadioOption[] = [];
   @property({ type: String }) public selected = "";
 
-  static styles = css`
+  static override styles = css`
     :host {
       display: block;
     }
@@ -32,7 +32,7 @@ export class RsRadioGroup extends LitElement {
     }
   `;
 
-  render() {
+  override render() {
     return html`
       <div class="radio-group">
         ${this.options.map(

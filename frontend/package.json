@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:room-detail": "vite --host 127.0.0.1 --open /dev/room-detail-preview.html",
     "typecheck": "tsgo --noEmit",
     "build": "bun run typecheck && vite build",
     "preview": "vite preview",

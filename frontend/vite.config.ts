@@ -3,6 +3,7 @@ import { resolve } from "path";
 
 export default defineConfig({
   build: {
+    target: "es2024",
     lib: {
       entry: resolve(__dirname, "src/main.ts"),
       name: "RoomMindPanel",

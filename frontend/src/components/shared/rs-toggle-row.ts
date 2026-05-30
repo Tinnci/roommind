@@ -9,7 +9,7 @@ export class RsToggleRow extends LitElement {
   @property({ type: Boolean }) public checked = false;
   @property({ type: Boolean }) public disabled = false;
 
-  static styles = css`
+  static override styles = css`
     :host {
       display: block;
     }
@@ -37,7 +37,7 @@ export class RsToggleRow extends LitElement {
     }
   `;
 
-  render() {
+  override render() {
     return html`
       <div class="toggle-row">
         <div class="toggle-text">

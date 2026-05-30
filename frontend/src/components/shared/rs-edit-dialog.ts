@@ -22,17 +22,17 @@ export class RsEditDialog extends LitElement {
     }
   };
 
-  connectedCallback(): void {
+  override connectedCallback(): void {
     super.connectedCallback();
     window.addEventListener("keydown", this._onKeyDown);
   }
 
-  disconnectedCallback(): void {
+  override disconnectedCallback(): void {
     super.disconnectedCallback();
     window.removeEventListener("keydown", this._onKeyDown);
   }
 
-  static styles = css`
+  static override styles = css`
     :host {
       display: contents;
     }
@@ -195,7 +195,7 @@ export class RsEditDialog extends LitElement {
     }
   `;
 
-  render() {
+  override render() {
     if (!this.open) return nothing;
     return html`
       <div class="backdrop" @click=${this._onBackdropClick} role="dialog" aria-modal="true">

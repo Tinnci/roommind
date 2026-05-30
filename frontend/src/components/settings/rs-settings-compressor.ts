@@ -14,7 +14,7 @@ export class RsSettingsCompressor extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
   @property({ type: Array }) public compressorGroups: CompressorGroup[] = [];
 
-  static styles = [
+  static override styles = [
     inputStyles,
     css`
       :host {
@@ -99,7 +99,7 @@ export class RsSettingsCompressor extends LitElement {
     `,
   ];
 
-  render() {
+  override render() {
     const l = this.hass.language;
     return html`
       ${this.compressorGroups.length === 0
@@ -142,7 +142,9 @@ export class RsSettingsCompressor extends LitElement {
             const v = (e.detail?.value as string) ?? "";
             if (!v) return;
             const updated = [...this.compressorGroups];
-            updated[idx] = { ...updated[idx], members: [...updated[idx].members, v] };
+            const group = updated[idx];
+            if (!group) return;
+            updated[idx] = { ...group, members: [...group.members, v] };
             this._fire(updated);
             const picker = e.target as HTMLElement & { value?: string };
             if (picker) picker.value = "";
@@ -296,9 +298,11 @@ export class RsSettingsCompressor extends LitElement {
           .path=${"M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"}
           @click=${() => {
             const updated = [...this.compressorGroups];
+            const group = updated[groupIdx];
+            if (!group) return;
             updated[groupIdx] = {
-              ...updated[groupIdx],
-              members: updated[groupIdx].members.filter((m) => m !== entityId),
+              ...group,
+              members: group.members.filter((m) => m !== entityId),
             };
             this._fire(updated);
           }}
@@ -333,7 +337,9 @@ export class RsSettingsCompressor extends LitElement {
     value: CompressorGroup[keyof CompressorGroup],
   ) {
     const updated = [...this.compressorGroups];
-    updated[idx] = { ...updated[idx], [field]: value };
+    const group = updated[idx];
+    if (!group) return;
+    updated[idx] = { ...group, [field]: value };
     this._fire(updated);
   }
 

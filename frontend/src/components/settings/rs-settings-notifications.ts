@@ -18,7 +18,7 @@ export class RsSettingsNotifications extends RsSettingsBase {
   @property({ type: Boolean }) public moldPreventionEnabled = false;
   @property({ type: Boolean }) public moldPreventionNotify = false;
 
-  render() {
+  override render() {
     const l = this.hass.language;
 
     return html`
@@ -72,8 +72,10 @@ export class RsSettingsNotifications extends RsSettingsBase {
                           allow-custom-entity
                           @value-changed=${(e: CustomEvent) => {
                             const targets = [...this.notificationTargets];
+                            const target = targets[idx];
+                            if (!target) return;
                             targets[idx] = {
-                              ...targets[idx],
+                              ...target,
                               person_entity: (e.detail?.value as string) ?? "",
                             };
                             this._fire("moldNotificationTargets", targets);
@@ -96,7 +98,9 @@ export class RsSettingsNotifications extends RsSettingsBase {
                             const v = getSelectValue(e) as "always" | "home_only";
                             if (!v) return;
                             const targets = [...this.notificationTargets];
-                            targets[idx] = { ...targets[idx], notify_when: v };
+                            const target = targets[idx];
+                            if (!target) return;
+                            targets[idx] = { ...target, notify_when: v };
                             this._fire("moldNotificationTargets", targets);
                           }}
                           @closed=${(e: Event) => e.stopPropagation()}
@@ -183,7 +187,7 @@ export class RsSettingsNotifications extends RsSettingsBase {
     `;
   }
 
-  static styles = [
+  static override styles = [
     RsSettingsBase.settingsBaseStyles,
     css`
       .hint {

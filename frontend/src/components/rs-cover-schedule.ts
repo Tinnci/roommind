@@ -9,7 +9,7 @@ import { inputStyles } from "../styles/input-styles";
 export class RsCoverSchedule extends RsScheduleBase {
   @property({ attribute: false }) public schedules: CoverScheduleEntry[] = [];
 
-  static styles = [
+  static override styles = [
     RsScheduleBase.sharedStyles,
     inputStyles,
     css`
@@ -63,7 +63,7 @@ export class RsCoverSchedule extends RsScheduleBase {
     `,
   ];
 
-  render() {
+  override render() {
     return this.editing ? this._renderEdit() : this._renderView();
   }
 
@@ -217,7 +217,10 @@ export class RsCoverSchedule extends RsScheduleBase {
     const target = index + direction;
     if (target < 0 || target >= this.schedules.length) return;
     const next = [...this.schedules];
-    [next[index], next[target]] = [next[target], next[index]];
+    const current = next[index];
+    const targetEntry = next[target];
+    if (!current || !targetEntry) return;
+    [next[index], next[target]] = [targetEntry, current];
     this._emitSchedules(next);
   }
 

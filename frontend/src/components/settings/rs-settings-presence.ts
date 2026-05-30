@@ -16,7 +16,7 @@ export class RsSettingsPresence extends RsSettingsBase {
   @property({ type: String }) public presenceAwayAction: "eco" | "off" = "eco";
   @property({ type: Boolean }) public presenceClearsOverride = false;
 
-  render() {
+  override render() {
     const l = this.hass.language;
 
     return html`
@@ -114,7 +114,7 @@ export class RsSettingsPresence extends RsSettingsBase {
     `;
   }
 
-  static styles = [
+  static override styles = [
     RsSettingsBase.settingsBaseStyles,
     css`
       .detail-section {

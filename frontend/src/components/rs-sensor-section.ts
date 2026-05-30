@@ -27,7 +27,7 @@ export class RsSensorSection extends LitElement {
   @state() private _pickerOpen = false;
   @state() private _collapsed: Partial<Record<SensorKind, boolean>> = {};
 
-  static styles = [
+  static override styles = [
     inputStyles,
     css`
       :host {
@@ -390,7 +390,7 @@ export class RsSensorSection extends LitElement {
     `,
   ];
 
-  render() {
+  override render() {
     if (!this.editing) {
       return this._renderViewMode();
     }

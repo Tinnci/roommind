@@ -10,7 +10,7 @@ export class RsToggleCard extends LitElement {
   @property({ type: Boolean }) public checked = false;
   @property({ type: Boolean }) public disabled = false;
 
-  static styles = css`
+  static override styles = css`
     :host {
       display: block;
     }
@@ -39,7 +39,7 @@ export class RsToggleCard extends LitElement {
     }
   `;
 
-  render() {
+  override render() {
     return html`
       <ha-card>
         <div class="row">

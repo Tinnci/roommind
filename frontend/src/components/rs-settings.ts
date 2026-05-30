@@ -70,12 +70,12 @@ export class RsSettings extends LitElement {
 
   private _saveDebounce?: ReturnType<typeof setTimeout>;
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
     this._loadSettings();
   }
 
-  disconnectedCallback() {
+  override disconnectedCallback() {
     super.disconnectedCallback();
     if (this._saveDebounce) clearTimeout(this._saveDebounce);
   }
@@ -132,7 +132,7 @@ export class RsSettings extends LitElement {
     }
   }
 
-  protected render() {
+  protected override render() {
     if (!this._loaded) {
       return html`<div class="loading">${localize("panel.loading", this.hass.language)}</div>`;
     }
@@ -375,7 +375,7 @@ export class RsSettings extends LitElement {
     }
   }
 
-  static styles = css`
+  static override styles = css`
     :host {
       display: flex;
       flex-direction: column;

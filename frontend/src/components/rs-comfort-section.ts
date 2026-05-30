@@ -42,7 +42,7 @@ export class RsComfortSection extends LitElement {
   @property({ type: Boolean }) public rapidRecoveryActive = false;
   @property() public language = "en";
 
-  static styles = [
+  static override styles = [
     inputStyles,
     css`
       :host {
@@ -227,7 +227,7 @@ export class RsComfortSection extends LitElement {
     `,
   ];
 
-  render() {
+  override render() {
     return this.editing ? this._renderEdit() : this._renderView();
   }
 
@@ -466,7 +466,7 @@ export class RsComfortSection extends LitElement {
           .value=${item.role ?? "other"}
           @selected=${(e: Event) =>
             this._updateNightControl(index, {
-              role: getSelectValue(e) as NightControlConfig["role"],
+              role: (getSelectValue(e) as NightControlConfig["role"]) ?? "other",
             })}
           @closed=${(e: Event) => e.stopPropagation()}
           fixedMenuPosition
@@ -602,7 +602,9 @@ export class RsComfortSection extends LitElement {
     if (!Number.isFinite(value)) return;
     if (key.startsWith("adjacent:")) {
       const [, rawIndex, field] = key.split(":");
-      this._updateAdjacent(Number(rawIndex), { [field]: value } as Partial<AdjacentRoomConfig>);
+      if (field === "coupling_weight") {
+        this._updateAdjacent(Number(rawIndex), { coupling_weight: value });
+      }
       return;
     }
     const saveValue = key === "room_volume_m3" && value <= 0 ? null : value;

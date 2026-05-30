@@ -15,7 +15,7 @@ export class RsSettingsVacation extends RsSettingsBase {
   @property({ type: Number }) public vacationTemp = 15;
   @property({ type: String }) public vacationUntil = "";
 
-  render() {
+  override render() {
     const l = this.hass.language;
 
     return html`
@@ -67,7 +67,7 @@ export class RsSettingsVacation extends RsSettingsBase {
     `;
   }
 
-  static styles = [RsSettingsBase.settingsBaseStyles];
+  static override styles = [RsSettingsBase.settingsBaseStyles];
 }
 
 declare global {

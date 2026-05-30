@@ -26,7 +26,7 @@ export class HaTextfieldPolyfill extends LitElement {
   @property({ type: String }) public label = "";
   @property({ type: String }) public placeholder = "";
   @property({ type: String }) public suffix = "";
-  @property({ type: String }) public prefix = "";
+  @property({ type: String }) public override prefix = "";
   @property({ type: String }) public helper = "";
   @property({ type: Boolean }) public disabled = false;
   @property({ type: Boolean }) public required = false;
@@ -38,12 +38,12 @@ export class HaTextfieldPolyfill extends LitElement {
 
   @query("ha-input") private _haInput?: HaInputLike;
 
-  static shadowRootOptions: ShadowRootInit = {
+  static override shadowRootOptions: ShadowRootInit = {
     mode: "open",
     delegatesFocus: true,
   };
 
-  static styles = css`
+  static override styles = css`
     :host {
       display: inline-flex;
       flex-direction: column;

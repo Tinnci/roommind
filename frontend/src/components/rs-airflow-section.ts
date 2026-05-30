@@ -5,6 +5,7 @@ import type {
   AirflowDeviceConfig,
   AirflowDeviceStatus,
   AirflowRole,
+  CurvePoint,
   HVACOutputStatus,
   HassArea,
   HomeAssistant,
@@ -60,19 +61,19 @@ export class RsAirflowSection extends LitElement {
 
   @state() private _selectedForEdit = "";
 
-  protected willUpdate(changed: PropertyValues): void {
+  protected override willUpdate(changed: PropertyValues): void {
     if (changed.has("airflowDevices")) {
       const ids = new Set(this.airflowDevices.map((d) => d.entity_id));
       if (this._selectedForEdit && !ids.has(this._selectedForEdit)) {
         this._selectedForEdit = "";
       }
       if (!this._selectedForEdit && this.airflowDevices.length > 0) {
-        this._selectedForEdit = this.airflowDevices[0].entity_id;
+        this._selectedForEdit = this.airflowDevices[0]?.entity_id ?? "";
       }
     }
   }
 
-  static styles = [
+  static override styles = [
     masterDetailStyles,
     inputStyles,
     css`
@@ -257,7 +258,7 @@ export class RsAirflowSection extends LitElement {
     `,
   ];
 
-  render() {
+  override render() {
     return this.editing ? this._renderEdit() : this._renderView();
   }
 
@@ -757,9 +758,8 @@ export class RsAirflowSection extends LitElement {
           .value=${device.compressor_stage_observer || "auto"}
           @selected=${(e: Event) =>
             this._updateDevice(entityId, {
-              compressor_stage_observer: getSelectValue(
-                e,
-              ) as AirflowDeviceConfig["compressor_stage_observer"],
+              compressor_stage_observer:
+                (getSelectValue(e) as AirflowDeviceConfig["compressor_stage_observer"]) ?? "auto",
             })}
           @closed=${(e: Event) => e.stopPropagation()}
           fixedMenuPosition
@@ -979,10 +979,7 @@ export class RsAirflowSection extends LitElement {
       .join(", ");
   }
 
-  private _parseCurveText(
-    text: string,
-    key: "capacity_factor" | "power_w",
-  ): AirflowDeviceConfig["fan_capacity_curve"] {
+  private _parseCurveText(text: string, key: "capacity_factor" | "power_w"): CurvePoint[] {
     return text
       .split(/[,\n]/)
       .map((part) => part.trim())

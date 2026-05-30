@@ -8,7 +8,7 @@ export class RsConfirmButton extends LitElement {
   @property({ type: Boolean }) public disabled = false;
   @property({ type: Boolean }) public destructive = false;
 
-  static styles = css`
+  static override styles = css`
     :host {
       display: block;
     }
@@ -41,7 +41,7 @@ export class RsConfirmButton extends LitElement {
     }
   `;
 
-  render() {
+  override render() {
     return html`
       <button
         class="confirm-btn ${this.destructive ? "destructive" : ""}"

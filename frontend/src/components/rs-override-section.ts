@@ -26,7 +26,7 @@ export class RsOverrideSection extends LitElement {
   } | null = null;
   @state() private _optimisticClear = false;
 
-  static styles = [
+  static override styles = [
     inputStyles,
     css`
       :host {
@@ -165,7 +165,7 @@ export class RsOverrideSection extends LitElement {
     `,
   ];
 
-  updated(changedProps: Map<string, unknown>) {
+  override updated(changedProps: Map<string, unknown>) {
     // Clear optimistic override state once server data catches up
     if (changedProps.has("config") && this.config?.live) {
       const live = this.config.live;
@@ -208,7 +208,7 @@ export class RsOverrideSection extends LitElement {
     return { active: false, type: null, temp: null, until: null };
   }
 
-  render() {
+  override render() {
     const ov = this.getEffectiveOverride();
 
     return html`

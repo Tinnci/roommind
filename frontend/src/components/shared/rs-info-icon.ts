@@ -26,12 +26,12 @@ export class RsInfoIcon extends LitElement {
 
   private _onScroll = () => this._close();
 
-  disconnectedCallback(): void {
+  override disconnectedCallback(): void {
     super.disconnectedCallback();
     this._removeListeners();
   }
 
-  static styles = css`
+  static override styles = css`
     :host {
       display: inline-flex;
       position: relative;
@@ -108,7 +108,7 @@ export class RsInfoIcon extends LitElement {
     }
   `;
 
-  render() {
+  override render() {
     return html`
       <button
         type="button"

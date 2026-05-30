@@ -14,7 +14,7 @@ export class RsSettingsPanel extends LitElement {
   @property({ type: String }) public badge = "";
   @property({ type: String }) public badgeHint = "";
 
-  render() {
+  override render() {
     return html`
       <ha-expansion-panel outlined>
         <div slot="header" class="panel-header">
@@ -32,7 +32,7 @@ export class RsSettingsPanel extends LitElement {
     `;
   }
 
-  static styles = css`
+  static override styles = css`
     :host {
       display: block;
     }

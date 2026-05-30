@@ -61,6 +61,45 @@ class TestRoomMindCoordinator:
         assert len(hvac_off_calls) >= 1
 
     @pytest.mark.asyncio
+    async def test_window_open_clears_mpc_prediction_forecast(self, hass, mock_config_entry):
+        """Window-open final idle state must not expose a stale pre-window MPC plan."""
+        from custom_components.roommind.control.mpc_optimizer import MPCPlan
+
+        room_with_window = {
+            **SAMPLE_ROOM,
+            "window_sensors": ["binary_sensor.living_room_window"],
+        }
+        store = _make_store_mock({"living_room_abc12345": room_with_window})
+        hass.data = {"roommind": {"store": store}}
+        hass.states.get = MagicMock(
+            side_effect=make_mock_states_get(
+                window_sensors={"binary_sensor.living_room_window": "on"},
+            )
+        )
+        hass.services.async_call = AsyncMock()
+
+        async def _fake_evaluate(controller, _current_temp, _targets):
+            controller.last_plan = MPCPlan(
+                actions=["heating"],
+                temperatures=[18.0, 18.4],
+                dt_minutes=5,
+                power_fractions=[1.0],
+            )
+            return "heating", 1.0
+
+        coordinator = _create_coordinator(hass, mock_config_entry)
+        with patch(
+            "custom_components.roommind.coordinator.MPCController.async_evaluate",
+            new=_fake_evaluate,
+        ):
+            data = await coordinator._async_update_data()
+
+        room_state = data["rooms"]["living_room_abc12345"]
+        assert room_state["mode"] == MODE_IDLE
+        assert room_state["window_open"] is True
+        assert "living_room_abc12345" not in coordinator._prediction_forecasts
+
+    @pytest.mark.asyncio
     async def test_window_closed_normal_operation(self, hass, mock_config_entry):
         """Test that a closed window sensor allows normal heating operation."""
         room_with_window = {

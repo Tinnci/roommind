@@ -20,7 +20,7 @@ export class RsAreaCard extends LitElement {
   @property({ type: Boolean }) public canMoveUp = false;
   @property({ type: Boolean }) public canMoveDown = false;
 
-  static styles = [
+  static override styles = [
     modeStyles,
     css`
       :host {
@@ -380,7 +380,7 @@ export class RsAreaCard extends LitElement {
     `,
   ];
 
-  render() {
+  override render() {
     const hasClimateDevices = this.climateEntityCount > 0;
     const hasClimateSelected =
       (this.config?.devices?.length ?? 0) > 0 ||

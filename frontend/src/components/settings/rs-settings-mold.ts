@@ -19,7 +19,7 @@ export class RsSettingsMold extends RsSettingsBase {
   @property({ type: String }) public moldPreventionIntensity: "light" | "medium" | "strong" =
     "medium";
 
-  render() {
+  override render() {
     const l = this.hass.language;
 
     return html`
@@ -166,7 +166,7 @@ export class RsSettingsMold extends RsSettingsBase {
     `;
   }
 
-  static styles = [RsSettingsBase.settingsBaseStyles];
+  static override styles = [RsSettingsBase.settingsBaseStyles];
 }
 
 declare global {

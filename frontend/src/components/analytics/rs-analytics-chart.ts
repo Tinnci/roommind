@@ -11,6 +11,7 @@ import {
   buildChartOptions,
   type ChartBuildContext,
 } from "../../utils/chart-builder";
+import "./rs-analytics-summary";
 
 @customElement("rs-analytics-chart")
 export class RsAnalyticsChart extends LitElement {
@@ -25,7 +26,7 @@ export class RsAnalyticsChart extends LitElement {
   @state() private _hiddenSeries = new Set(["outdoor_temp"]);
   @state() private _chartInfoExpanded = false;
 
-  render() {
+  override render() {
     const l = this.language;
     const points = this.data ? [...this.data.history, ...this.data.detail] : [];
     const allPoints = [...points, ...(this.data?.forecast ?? [])];
@@ -36,8 +37,8 @@ export class RsAnalyticsChart extends LitElement {
       chartAnchor: this.chartAnchor,
       rangeStart: this.rangeStart,
       rangeEnd: this.rangeEnd,
-      forecast: this.data?.forecast,
       isOutdoor: this.isOutdoor,
+      ...(this.data?.forecast ? { forecast: this.data.forecast } : {}),
     };
     const allSeries = points.length > 0 ? buildChartSeries(points, chartCtx) : [];
 
@@ -91,6 +92,12 @@ export class RsAnalyticsChart extends LitElement {
           : nothing}
         ${points.length > 0
           ? html`
+              <rs-analytics-summary
+                .hass=${this.hass}
+                .data=${this.data}
+                .language=${l}
+                .isOutdoor=${this.isOutdoor}
+              ></rs-analytics-summary>
               <ha-chart-base
                 .hass=${this.hass}
                 .data=${displaySeries}
@@ -158,7 +165,7 @@ export class RsAnalyticsChart extends LitElement {
     this._hiddenSeries = next;
   }
 
-  static styles = [
+  static override styles = [
     infoIconStyles,
     css`
       :host {

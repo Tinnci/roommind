@@ -393,6 +393,88 @@ class TestHeatSourceOrchestration:
         assert room_state["window_open"] is True
 
     @pytest.mark.asyncio
+    async def test_compressor_tracking_respects_heat_source_inactive_devices(self, hass, mock_config_entry):
+        """Compressor active members should reflect heat-source plan commands, not room mode alone."""
+        from custom_components.roommind.managers.heat_source_orchestrator import (
+            DeviceCommand,
+            HeatSourcePlan,
+        )
+
+        room = {
+            **self.ROOM_WITH_BOTH,
+            "devices": [
+                {"entity_id": "climate.living_room", "type": "trv", "role": "auto", "heating_system_type": ""},
+                {"entity_id": "climate.living_room_ac", "type": "ac", "role": "auto", "heating_system_type": ""},
+            ],
+        }
+        store = _make_store_mock({"living_room_abc12345": room})
+        store.get_settings.return_value = {
+            "outdoor_temp_sensor": "sensor.outdoor_temp",
+            "compressor_groups": [
+                {
+                    "id": "shared_heat",
+                    "name": "Shared Heat",
+                    "members": ["climate.living_room", "climate.living_room_ac"],
+                    "min_run_minutes": 5,
+                    "min_off_minutes": 5,
+                }
+            ],
+        }
+        hass.data = {"roommind": {"store": store}}
+
+        trv_state = MagicMock()
+        trv_state.state = "off"
+        trv_state.attributes = {"hvac_modes": ["off", "heat"], "max_temp": 30}
+        ac_state = MagicMock()
+        ac_state.state = "off"
+        ac_state.attributes = {"hvac_modes": ["off", "heat", "cool"], "min_temp": 16, "max_temp": 30}
+        base_mock = make_mock_states_get(temp="18.0")
+
+        def custom_get(eid):
+            if eid == "climate.living_room":
+                return trv_state
+            if eid == "climate.living_room_ac":
+                return ac_state
+            return base_mock(eid)
+
+        hass.states.get = MagicMock(side_effect=custom_get)
+        hass.services.async_call = AsyncMock()
+
+        plan = HeatSourcePlan(
+            commands=[
+                DeviceCommand(
+                    entity_id="climate.living_room",
+                    role="primary",
+                    device_type="thermostat",
+                    active=False,
+                    power_fraction=0.0,
+                    reason="not selected",
+                ),
+                DeviceCommand(
+                    entity_id="climate.living_room_ac",
+                    role="secondary",
+                    device_type="ac",
+                    active=True,
+                    power_fraction=0.7,
+                    reason="active",
+                ),
+            ],
+            active_sources="secondary",
+            reason="test",
+        )
+
+        coordinator = _create_coordinator(hass, mock_config_entry)
+        with patch(
+            "custom_components.roommind.coordinator.evaluate_heat_sources",
+            return_value=plan,
+        ):
+            await coordinator._async_update_data()
+
+        state = coordinator._compressor_manager.get_state("shared_heat")
+        assert state is not None
+        assert state.active_members == {"climate.living_room_ac"}
+
+    @pytest.mark.asyncio
     async def test_compressor_cross_room(self, hass, mock_config_entry):
         """Compressor group correctly tracks shared state across two rooms."""
         room_a = {

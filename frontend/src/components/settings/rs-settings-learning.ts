@@ -22,7 +22,7 @@ export class RsSettingsLearning extends RsSettingsBase {
   @state() private _showLearningExceptions = false;
   @state() private _boostSelectedRoom = "";
 
-  render() {
+  override render() {
     const l = this.hass.language;
     const configuredRooms = Object.entries(this.rooms)
       .map(([areaId]) => ({
@@ -179,7 +179,7 @@ export class RsSettingsLearning extends RsSettingsBase {
     }
   }
 
-  static styles = [
+  static override styles = [
     RsSettingsBase.settingsBaseStyles,
     css`
       .hint {

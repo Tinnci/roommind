@@ -14,7 +14,7 @@ export class RsPresenceSection extends LitElement {
   @property({ type: Boolean }) public editing = false;
   @property() public language = "en";
 
-  static styles = css`
+  static override styles = css`
     :host {
       display: block;
     }
@@ -155,7 +155,7 @@ export class RsPresenceSection extends LitElement {
     }
   `;
 
-  render() {
+  override render() {
     if (!this.presenceEnabled || this.presencePersons.length === 0) return nothing;
 
     if (!this.editing) {

@@ -8,7 +8,7 @@ export class RsClimateModeSelector extends LitElement {
   @property({ type: String }) public climateMode: ClimateMode = "auto";
   @property({ type: String }) public language = "en";
 
-  static styles = css`
+  static override styles = css`
     :host {
       display: block;
     }
@@ -67,7 +67,7 @@ export class RsClimateModeSelector extends LitElement {
     }
   `;
 
-  render() {
+  override render() {
     const l = this.language;
     const modes: {
       value: ClimateMode;

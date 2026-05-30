@@ -22,7 +22,7 @@ export class RsSettingsControl extends RsSettingsBase {
   @property({ type: Boolean }) public predictionEnabled = true;
   @property({ type: String }) public scheduleOffAction: "eco" | "off" = "eco";
 
-  render() {
+  override render() {
     const l = this.hass.language;
 
     return html`
@@ -142,7 +142,7 @@ export class RsSettingsControl extends RsSettingsBase {
     this._fire("controlMode", mode);
   }
 
-  static styles = [
+  static override styles = [
     RsSettingsBase.settingsBaseStyles,
     css`
       .hint {

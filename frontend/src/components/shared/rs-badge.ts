@@ -10,7 +10,7 @@ export class RsBadge extends LitElement {
   @property({ type: String }) public label = "";
   @property({ type: String }) public hint = "";
 
-  static styles = css`
+  static override styles = css`
     :host {
       display: inline-block;
     }
@@ -28,7 +28,7 @@ export class RsBadge extends LitElement {
     }
   `;
 
-  render() {
+  override render() {
     return html`<span class="badge" title=${this.hint}>${this.label}</span>`;
   }
 }

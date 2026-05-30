@@ -15,7 +15,7 @@ export class RsSettingsReset extends RsSettingsBase {
 
   @state() private _resetSelectedRoom = "";
 
-  render() {
+  override render() {
     const l = this.hass.language;
     const configuredRooms = Object.entries(this.rooms)
       .map(([areaId]) => ({
@@ -111,7 +111,7 @@ export class RsSettingsReset extends RsSettingsBase {
     }
   }
 
-  static styles = [
+  static override styles = [
     RsSettingsBase.settingsBaseStyles,
     css`
       .hint {

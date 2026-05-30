@@ -13,7 +13,7 @@ export class RsThresholdField extends LitElement {
   @property({ type: Number }) public step: number | undefined;
   @property({ type: String }) public hint = "";
 
-  static styles = [
+  static override styles = [
     inputStyles,
     css`
       :host {
@@ -38,7 +38,7 @@ export class RsThresholdField extends LitElement {
     `,
   ];
 
-  render() {
+  override render() {
     return html`
       <div class="row">
         <ha-textfield

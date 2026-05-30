@@ -6,7 +6,7 @@ export class RsMasterDetail extends LitElement {
   @property({ type: String }) public masterWidth = "260px";
   @property({ type: Number }) public breakpoint = 720;
 
-  static styles = css`
+  static override styles = css`
     :host {
       display: block;
       container-type: inline-size;
@@ -41,7 +41,7 @@ export class RsMasterDetail extends LitElement {
     }
   `;
 
-  render() {
+  override render() {
     return html`
       <div class="wrap" style="--rs-master-width: ${this.masterWidth};">
         <div class="master"><slot name="master"></slot></div>

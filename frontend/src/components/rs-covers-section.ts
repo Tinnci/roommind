@@ -39,18 +39,18 @@ export class RsCoverSection extends LitElement {
   @state() private _scheduleCollapsed = true;
   @state() private _solarCollapsed = true;
 
-  protected willUpdate(changed: PropertyValues): void {
+  protected override willUpdate(changed: PropertyValues): void {
     if (changed.has("selectedCovers")) {
       if (this._selectedForEdit && !this.selectedCovers.has(this._selectedForEdit)) {
         this._selectedForEdit = "";
       }
       if (!this._selectedForEdit && this.selectedCovers.size > 0) {
-        this._selectedForEdit = [...this.selectedCovers][0];
+        this._selectedForEdit = [...this.selectedCovers][0] ?? "";
       }
     }
   }
 
-  static styles = [
+  static override styles = [
     masterDetailStyles,
     inputStyles,
     css`
@@ -327,7 +327,7 @@ export class RsCoverSection extends LitElement {
     `,
   ];
 
-  render() {
+  override render() {
     const l = this.hass.language;
     return this.editing ? this._renderEdit(l) : this._renderView(l);
   }

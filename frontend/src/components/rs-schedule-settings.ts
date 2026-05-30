@@ -36,7 +36,7 @@ export class RsScheduleSettings extends RsScheduleBase {
   @property({ type: Number }) public ecoCool = 27.0;
   @property({ type: String }) public climateMode: ClimateMode = "auto";
 
-  static styles = [
+  static override styles = [
     RsScheduleBase.sharedStyles,
     inputStyles,
     css`
@@ -125,7 +125,7 @@ export class RsScheduleSettings extends RsScheduleBase {
     `,
   ];
 
-  render() {
+  override render() {
     if (!this.editing) {
       return this._renderViewMode();
     }
@@ -392,6 +392,7 @@ export class RsScheduleSettings extends RsScheduleBase {
     if (state === "inactive") return localize("schedule.state_inactive", l);
 
     const schedule = this.schedules[index];
+    if (!schedule) return localize("schedule.state_active", l);
     const entityState = this.hass?.states?.[schedule.entity_id];
     if (!entityState) return localize("schedule.state_active", l);
 
@@ -443,7 +444,10 @@ export class RsScheduleSettings extends RsScheduleBase {
     const target = index + direction;
     if (target < 0 || target >= this.schedules.length) return;
     const next = [...this.schedules];
-    [next[index], next[target]] = [next[target], next[index]];
+    const current = next[index];
+    const targetEntry = next[target];
+    if (!current || !targetEntry) return;
+    [next[index], next[target]] = [targetEntry, current];
     this._emitSchedules(next);
   }
 

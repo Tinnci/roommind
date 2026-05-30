@@ -26,17 +26,17 @@ export class RsAnalyticsToolbar extends LitElement {
 
   private _boundCloseDropdowns = this._closeDropdowns.bind(this);
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
     document.addEventListener("click", this._boundCloseDropdowns);
   }
 
-  disconnectedCallback() {
+  override disconnectedCallback() {
     super.disconnectedCallback();
     document.removeEventListener("click", this._boundCloseDropdowns);
   }
 
-  protected updated(changedProps: Map<string, unknown>) {
+  protected override updated(changedProps: Map<string, unknown>) {
     if ((changedProps.has("rooms") || changedProps.has("selectedRoom")) && this.selectedRoom) {
       this.updateComplete.then(() => {
         const select = this.renderRoot?.querySelector("ha-select") as HTMLElement & {
@@ -49,7 +49,7 @@ export class RsAnalyticsToolbar extends LitElement {
     }
   }
 
-  render() {
+  override render() {
     const l = this.language;
     const configuredRooms = this._getConfiguredRooms();
 
@@ -312,7 +312,7 @@ export class RsAnalyticsToolbar extends LitElement {
     }
   }
 
-  static styles = [
+  static override styles = [
     inputStyles,
     css`
       :host {

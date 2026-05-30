@@ -58,14 +58,14 @@ export class RoomMindPanel extends LitElement {
   @state() private _reorderMode = false;
   @state() private _elementsLoaded = false;
 
-  private _refreshInterval?: ReturnType<typeof setInterval>;
+  private _refreshInterval: ReturnType<typeof setInterval> | undefined;
   private _routeApplied = false;
-  private _saveStatusTimeout?: ReturnType<typeof setTimeout>;
+  private _saveStatusTimeout: ReturnType<typeof setTimeout> | undefined;
   private _areaInfosCache: AreaInfo[] = [];
-  private _boundVisibilityHandler?: () => void;
-  private _boundConnectionReady?: () => void;
+  private _boundVisibilityHandler: (() => void) | undefined;
+  private _boundConnectionReady: (() => void) | undefined;
 
-  static styles = css`
+  static override styles = css`
     :host {
       display: block;
       font-family: var(--primary-font-family, Roboto, sans-serif);
@@ -340,7 +340,7 @@ export class RoomMindPanel extends LitElement {
     }
   `;
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
     loadHaElements().then(() => {
       this._elementsLoaded = true;
@@ -370,7 +370,7 @@ export class RoomMindPanel extends LitElement {
     }
   }
 
-  disconnectedCallback() {
+  override disconnectedCallback() {
     super.disconnectedCallback();
     if (this._refreshInterval) {
       clearInterval(this._refreshInterval);
@@ -387,7 +387,7 @@ export class RoomMindPanel extends LitElement {
     }
   }
 
-  render() {
+  override render() {
     if (!this._elementsLoaded || !this.hass) return html``;
 
     const l = this.hass.language;
@@ -902,7 +902,10 @@ export class RoomMindPanel extends LitElement {
         if (idx === -1) continue;
         const targetIdx = idx + direction;
         if (targetIdx < 0 || targetIdx >= ids.length) return;
-        [ids[idx], ids[targetIdx]] = [ids[targetIdx], ids[idx]];
+        const current = ids[idx];
+        const target = ids[targetIdx];
+        if (!current || !target) return;
+        [ids[idx], ids[targetIdx]] = [target, current];
         // Rebuild full order from all groups
         const newOrder = groups.flatMap((g) =>
           g === group ? ids : g.items.map((i) => i.area.area_id),
@@ -916,7 +919,10 @@ export class RoomMindPanel extends LitElement {
       if (idx === -1) return;
       const targetIdx = idx + direction;
       if (targetIdx < 0 || targetIdx >= ids.length) return;
-      [ids[idx], ids[targetIdx]] = [ids[targetIdx], ids[idx]];
+      const current = ids[idx];
+      const target = ids[targetIdx];
+      if (!current || !target) return;
+      [ids[idx], ids[targetIdx]] = [target, current];
       await this._saveRoomOrder(ids);
     }
   }
@@ -974,7 +980,7 @@ export class RoomMindPanel extends LitElement {
     `;
   }
 
-  protected willUpdate(changedProps: Map<string, unknown>) {
+  protected override willUpdate(changedProps: Map<string, unknown>) {
     if (changedProps.has("route") && this._routeApplied) {
       this._applyRoute();
     }
@@ -983,7 +989,7 @@ export class RoomMindPanel extends LitElement {
     }
   }
 
-  updated(changedProps: Map<string, unknown>) {
+  override updated(changedProps: Map<string, unknown>) {
     if (changedProps.has("hass") && this.hass && !this._roomsLoaded) {
       this._loadRooms();
     }

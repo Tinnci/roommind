@@ -12,7 +12,7 @@ export class RsEntityPickerField extends LitElement {
   @property({ type: String }) public currentValue = "";
   @property({ type: String }) public currentValueLabel = "";
 
-  static styles = [
+  static override styles = [
     inputStyles,
     css`
       :host {
@@ -31,7 +31,7 @@ export class RsEntityPickerField extends LitElement {
     `,
   ];
 
-  render() {
+  override render() {
     return html`
       <ha-entity-picker
         .hass=${this.hass}

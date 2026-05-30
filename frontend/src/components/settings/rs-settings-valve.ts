@@ -13,7 +13,7 @@ export class RsSettingsValve extends RsSettingsBase {
   @property({ type: Boolean }) public valveProtectionEnabled = false;
   @property({ type: Number }) public valveProtectionInterval = 7;
 
-  render() {
+  override render() {
     const l = this.hass.language;
 
     return html`
@@ -54,7 +54,7 @@ export class RsSettingsValve extends RsSettingsBase {
     `;
   }
 
-  static styles = [RsSettingsBase.settingsBaseStyles];
+  static override styles = [RsSettingsBase.settingsBaseStyles];
 }
 
 declare global {

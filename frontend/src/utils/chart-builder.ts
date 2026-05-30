@@ -256,7 +256,9 @@ export function buildChartOptions(
         }>,
       ) => {
         if (!Array.isArray(params) || params.length === 0) return "";
-        const date = new Date(params[0].value[0]);
+        const firstParam = params[0];
+        if (!firstParam) return "";
+        const date = new Date(firstParam.value[0]);
         const time = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
         let markup = `<div style="font-weight:500;margin-bottom:4px">${time}</div>`;
         let roomVal: number | null = null;
@@ -275,7 +277,7 @@ export function buildChartOptions(
           markup += `<div style="border-top:1px solid rgba(128,128,128,0.3);margin-top:4px;padding-top:4px">Delta: ${sign}${delta.toFixed(2)}\u00A0${unit}</div>`;
         }
         if (points.length > 0) {
-          const hoverTs = params[0].value[0] / 1000;
+          const hoverTs = firstParam.value[0] / 1000;
           let closest: AnalyticsDataPoint | null = null;
           let minDist = Infinity;
           for (const pt of points) {

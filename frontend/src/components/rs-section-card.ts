@@ -13,7 +13,7 @@ export class RsSectionCard extends LitElement {
   @property({ type: String }) public badgeHint = "";
   @property({ type: Boolean }) public editable = false;
 
-  static styles = css`
+  static override styles = css`
     :host {
       display: block;
     }
@@ -80,7 +80,7 @@ export class RsSectionCard extends LitElement {
     }
   `;
 
-  render() {
+  override render() {
     return html`
       <ha-card>
         <div class="section-header">

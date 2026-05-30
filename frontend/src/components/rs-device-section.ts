@@ -28,7 +28,7 @@ export class RsDeviceSection extends LitElement {
   @state() private _heatingSystemType = "";
   @state() private _selectedForEdit = "";
 
-  protected willUpdate(changed: PropertyValues): void {
+  protected override willUpdate(changed: PropertyValues): void {
     if (changed.has("devices")) {
       this._selectedThermostats = new Set(
         this.devices.filter((d) => d.type === "trv").map((d) => d.entity_id),
@@ -45,12 +45,12 @@ export class RsDeviceSection extends LitElement {
         this._selectedForEdit = "";
       }
       if (!this._selectedForEdit && this.devices.length > 0) {
-        this._selectedForEdit = this.devices[0].entity_id;
+        this._selectedForEdit = this.devices[0]?.entity_id ?? "";
       }
     }
   }
 
-  static styles = [
+  static override styles = [
     masterDetailStyles,
     inputStyles,
     css`
@@ -321,7 +321,7 @@ export class RsDeviceSection extends LitElement {
     `,
   ];
 
-  render() {
+  override render() {
     if (!this.editing) {
       return this._renderViewMode();
     }

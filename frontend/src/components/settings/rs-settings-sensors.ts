@@ -32,7 +32,7 @@ export class RsSettingsSensors extends RsSettingsBase {
     return isNaN(val) ? null : Math.round(val * 10) / 10;
   }
 
-  render() {
+  override render() {
     const l = this.hass.language;
     const outdoorTemp = this.outdoorTempSensor
       ? this._getSensorValue(this.outdoorTempSensor)
@@ -124,7 +124,7 @@ export class RsSettingsSensors extends RsSettingsBase {
     `;
   }
 
-  static styles = [
+  static override styles = [
     RsSettingsBase.settingsBaseStyles,
     css`
       .sensor-grid {

@@ -1,0 +1,296 @@
+import type {
+  HassArea,
+  HassEntity,
+  HassEntityRegistryEntry,
+  HomeAssistant,
+  RoomConfig,
+} from "../types";
+
+function state(entityId: string, value: string, friendlyName: string, attributes = {}): HassEntity {
+  return {
+    entity_id: entityId,
+    state: value,
+    attributes: {
+      friendly_name: friendlyName,
+      ...attributes,
+    },
+  };
+}
+
+function entity(entityId: string, areaId: string): HassEntityRegistryEntry {
+  return {
+    entity_id: entityId,
+    area_id: areaId,
+    device_id: entityId.replace(".", "_"),
+    platform: "preview",
+  };
+}
+
+export function createRoomDetailPreviewModel(): {
+  area: HassArea;
+  config: RoomConfig;
+  hass: HomeAssistant;
+  presencePersons: string[];
+} {
+  const area: HassArea = {
+    area_id: "bedroom",
+    name: "Bedroom",
+    picture: null,
+    floor_id: "upstairs",
+  };
+  const entityIds = [
+    "climate.bedroom_radiator",
+    "climate.bedroom_ac",
+    "sensor.bedroom_temperature",
+    "sensor.bedroom_bed_temperature",
+    "sensor.bedroom_humidity",
+    "binary_sensor.bedroom_motion",
+    "binary_sensor.bedroom_window",
+    "fan.bedroom_ceiling_fan",
+    "cover.bedroom_blinds",
+    "input_select.bedroom_schedule",
+    "input_select.bedroom_cover_schedule",
+    "light.bedroom_display",
+  ];
+
+  const hass: HomeAssistant = {
+    language: "en",
+    config: { unit_system: { temperature: "C" } },
+    areas: { bedroom: area },
+    floors: { upstairs: { floor_id: "upstairs", name: "Upstairs", level: 1 } },
+    devices: Object.fromEntries(
+      entityIds.map((entityId) => [
+        entityId.replace(".", "_"),
+        { id: entityId.replace(".", "_"), area_id: area.area_id },
+      ]),
+    ),
+    entities: Object.fromEntries(
+      entityIds.map((entityId) => [entityId, entity(entityId, area.area_id)]),
+    ),
+    states: {
+      "climate.bedroom_radiator": state("climate.bedroom_radiator", "heat", "Bedroom radiator", {
+        current_temperature: 20.8,
+        temperature: 21.5,
+        hvac_modes: ["off", "heat"],
+      }),
+      "climate.bedroom_ac": state("climate.bedroom_ac", "fan_only", "Bedroom AC", {
+        current_temperature: 20.9,
+        temperature: 24,
+        hvac_modes: ["off", "cool", "heat", "fan_only"],
+      }),
+      "sensor.bedroom_temperature": state(
+        "sensor.bedroom_temperature",
+        "20.8",
+        "Bedroom temperature",
+        {
+          unit_of_measurement: "C",
+        },
+      ),
+      "sensor.bedroom_bed_temperature": state(
+        "sensor.bedroom_bed_temperature",
+        "20.3",
+        "Bedside temperature",
+        { unit_of_measurement: "C" },
+      ),
+      "sensor.bedroom_humidity": state("sensor.bedroom_humidity", "48", "Bedroom humidity", {
+        unit_of_measurement: "%",
+      }),
+      "binary_sensor.bedroom_motion": state("binary_sensor.bedroom_motion", "on", "Bedroom motion"),
+      "binary_sensor.bedroom_window": state(
+        "binary_sensor.bedroom_window",
+        "off",
+        "Bedroom window",
+      ),
+      "fan.bedroom_ceiling_fan": state("fan.bedroom_ceiling_fan", "on", "Bedroom ceiling fan", {
+        percentage: 35,
+        percentage_step: 5,
+        preset_modes: ["sleep", "normal", "boost"],
+      }),
+      "cover.bedroom_blinds": state("cover.bedroom_blinds", "open", "Bedroom blinds", {
+        current_position: 22,
+      }),
+      "input_select.bedroom_schedule": state(
+        "input_select.bedroom_schedule",
+        "sleep",
+        "Bedroom schedule selector",
+      ),
+      "input_select.bedroom_cover_schedule": state(
+        "input_select.bedroom_cover_schedule",
+        "night",
+        "Bedroom cover schedule selector",
+      ),
+      "light.bedroom_display": state("light.bedroom_display", "off", "Bedroom display"),
+    },
+    callWS: async () => ({ ok: true }) as never,
+    callService: async () => undefined,
+  };
+
+  const config: RoomConfig = {
+    area_id: area.area_id,
+    thermostats: [],
+    acs: [],
+    devices: [
+      {
+        entity_id: "climate.bedroom_radiator",
+        type: "trv",
+        role: "primary",
+        heating_system_type: "radiator",
+      },
+      {
+        entity_id: "climate.bedroom_ac",
+        type: "ac",
+        role: "secondary",
+        idle_action: "fan_only",
+      },
+    ],
+    airflow_devices: [
+      {
+        entity_id: "fan.bedroom_ceiling_fan",
+        role: "circulation",
+        controllable: true,
+        control_enabled: true,
+        preferred_preset_mode_night: "sleep",
+        effect_weight: 0.8,
+        airflow_m3h: 180,
+      },
+    ],
+    room_volume_m3: 42,
+    control_target: "perceived_temperature",
+    quiet_hours: { start: "22:30", end: "06:30" },
+    night_mode_enabled: true,
+    night_controls: [
+      { entity_id: "light.bedroom_display", role: "indicator_light", enabled: true },
+    ],
+    night_allow_rapid_recovery: true,
+    rapid_recovery_delta_c: 1.8,
+    max_fan_level_night: 0.35,
+    sleep_temp_ramp_c: -0.8,
+    adjacent_rooms: [],
+    temperature_sensor: "sensor.bedroom_temperature",
+    temperature_sensors: ["sensor.bedroom_temperature", "sensor.bedroom_bed_temperature"],
+    humidity_sensor: "sensor.bedroom_humidity",
+    occupancy_sensors: ["binary_sensor.bedroom_motion"],
+    window_sensors: ["binary_sensor.bedroom_window"],
+    window_open_delay: 30,
+    window_close_delay: 90,
+    climate_mode: "auto",
+    schedules: [{ entity_id: "schedule.bedroom_climate" }],
+    schedule_selector_entity: "input_select.bedroom_schedule",
+    comfort_heat: 21,
+    comfort_cool: 24.5,
+    eco_heat: 17,
+    eco_cool: 27,
+    display_name: "Bedroom",
+    presence_persons: ["person.alex"],
+    covers: ["cover.bedroom_blinds"],
+    covers_auto_enabled: true,
+    covers_deploy_threshold: 1.2,
+    covers_min_position: 18,
+    covers_override_minutes: 45,
+    cover_schedules: [{ entity_id: "schedule.bedroom_covers", mode: "gate" }],
+    cover_schedule_selector_entity: "input_select.bedroom_cover_schedule",
+    cover_orientations: { "cover.bedroom_blinds": 230 },
+    covers_outdoor_min_temp: 8,
+    covers_night_close: true,
+    covers_night_position: 8,
+    covers_snap_deploy: true,
+    cover_min_positions: { "cover.bedroom_blinds": 18 },
+    ignore_presence: false,
+    is_outdoor: false,
+    valve_protection_exclude: [],
+    heat_source_orchestration: true,
+    heat_source_primary_delta: 1.4,
+    heat_source_outdoor_threshold: 5,
+    heat_source_ac_min_outdoor: -12,
+    climate_control_enabled: true,
+    live: {
+      current_temp: 20.8,
+      current_humidity: 48,
+      target_temp: 21.2,
+      heat_target: 21,
+      cool_target: 24.5,
+      mode: "heating",
+      heating_power: 42,
+      device_setpoint: 21.5,
+      override_active: false,
+      override_type: null,
+      override_temp: null,
+      override_until: null,
+      override_suppressed: false,
+      active_schedule_index: 0,
+      window_open: false,
+      confidence: 0.84,
+      mpc_active: true,
+      presence_away: false,
+      mold_risk_level: "ok",
+      mold_surface_rh: 61,
+      mold_prevention_active: false,
+      mold_prevention_delta: 0,
+      blind_position: 22,
+      cover_auto_paused: false,
+      cover_forced_reason: "",
+      active_cover_schedule_index: 0,
+      active_heat_sources: "radiator",
+      learning_paused_reason: null,
+      q_fan_mix: 0.34,
+      q_vent: 0,
+      airflow_ach: 1.7,
+      perceived_temp: 20.4,
+      airflow_active: true,
+      airflow_plan_level: 0.35,
+      airflow_mix_plan_level: 0.35,
+      airflow_vent_plan_level: 0,
+      airflow_devices_status: [
+        {
+          entity_id: "fan.bedroom_ceiling_fan",
+          role: "circulation",
+          available: true,
+          q: 0.34,
+          controllable: true,
+          control_enabled: true,
+          domain: "fan",
+          percentage: 35,
+          preset_mode: "sleep",
+          preset_modes: ["sleep", "normal", "boost"],
+        },
+      ],
+      airflow_command_status: [
+        {
+          entity_id: "fan.bedroom_ceiling_fan",
+          domain: "fan",
+          role: "circulation",
+          planned_level: 0.35,
+          outcome: "applied",
+          commanded_level: 0.35,
+        },
+      ],
+      hvac_output_status: null,
+      night_mode: {
+        active: true,
+        quiet_hours: { start: "22:30", end: "06:30" },
+        sleep_temp_ramp_c: -0.8,
+        max_fan_level: 0.35,
+      },
+      night_control_status: [
+        {
+          entity_id: "light.bedroom_display",
+          role: "indicator_light",
+          active: true,
+          outcome: "applied",
+          target_value: false,
+          restore_after_night: true,
+        },
+      ],
+      rapid_recovery_active: false,
+      effective_control_target: "perceived_temperature",
+      coupling_status: [],
+    },
+  };
+
+  return {
+    area,
+    config,
+    hass,
+    presencePersons: ["person.alex", "person.sam"],
+  };
+}

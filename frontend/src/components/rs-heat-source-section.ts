@@ -15,7 +15,7 @@ export class RsHeatSourceSection extends LitElement {
   @property({ type: Number }) public acMinOutdoor = -15.0;
   @property({ type: Boolean }) public editing = false;
 
-  static styles = [
+  static override styles = [
     inputStyles,
     css`
       :host {
@@ -120,7 +120,7 @@ export class RsHeatSourceSection extends LitElement {
     `,
   ];
 
-  render() {
+  override render() {
     const lang = this.hass.language;
 
     if (!this.editing) {
