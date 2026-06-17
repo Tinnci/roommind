@@ -14,10 +14,14 @@ concurrency:
   group: release-${{ github.event.release.tag_name || inputs.tag_name || github.ref }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   build-and-upload:
     name: Build and upload release asset
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: write
     steps:

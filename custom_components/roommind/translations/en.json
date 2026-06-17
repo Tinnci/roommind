@@ -23,23 +23,6 @@
       }
     }
   },
-  "notifications": {
-    "common": {
-      "not_configured": "not configured"
-    },
-    "outdoor_unavailable": {
-      "title": "RoomMind: outdoor temperature unavailable",
-      "message": "RoomMind cannot read an outdoor temperature. Thermal model learning is paused for all rooms until a valid source returns.\n\n• Outdoor sensor: `{sensor_id}`\n• Weather entity: `{weather_entity}`\n\nCheck that the sensor is online or configure a weather entity in Settings → Outdoor."
-    },
-    "mold_risk": {
-      "title": "RoomMind: Mold risk warning",
-      "message": "Mold risk in {area_name}: {humidity}% humidity, estimated surface RH {surface_rh}%."
-    },
-    "mold_prevention": {
-      "title": "RoomMind: Mold prevention",
-      "message": "Mold prevention active in {area_name}: temperature raised by {delta}{unit}."
-    }
-  },
   "entity": {
     "sensor": {
       "target_temperature": {

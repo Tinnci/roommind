@@ -10,6 +10,7 @@ from custom_components.roommind.utils.i18n import get_translation
 
 LANGUAGES = ("en", "de", "zh-Hans")
 BACKEND_TRANSLATION_ROOT = Path("custom_components/roommind/translations")
+RUNTIME_TRANSLATION_ROOT = Path("custom_components/roommind/runtime_translations")
 FRONTEND_LOCALE_ROOT = Path("frontend/src/locales")
 
 RUNTIME_NOTIFICATION_KEYS = (
@@ -68,6 +69,12 @@ def test_backend_translation_keys_are_complete_across_supported_languages() -> N
         assert set(flattened[language]) == expected_keys
 
 
+def test_backend_translations_only_use_home_assistant_schema_keys() -> None:
+    """Runtime-only text must not leak into HA's strict translation schema."""
+    for language in LANGUAGES:
+        assert "notifications" not in _load_json(BACKEND_TRANSLATION_ROOT / f"{language}.json")
+
+
 def test_frontend_locale_keys_are_complete_across_supported_languages() -> None:
     """Frontend locale files must stay structurally identical for all supported languages."""
     flattened = {language: _flatten(_load_json(FRONTEND_LOCALE_ROOT / f"{language}.json")) for language in LANGUAGES}
@@ -78,11 +85,22 @@ def test_frontend_locale_keys_are_complete_across_supported_languages() -> None:
 
 
 def test_runtime_notification_translations_exist_in_backend_locales() -> None:
-    """Notifications sent outside the frontend need HA-side translations too."""
+    """Notifications sent outside the frontend need runtime translations."""
     for language in LANGUAGES:
-        flattened = _flatten(_load_json(BACKEND_TRANSLATION_ROOT / f"{language}.json"))
+        flattened = _flatten(_load_json(RUNTIME_TRANSLATION_ROOT / f"{language}.json"))
         for key in RUNTIME_NOTIFICATION_KEYS:
             assert key in flattened, f"{language} is missing {key}"
+
+
+def test_runtime_translation_keys_are_complete_across_supported_languages() -> None:
+    """Runtime-only locale files must stay structurally identical."""
+    flattened = {
+        language: _flatten(_load_json(RUNTIME_TRANSLATION_ROOT / f"{language}.json")) for language in LANGUAGES
+    }
+    expected_keys = set().union(*(set(keys) for keys in flattened.values()))
+
+    for language in LANGUAGES:
+        assert set(flattened[language]) == expected_keys
 
 
 def test_frontend_airflow_skip_reasons_have_supported_translations() -> None:

@@ -10,6 +10,7 @@ from typing import Any, cast
 from homeassistant.core import HomeAssistant
 
 _TRANSLATION_DIR = Path(__file__).parents[1] / "translations"
+_RUNTIME_TRANSLATION_DIR = Path(__file__).parents[1] / "runtime_translations"
 _DEFAULT_LANGUAGE = "en"
 _SUPPORTED_LANGUAGES = {"en", "de", "zh-Hans"}
 
@@ -17,6 +18,12 @@ _SUPPORTED_LANGUAGES = {"en", "de", "zh-Hans"}
 @cache
 def _load_language(language: str) -> dict[str, Any]:
     path = _TRANSLATION_DIR / f"{language}.json"
+    return cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
+
+
+@cache
+def _load_runtime_language(language: str) -> dict[str, Any]:
+    path = _RUNTIME_TRANSLATION_DIR / f"{language}.json"
     return cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
 
 
@@ -43,5 +50,11 @@ def _lookup(data: dict[str, Any], key: str) -> str | None:
 def get_translation(hass: HomeAssistant, key: str, **placeholders: Any) -> str:
     """Return a translated backend string using Home Assistant's configured language."""
     language = _normalise_language(getattr(getattr(hass, "config", None), "language", None))
-    template = _lookup(_load_language(language), key) or _lookup(_load_language(_DEFAULT_LANGUAGE), key) or key
+    template = (
+        _lookup(_load_runtime_language(language), key)
+        or _lookup(_load_language(language), key)
+        or _lookup(_load_runtime_language(_DEFAULT_LANGUAGE), key)
+        or _lookup(_load_language(_DEFAULT_LANGUAGE), key)
+        or key
+    )
     return template.format(**placeholders)

@@ -3,6 +3,13 @@ name: Mutation Testing
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   mutation-test:
     name: Mutation Testing

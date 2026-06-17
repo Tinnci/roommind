@@ -1,0 +1,19 @@
+{
+  "notifications": {
+    "common": {
+      "not_configured": "nicht konfiguriert"
+    },
+    "outdoor_unavailable": {
+      "title": "RoomMind: Außentemperatur nicht verfügbar",
+      "message": "RoomMind kann keine Außentemperatur lesen. Das Lernen des thermischen Modells ist für alle Räume pausiert, bis wieder eine gültige Quelle verfügbar ist.\n\n• Außensensor: `{sensor_id}`\n• Wetter-Entität: `{weather_entity}`\n\nPrüfen Sie, ob der Sensor online ist, oder konfigurieren Sie eine Wetter-Entität unter Einstellungen → Außen."
+    },
+    "mold_risk": {
+      "title": "RoomMind: Schimmelrisiko-Warnung",
+      "message": "Schimmelrisiko in {area_name}: {humidity}% Luftfeuchte, geschätzte Oberflächenfeuchte {surface_rh}%."
+    },
+    "mold_prevention": {
+      "title": "RoomMind: Schimmelprävention",
+      "message": "Schimmelprävention aktiv in {area_name}: Temperatur um {delta}{unit} erhöht."
+    }
+  }
+}
