@@ -6,6 +6,18 @@
  */
 /* eslint-disable @typescript-eslint/no-explicit-any -- HA runtime APIs are untyped */
 export const loadHaElements = async (): Promise<void> => {
+  if (!customElements.get("ha-radio")) {
+    try {
+      const { HaRadioPolyfill } = await import("./ha-radio-polyfill");
+      if (!customElements.get("ha-radio")) {
+        customElements.define("ha-radio", HaRadioPolyfill);
+      }
+    } catch {
+      // The affected radio controls will remain unavailable; keep loading the
+      // rest of the HA elements so the panel does not fail as a whole.
+    }
+  }
+
   if (customElements.get("ha-entity-picker")) return;
 
   // Step 1: Load base HA components via partial-panel-resolver.
@@ -73,22 +85,23 @@ export const loadHaElements = async (): Promise<void> => {
 
   await customElements.whenDefined("ha-card");
 
-  // Step 2b: HA 2026.5 removed `ha-textfield` (home-assistant/frontend#30349).
-  // If it is missing but the successor `ha-input` exists, register a
-  // wrapper so existing `<ha-textfield>` templates keep working. Older HA
-  // versions retain their native ha-textfield and fall through untouched.
+  // Step 2b: HA 2026.5 removed `ha-textfield` in favour of `ha-input`.
+  // Register a wrapper whenever `ha-textfield` is missing. Waiting for
+  // `ha-input` is best-effort only; on newer HA frontends it may be imported
+  // after this loader finishes, and the nested element upgrades later.
   if (!customElements.get("ha-textfield")) {
     try {
       await Promise.race([
         customElements.whenDefined("ha-input"),
-        new Promise<void>((_, rej) => setTimeout(() => rej(new Error("timeout")), 5000)),
+        new Promise<void>((resolve) => setTimeout(resolve, 5000)),
       ]);
       const { HaTextfieldPolyfill } = await import("./ha-textfield-polyfill");
       if (!customElements.get("ha-textfield")) {
         customElements.define("ha-textfield", HaTextfieldPolyfill);
       }
     } catch {
-      // ha-input not available — ha-textfield templates will render empty
+      // The affected text fields will remain unavailable; keep loading chart
+      // and date range elements instead of aborting panel startup.
     }
   }
 

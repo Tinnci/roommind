@@ -314,7 +314,9 @@ export function buildChartOptions(
             }
           }
         }
-        return markup;
+        const tooltipEl = document.createElement("div");
+        tooltipEl.innerHTML = markup;
+        return tooltipEl;
       },
     },
     grid: {

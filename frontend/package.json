@@ -4,15 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "dev:room-detail": "vite --host 127.0.0.1 --open /dev/room-detail-preview.html",
-    "typecheck": "tsgo --noEmit",
-    "build": "bun run typecheck && vite build",
-    "preview": "vite preview",
+    "dev": "bun --bun vite",
+    "dev:room-detail": "bun --bun vite --host 127.0.0.1 --open /dev/room-detail-preview.html",
+    "typecheck": "bun --bun tsgo --noEmit",
+    "build": "bun run typecheck && bun --bun vite build",
+    "preview": "bun --bun vite preview",
     "preview:regression": "bun scripts/preview-regression.ts",
-    "lint": "eslint src/",
-    "format": "prettier --write src/",
-    "format:check": "prettier --check src/"
+    "lint": "bun --bun eslint src/",
+    "format": "bun --bun prettier --write src/",
+    "format:check": "bun --bun prettier --check src/"
   },
   "dependencies": {
     "home-assistant-js-websocket": "^9.4.0",

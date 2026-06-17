@@ -67,6 +67,46 @@ def test_observation_falls_back_to_last_updated_when_last_reported_missing():
     assert observation.age_s == pytest.approx(15.0)
 
 
+def test_diagnostics_exposes_ha_freshness_metadata():
+    """Fusion diagnostics include HA timestamp source and serialized timestamps."""
+    now = datetime(2026, 5, 24, 12, 0, tzinfo=UTC)
+    fusion = SensorFusionManager()
+    observation = fusion.observation_from_state(
+        "sensor.wall",
+        _state(
+            "20.0",
+            last_reported=now - timedelta(seconds=5),
+            last_updated=now - timedelta(seconds=10),
+            last_changed=now - timedelta(minutes=30),
+        ),
+        now=now,
+        value_c=20.0,
+        is_primary=True,
+    )
+
+    assert observation is not None
+    diagnostics = fusion.diagnostics([observation], power_fraction=0.0)
+
+    assert diagnostics == [
+        {
+            "entity_id": "sensor.wall",
+            "is_primary": True,
+            "value": 20.0,
+            "corrected_value": 20.0,
+            "static_bias": 0.0,
+            "active_bias": 0.0,
+            "k_mix": 0.0,
+            "age_s": 5.0,
+            "variance": 0.04,
+            "freshness_source": "last_reported",
+            "freshness_status": "fresh",
+            "last_reported": "2026-05-24T11:59:55+00:00",
+            "last_updated": "2026-05-24T11:59:50+00:00",
+            "last_changed": "2026-05-24T11:30:00+00:00",
+        }
+    ]
+
+
 def test_observation_inflates_variance_for_aging_sensor():
     """Aging-but-not-stale sensors remain usable with lower trust."""
     now = datetime(2026, 5, 24, 12, 0, tzinfo=UTC)

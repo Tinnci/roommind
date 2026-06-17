@@ -92,7 +92,9 @@ def plan_fan_airflow(
     preset_mode = config.get("preferred_preset_mode")
     if preset_mode:
         preset_modes = [str(item) for item in attrs.get("preset_modes") or []]
-        if not supports_feature(attrs, FanEntityFeature.PRESET_MODE) or (preset_modes and preset_mode not in preset_modes):
+        if not supports_feature(attrs, FanEntityFeature.PRESET_MODE) or (
+            preset_modes and preset_mode not in preset_modes
+        ):
             skipped_services.append({"service": "fan.set_preset_mode", "reason": "preset_unsupported"})
         else:
             commands.append(
@@ -166,11 +168,15 @@ def plan_climate_airflow(
         if not supports_feature(attrs, ClimateEntityFeature.FAN_MODE):
             skipped_services.append({"service": "climate.set_fan_mode", "reason": "fan_mode_unsupported"})
         else:
-            commands.append(AirflowServiceCommand("climate", "set_fan_mode", {"entity_id": entity_id, "fan_mode": fan_mode}))
+            commands.append(
+                AirflowServiceCommand("climate", "set_fan_mode", {"entity_id": entity_id, "fan_mode": fan_mode})
+            )
 
     preset_mode = select_climate_preset(config, mode, night_active=night_active)
     if preset_mode:
-        if not supports_feature(attrs, ClimateEntityFeature.PRESET_MODE) or (preset_modes and preset_mode not in preset_modes):
+        if not supports_feature(attrs, ClimateEntityFeature.PRESET_MODE) or (
+            preset_modes and preset_mode not in preset_modes
+        ):
             skipped_services.append({"service": "climate.set_preset_mode", "reason": "preset_unsupported"})
         else:
             commands.append(
@@ -277,4 +283,3 @@ def select_climate_preset(config: dict[str, Any], mode: str, *, night_active: bo
     if mode in (MODE_HEATING, MODE_COOLING):
         return str(config.get("preferred_preset_mode_thermal") or "")
     return str(config.get("preferred_preset_mode_idle") or "")
-

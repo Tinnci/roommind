@@ -8,7 +8,7 @@
 
 ## Checklist
 
-- [ ] Backend tests pass (`pytest tests/ -v`)
-- [ ] Frontend builds without errors (`cd frontend && npm run build`)
-- [ ] New strings added to both `en.json` and `de.json` (if applicable)
+- [ ] Backend tests pass (`uv run pytest tests/ -v`)
+- [ ] Frontend builds without errors (`cd frontend && bun run build`)
+- [ ] New strings added to `en.json`, `de.json`, and `zh-Hans.json` (if applicable)
 - [ ] Tested on mobile layout (if UI change)

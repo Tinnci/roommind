@@ -1,24 +1,39 @@
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.5
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
     hooks:
-      - id: ruff
-        args: [--fix]
+      - id: check-yaml
+        exclude: ^\.devcontainer/
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-added-large-files
+
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check --fix
+        language: system
+        types_or: [python, pyi]
+
       - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format
+        language: system
+        types_or: [python, pyi]
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.19.1
-    hooks:
       - id: mypy
-        additional_dependencies: []
-        args: [--config-file=pyproject.toml]
+        name: mypy
+        entry: uv run mypy --explicit-package-bases custom_components/roommind
+        language: system
         pass_filenames: false
-        entry: mypy custom_components/roommind/
 
-  - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: v4.0.0-alpha.8
-    hooks:
-      - id: prettier
-        types_or: [ts, javascript]
-        additional_dependencies:
-          - prettier@3
+      - id: frontend-format
+        name: frontend prettier
+        entry: bash -c 'cd frontend && bun run format'
+        language: system
+        pass_filenames: false
+        files: ^frontend/src/.*\.(ts|js|json)$

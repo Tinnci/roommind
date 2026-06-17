@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 import time
@@ -25,6 +26,16 @@ from ..control.mpc_controller import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+_RANGE_MAX_AGE: dict[str, int] = {
+    "12h": 43200,
+    "24h": 86400,
+    "2d": 172800,
+    "7d": 604800,
+    "14d": 1209600,
+    "30d": 2592000,
+    "90d": 7776000,
+}
 
 
 def _safe_float(value: str) -> float | None:
@@ -180,6 +191,7 @@ async def build_analytics_data(
     This is the core data assembly extracted from websocket_get_analytics.
     """
     settings = store.get_settings()
+    room_config = store.get_room(area_id) or {}
     history_store = getattr(coordinator, "_history_store", None)
 
     # Read history data -- custom timestamps take precedence over range preset
@@ -187,29 +199,25 @@ async def build_analytics_data(
     history: list = []
     if history_store:
         if custom_start is not None:
-            detail = _csv_to_points(
-                await hass.async_add_executor_job(history_store.read_detail, area_id, None, custom_start, custom_end)
+            detail_rows, history_rows = await asyncio.gather(
+                hass.async_add_executor_job(history_store.read_detail, area_id, None, custom_start, custom_end),
+                hass.async_add_executor_job(history_store.read_history, area_id, None, custom_start, custom_end),
             )
-            history = _csv_to_points(
-                await hass.async_add_executor_job(history_store.read_history, area_id, None, custom_start, custom_end)
-            )
+            detail = _csv_to_points(detail_rows)
+            history = _csv_to_points(history_rows)
         else:
-            max_age_map = {
-                "12h": 43200,
-                "24h": 86400,
-                "2d": 172800,
-                "7d": 604800,
-                "14d": 1209600,
-                "30d": 2592000,
-                "90d": 7776000,
-            }
-            max_age = max_age_map.get(range_key, 43200)
-            detail = _csv_to_points(await hass.async_add_executor_job(history_store.read_detail, area_id, max_age))
-            history = _csv_to_points(await hass.async_add_executor_job(history_store.read_history, area_id, max_age))
+            max_age = _RANGE_MAX_AGE.get(range_key, _RANGE_MAX_AGE["12h"])
+            detail_rows, history_rows = await asyncio.gather(
+                hass.async_add_executor_job(history_store.read_detail, area_id, max_age),
+                hass.async_add_executor_job(history_store.read_history, area_id, max_age),
+            )
+            detail = _csv_to_points(detail_rows)
+            history = _csv_to_points(history_rows)
 
     # Model info (only if estimator exists -- avoid auto-creating for unknown rooms)
     model_info: dict = {}
     mpc_active = False
+    acs_can_heat: bool | None = None
     if coordinator:
         mgr = coordinator._model_manager
         if area_id in mgr._estimators:
@@ -217,13 +225,13 @@ async def build_analytics_data(
             rc = est.get_model()
             pred_std_idle = est.prediction_std(0.0, 20.0, 15.0, 5.0)
             pred_std_heat = est.prediction_std(rc.Q_heat, 20.0, 10.0, 5.0)
-            room_config = store.get_room(area_id) or {}
             has_ext_sensor = bool(room_config.get("temperature_sensor"))
             if has_ext_sensor:
+                acs_can_heat = check_acs_can_heat(hass, room_config)
                 can_heat, can_cool = get_can_heat_cool(
                     room_config,
                     coordinator.outdoor_temp_effective,
-                    acs_can_heat=check_acs_can_heat(hass, room_config),
+                    acs_can_heat=acs_can_heat,
                 )
                 T_out = (
                     coordinator.outdoor_temp_effective
@@ -252,7 +260,6 @@ async def build_analytics_data(
             }
 
     # Build merged forecast: same format as history points, on a shared 5-min grid
-    room_config = store.get_room(area_id) or {}
     mold_delta = 0.0
     if coordinator:
         live = coordinator.rooms.get(area_id, {})
@@ -337,6 +344,8 @@ async def build_analytics_data(
                         sim_q_occupancy = 1.0
                         break
 
+                if acs_can_heat is None:
+                    acs_can_heat = check_acs_can_heat(hass, room_config)
                 pred_temps = cast(
                     list[float | None],
                     simulate_prediction(
@@ -351,7 +360,7 @@ async def build_analytics_data(
                         settings=settings,
                         all_points=all_points,
                         solar_series=solar_series,
-                        acs_can_heat=check_acs_can_heat(hass, room_config),
+                        acs_can_heat=acs_can_heat,
                         q_residual=sim_q_residual,
                         heating_system_type=system_type,
                         heating_duration_minutes=sim_heat_dur,

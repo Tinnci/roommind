@@ -49,4 +49,3 @@ def test_zero_level_user_owned_fan_only_is_blocked() -> None:
     assert plan.skip_reason == "fan_only_not_roommind_owned"
     assert plan.fan_only_ownership is None
     assert plan.assumed_level is None
-

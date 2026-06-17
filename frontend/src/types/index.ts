@@ -23,6 +23,23 @@ export interface CoverScheduleEntry {
   mode?: "force" | "gate";
 }
 
+export interface SensorFusionStatus {
+  entity_id: string;
+  is_primary: boolean;
+  value: number;
+  corrected_value: number;
+  static_bias: number;
+  active_bias: number;
+  k_mix: number;
+  age_s: number;
+  variance: number;
+  freshness_source: "last_reported" | "last_updated" | "last_changed" | "none" | string;
+  freshness_status: "fresh" | "aging" | "stale" | string;
+  last_reported?: string | null;
+  last_updated?: string | null;
+  last_changed?: string | null;
+}
+
 export interface RoomLiveData {
   current_temp: number | null;
   current_humidity: number | null;
@@ -62,6 +79,8 @@ export interface RoomLiveData {
   airflow_vent_plan_level?: number;
   airflow_devices_status?: AirflowDeviceStatus[];
   airflow_command_status?: AirflowCommandStatus[];
+  sensor_conflict?: number;
+  sensor_fusion_status?: SensorFusionStatus[];
   hvac_output_status?: HVACOutputStatus | null;
   night_mode?: NightModeLiveStatus;
   night_control_status?: NightControlStatus[];
@@ -137,6 +156,11 @@ export interface AirflowDeviceStatus {
   levels?: number[];
   effect_weight?: number;
   airflow_m3h?: number | null;
+  age_s?: number | null;
+  freshness_source?: "last_reported" | "last_updated" | "last_changed" | "none" | string;
+  last_reported?: string | null;
+  last_updated?: string | null;
+  last_changed?: string | null;
 }
 
 export interface SkippedService {

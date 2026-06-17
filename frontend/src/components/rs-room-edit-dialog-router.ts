@@ -235,6 +235,8 @@ export class RsRoomEditDialogRouter extends LitElement {
           .windowOpenDelay=${draft.windowOpenDelay}
           .windowCloseDelay=${draft.windowCloseDelay}
           .heatingSystemType=${resolveHeatingSystemType(draft.devices)}
+          .sensorConflict=${live?.sensor_conflict ?? 0}
+          .sensorFusionStatus=${live?.sensor_fusion_status ?? []}
           .language=${this.hass.language}
           @sensor-changed=${this._forward("sensor-changed")}
         ></rs-sensor-section>`;

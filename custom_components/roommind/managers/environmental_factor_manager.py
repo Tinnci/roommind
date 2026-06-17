@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 from homeassistant.const import STATE_OFF, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
 AIRFLOW_ROLE_CIRCULATION = "circulation"
 AIRFLOW_ROLE_VENTILATION = "ventilation"
@@ -39,6 +41,11 @@ class AirflowDeviceStatus:
     levels: list[float] = field(default_factory=lambda: [0.0])
     effect_weight: float = 1.0
     airflow_m3h: float | None = None
+    age_s: float | None = None
+    freshness_source: str = "none"
+    last_reported: str | None = None
+    last_updated: str | None = None
+    last_changed: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,6 +87,11 @@ class AirflowFactors:
                 "levels": status.levels,
                 "effect_weight": status.effect_weight,
                 "airflow_m3h": status.airflow_m3h,
+                "age_s": status.age_s,
+                "freshness_source": status.freshness_source,
+                "last_reported": status.last_reported,
+                "last_updated": status.last_updated,
+                "last_changed": status.last_changed,
             }
             for status in self.statuses
         ]
@@ -154,6 +166,7 @@ class EnvironmentalFactorManager:
         airflow_m3h = _safe_float(config.get("airflow_m3h"))
         domain = entity_id.split(".", 1)[0] if "." in entity_id else ""
         state = self.hass.states.get(entity_id) if entity_id else None
+        freshness = _state_freshness(state)
 
         if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
             return AirflowDeviceStatus(
@@ -165,12 +178,31 @@ class EnvironmentalFactorManager:
                 domain=domain,
                 effect_weight=effect_weight,
                 airflow_m3h=airflow_m3h,
+                **freshness,
             )
 
         if domain == "fan":
-            return self._read_fan(entity_id, role, state, controllable, control_enabled, effect_weight, airflow_m3h)
+            return self._read_fan(
+                entity_id,
+                role,
+                state,
+                controllable,
+                control_enabled,
+                effect_weight,
+                airflow_m3h,
+                freshness,
+            )
         if domain == "climate":
-            return self._read_climate(entity_id, role, state, controllable, control_enabled, effect_weight, airflow_m3h)
+            return self._read_climate(
+                entity_id,
+                role,
+                state,
+                controllable,
+                control_enabled,
+                effect_weight,
+                airflow_m3h,
+                freshness,
+            )
 
         return AirflowDeviceStatus(
             entity_id=entity_id,
@@ -181,6 +213,7 @@ class EnvironmentalFactorManager:
             domain=domain,
             effect_weight=effect_weight,
             airflow_m3h=airflow_m3h,
+            **freshness,
         )
 
     def _read_fan(
@@ -192,6 +225,7 @@ class EnvironmentalFactorManager:
         control_enabled: bool,
         effect_weight: float,
         airflow_m3h: float | None,
+        freshness: dict[str, Any],
     ) -> AirflowDeviceStatus:
         percentage = _safe_float(state.attributes.get("percentage"))
         preset_mode = state.attributes.get("preset_mode")
@@ -229,6 +263,7 @@ class EnvironmentalFactorManager:
             levels=_unique_levels(levels),
             effect_weight=effect_weight,
             airflow_m3h=airflow_m3h,
+            **freshness,
         )
 
     def _read_climate(
@@ -240,6 +275,7 @@ class EnvironmentalFactorManager:
         control_enabled: bool,
         effect_weight: float,
         airflow_m3h: float | None,
+        freshness: dict[str, Any],
     ) -> AirflowDeviceStatus:
         fan_modes = [str(mode) for mode in state.attributes.get("fan_modes") or []]
         fan_mode = state.attributes.get("fan_mode")
@@ -272,6 +308,7 @@ class EnvironmentalFactorManager:
             levels=levels,
             effect_weight=effect_weight,
             airflow_m3h=airflow_m3h,
+            **freshness,
         )
 
 
@@ -282,6 +319,48 @@ def airflow_sensor_conflict(observations: list[Any]) -> float:
         return 0.0
     spread = max(values) - min(values)
     return _round_level(min(1.0, spread / 3.0))
+
+
+def _state_freshness(state: Any | None) -> dict[str, Any]:
+    """Return HA state timestamp metadata for airflow diagnostics."""
+    last_reported = getattr(state, "last_reported", None)
+    last_updated = getattr(state, "last_updated", None)
+    last_changed = getattr(state, "last_changed", None)
+    source, timestamp = _freshness_timestamp(
+        last_reported=last_reported,
+        last_updated=last_updated,
+        last_changed=last_changed,
+    )
+    age_s = None
+    if timestamp is not None:
+        age_s = round(max(0.0, (dt_util.utcnow() - timestamp).total_seconds()), 1)
+    return {
+        "age_s": age_s,
+        "freshness_source": source,
+        "last_reported": _timestamp_iso(last_reported),
+        "last_updated": _timestamp_iso(last_updated),
+        "last_changed": _timestamp_iso(last_changed),
+    }
+
+
+def _freshness_timestamp(
+    *,
+    last_reported: Any,
+    last_updated: Any,
+    last_changed: Any,
+) -> tuple[str, datetime | None]:
+    for source, value in (
+        ("last_reported", last_reported),
+        ("last_updated", last_updated),
+        ("last_changed", last_changed),
+    ):
+        if isinstance(value, datetime):
+            return source, value
+    return "none", None
+
+
+def _timestamp_iso(value: Any) -> str | None:
+    return value.isoformat() if isinstance(value, datetime) else None
 
 
 def _levels_from_fan_modes(fan_modes: list[str]) -> list[float]:

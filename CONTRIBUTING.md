@@ -6,25 +6,24 @@ Thanks for your interest in contributing! Here's how to get started.
 
 ### Prerequisites
 
-- Python 3.12+
-- Node.js 20+
+- Python 3.13+
+- uv
+- Bun
 - A Home Assistant instance for testing
 
 ### Backend
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install pytest pytest-asyncio homeassistant voluptuous
+uv sync --locked --group dev
 ```
 
 ### Frontend
 
 ```bash
 cd frontend
-npm install
-npm run dev     # Dev server with hot reload
-npm run build   # Production build (TypeScript check + Vite bundle)
+bun install --frozen-lockfile
+bun run dev     # Dev server with hot reload
+bun run build   # Production build (tsgo check + Vite bundle)
 ```
 
 The production build outputs to `custom_components/roommind/frontend/roommind-panel.js`.
@@ -33,13 +32,13 @@ The production build outputs to `custom_components/roommind/frontend/roommind-pa
 
 ```bash
 # All tests
-.venv/bin/pytest tests/ -v
+uv run pytest tests/ -v
 
 # Single test file
-.venv/bin/pytest tests/test_store.py -v
+uv run pytest tests/test_store.py -v
 
 # Single test
-.venv/bin/pytest tests/test_coordinator.py::test_heating_mode -v
+uv run pytest tests/control/test_controller.py::test_has_enough_data_insufficient_cooling -v
 ```
 
 Tests are organized by module:
@@ -58,7 +57,20 @@ tests/
 Coverage must stay ≥ 95% (enforced in CI). Check locally:
 
 ```bash
-.venv/bin/pytest tests/ --cov=custom_components/roommind --cov-report=term-missing
+uv run pytest tests/ --cov=custom_components/roommind --cov-report=term-missing
+```
+
+## Static Checks
+
+```bash
+uv run ruff check .
+uv run ruff format --check custom_components/ tests/
+uv run mypy --explicit-package-bases custom_components/roommind
+
+cd frontend
+bun run typecheck
+bun run lint
+bun run format:check
 ```
 
 ## Code Style
@@ -79,7 +91,11 @@ Coverage must stay ≥ 95% (enforced in CI). Check locally:
 
 ### i18n
 
-All user-facing strings go through `localize()`. Add new keys to both `frontend/src/locales/en.json` and `de.json`.
+All user-facing strings go through `localize()`. Add new keys to `frontend/src/locales/en.json`, `de.json`, and `zh-Hans.json`.
+
+## Release And Maintenance
+
+Use the release and maintenance checklist in [docs/release-and-maintenance.md](docs/release-and-maintenance.md) for HACS packaging, CI expectations, Dependabot setup, and upstream backports.
 
 ## Commit Messages
 

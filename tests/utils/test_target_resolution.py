@@ -57,4 +57,3 @@ def test_presence_clears_override_suppresses_but_does_not_clear_override() -> No
     assert result.targets == TargetTemps(heat=17.0, cool=27.0)
     assert result.clear_expired_override is False
     assert result.clear_expired_vacation is False
-

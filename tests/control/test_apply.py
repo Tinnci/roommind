@@ -3508,6 +3508,7 @@ async def test_apply_idle_forced_on_heat_cool_device():
     assert len(temp_calls) == 1
     # _call converts to target_temp_low/high for dual-setpoint devices
     assert temp_calls[0][0][2].get("target_temp_low") == 21.0
+    assert temp_calls[0][0][2].get("hvac_mode") == "heat_cool"
 
 
 @pytest.mark.asyncio

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
+from custom_components.roommind.managers import environmental_factor_manager as airflow_factors
 from custom_components.roommind.managers.environmental_factor_manager import EnvironmentalFactorManager
 
 
@@ -49,6 +51,39 @@ def test_reads_fan_percentage_as_circulation_factor(hass):
     assert factors.has_hvac_fan_control is False
     assert factors.statuses[0].preset_mode == "normal"
     assert factors.statuses[0].oscillating is True
+
+
+def test_airflow_status_exposes_ha_freshness_metadata(hass, monkeypatch):
+    now = datetime(2026, 5, 24, 12, 0, tzinfo=UTC)
+    monkeypatch.setattr(airflow_factors.dt_util, "utcnow", lambda: now)
+
+    def get_state(_entity_id):
+        state = _state("on", {"percentage": 40, "speed_count": 4})
+        state.last_reported = now - timedelta(seconds=7)
+        state.last_updated = now - timedelta(seconds=8)
+        state.last_changed = now - timedelta(minutes=20)
+        return state
+
+    hass.states.get.side_effect = get_state
+    mgr = EnvironmentalFactorManager(hass)
+
+    factors = mgr.read_room_airflow(
+        {
+            "airflow_devices": [
+                {
+                    "entity_id": "fan.living_room",
+                    "role": "circulation",
+                }
+            ]
+        }
+    )
+
+    status = factors.as_status_dicts()[0]
+    assert status["age_s"] == 7.0
+    assert status["freshness_source"] == "last_reported"
+    assert status["last_reported"] == "2026-05-24T11:59:53+00:00"
+    assert status["last_updated"] == "2026-05-24T11:59:52+00:00"
+    assert status["last_changed"] == "2026-05-24T11:40:00+00:00"
 
 
 def test_preset_only_fan_on_does_not_collapse_to_zero_airflow(hass):

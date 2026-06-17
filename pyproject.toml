@@ -60,6 +60,7 @@ do_not_mutate = [
 dev = [
     "homeassistant==2026.2.3",
     "mypy>=2.1.0",
+    "pre-commit>=4.6.0",
     "pytest-cov>=7.0.0",
     "pytest-freezer>=0.4.9",
     "pytest-homeassistant-custom-component==0.13.316",

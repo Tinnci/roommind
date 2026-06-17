@@ -112,4 +112,3 @@ def resolve_room_targets(
     else:
         targets = TargetTemps(heat=eco_heat, cool=eco_cool)
     return TargetResolutionResult(targets, clear_expired_override, clear_expired_vacation)
-

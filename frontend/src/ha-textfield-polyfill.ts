@@ -10,8 +10,7 @@
  * RoomMind uses (value, label, placeholder, type, min/max/step, suffix,
  * disabled) and forwards everything to `<ha-input>`. It is registered
  * conditionally in `load-ha-elements.ts`, only when `ha-textfield` is
- * missing AND `ha-input` is available, so older HA versions keep using
- * their native `ha-textfield`.
+ * missing, so older HA versions keep using their native `ha-textfield`.
  */
 import { LitElement, html, css, nothing, type TemplateResult } from "lit";
 import { property, query } from "lit/decorators.js";

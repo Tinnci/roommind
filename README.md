@@ -30,6 +30,8 @@
 - **Heat Source Orchestration** - Rooms with both TRVs and ACs automatically route heating demand to the most efficient device based on temperature gap and outdoor conditions.
 - **Compressor Group Protection** - Define groups of climate devices sharing an outdoor compressor. Enforces minimum run and off times to prevent short-cycling.
 - **Fan-only & Setback Idle Modes** - AC and heat pump devices can switch to fan-only or setback mode instead of turning off, keeping air circulation or low-load operation active.
+- **Airflow-Aware Comfort** - Circulation, ventilation, and HVAC fan devices feed the thermal model, perceived temperature, and sensor disagreement analysis.
+- **Multi-Sensor Fusion Diagnostics** - Temperature sensors expose freshness, bias correction, variance, and conflict status in the room interface.
 - **Per-Device Setpoint Mode** - Choose proportional (boost setpoint) or direct (exact target) control per device for optimal results with different hardware.
 - **Separate Heat/Cool Targets** - Independent comfort and eco temperatures for heating and cooling in auto mode, creating a natural dead-band.
 - **Per-Room Climate Toggle** - Disable climate control for individual rooms while keeping other rooms active.
@@ -103,6 +105,8 @@ Until calibrated (~60 idle + ~20 active samples), RoomMind falls back to simple 
 
 For a more detailed explanation of the `Priority` slider, device types, setpoint modes, idle behavior, and smart source selection, see the [Control and Device Guide](docs/control-and-devices.md).
 
+For HA state freshness, sensor fusion, airflow modeling, and comfort diagnostics, see the [Observer and Airflow Guide](docs/observer-and-airflow.md).
+
 ## Entities Created
 
 | Entity | Description |
@@ -129,6 +133,7 @@ These can be used in HA automations, dashboards, or other integrations.
 ## Requirements
 
 - **Home Assistant** 2026.2+
+- **HACS** custom repository or default listing
 - At least one HA area with a `climate.*` entity
 - Optional: temperature sensor, humidity sensor, window sensors, weather entity, schedule helpers, person entities
 

@@ -1,6 +1,6 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import type { HomeAssistant, HassArea } from "../types";
+import type { HomeAssistant, HassArea, SensorFusionStatus } from "../types";
 import { getEntitiesForArea } from "../utils/room-state";
 import { localize } from "../utils/localize";
 import { openEntityInfo } from "../utils/events";
@@ -21,6 +21,8 @@ export class RsSensorSection extends LitElement {
   @property({ type: Number }) public windowOpenDelay = 0;
   @property({ type: Number }) public windowCloseDelay = 0;
   @property({ type: String }) public heatingSystemType = "";
+  @property({ type: Number }) public sensorConflict = 0;
+  @property({ attribute: false }) public sensorFusionStatus: SensorFusionStatus[] = [];
   @property({ type: Boolean }) public editing = false;
   @property() public language = "en";
 
@@ -387,6 +389,113 @@ export class RsSensorSection extends LitElement {
       .section-subtitle:first-child {
         margin-top: 0;
       }
+
+      .fusion-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 10px 12px;
+        margin: 0 0 12px 0;
+        border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.08));
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.02);
+      }
+
+      .fusion-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .fusion-title {
+        flex: 1;
+        min-width: 0;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--primary-text-color);
+        text-transform: uppercase;
+        letter-spacing: 0;
+      }
+
+      .fusion-conflict {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--primary-color);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .fusion-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .fusion-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .fusion-name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--primary-text-color);
+      }
+
+      .fusion-meta,
+      .fusion-values {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        min-width: 0;
+      }
+
+      .fusion-meta {
+        margin-top: 3px;
+      }
+
+      .fusion-chip {
+        display: inline-flex;
+        align-items: center;
+        min-height: 18px;
+        padding: 1px 6px;
+        border-radius: 6px;
+        font-size: 10.5px;
+        line-height: 1.4;
+        color: var(--secondary-text-color);
+        background: rgba(255, 255, 255, 0.05);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .fusion-chip.primary {
+        color: var(--primary-color);
+        background: rgba(3, 169, 244, 0.12);
+      }
+
+      .fusion-chip.aging {
+        color: var(--warning-color, #ff9800);
+        background: rgba(255, 152, 0, 0.12);
+      }
+
+      .fusion-chip.stale {
+        color: var(--error-color, #f44336);
+        background: rgba(244, 67, 54, 0.12);
+      }
+
+      @media (max-width: 520px) {
+        .fusion-row {
+          grid-template-columns: minmax(0, 1fr);
+        }
+
+        .fusion-values {
+          justify-content: flex-start;
+        }
+      }
     `,
   ];
 
@@ -584,6 +693,7 @@ export class RsSensorSection extends LitElement {
         externalSensors: externalTempSensors,
         selectedCount: this._temperatureSensorIds().length,
       })}
+      ${this._renderFusionDiagnostics(lang)}
       ${this._renderBlock({
         kind: "humidity",
         icon: "mdi:water-percent",
@@ -614,6 +724,103 @@ export class RsSensorSection extends LitElement {
       })}
       ${this._renderGlobalAdd(lang)}
     `;
+  }
+
+  private _renderFusionDiagnostics(lang: string) {
+    if (!this.sensorFusionStatus?.length) return nothing;
+    const conflictPercent = Math.round(Math.max(0, Math.min(1, this.sensorConflict || 0)) * 100);
+    const ordered = [...this.sensorFusionStatus].sort(
+      (a, b) => Number(b.is_primary) - Number(a.is_primary),
+    );
+    return html`
+      <div class="fusion-panel">
+        <div class="fusion-header">
+          <ha-icon icon="mdi:chart-timeline-variant"></ha-icon>
+          <div class="fusion-title">${localize("devices.sensor_fusion", lang)}</div>
+          <div class="fusion-conflict">
+            ${localize("devices.sensor_conflict", lang)} ${conflictPercent}%
+          </div>
+        </div>
+        <div class="fusion-list">
+          ${ordered.map((status) => this._renderFusionRow(status, lang))}
+        </div>
+      </div>
+    `;
+  }
+
+  private _renderFusionRow(status: SensorFusionStatus, lang: string) {
+    const state = this.hass.states[status.entity_id];
+    const friendlyName = (state?.attributes?.friendly_name as string) || status.entity_id;
+    const unit = tempUnit(this.hass);
+    const bias = status.static_bias + status.active_bias;
+    return html`
+      <div class="fusion-row">
+        <div>
+          <div
+            class="fusion-name entity-link"
+            @click=${() => openEntityInfo(this, status.entity_id)}
+          >
+            ${friendlyName}
+          </div>
+          <div class="fusion-meta">
+            <span class="fusion-chip ${status.is_primary ? "primary" : ""}">
+              ${status.is_primary
+                ? localize("devices.primary_sensor", lang)
+                : localize("devices.sensor_auxiliary", lang)}
+            </span>
+            <span class="fusion-chip ${status.freshness_status}">
+              ${this._freshnessLabel(status.freshness_status, lang)}
+            </span>
+            <span class="fusion-chip"
+              >${this._freshnessSourceLabel(status.freshness_source, lang)}</span
+            >
+            <span class="fusion-chip">${this._formatAge(status.age_s)}</span>
+          </div>
+        </div>
+        <div class="fusion-values">
+          <span class="fusion-chip">
+            ${localize("devices.sensor_corrected", lang)}
+            ${Number(status.corrected_value).toFixed(1)}${unit}
+          </span>
+          <span class="fusion-chip">
+            ${localize("devices.sensor_bias", lang)}
+            ${bias >= 0 ? "+" : ""}${bias.toFixed(2)}${unit}
+          </span>
+          <span class="fusion-chip">Var ${Number(status.variance).toFixed(3)}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  private _freshnessLabel(status: string, lang: string): string {
+    switch (status) {
+      case "aging":
+        return localize("devices.sensor_freshness_aging", lang);
+      case "stale":
+        return localize("devices.sensor_freshness_stale", lang);
+      default:
+        return localize("devices.sensor_freshness_fresh", lang);
+    }
+  }
+
+  private _freshnessSourceLabel(source: string, lang: string): string {
+    switch (source) {
+      case "last_reported":
+        return localize("devices.sensor_source_reported", lang);
+      case "last_updated":
+        return localize("devices.sensor_source_updated", lang);
+      case "last_changed":
+        return localize("devices.sensor_source_changed", lang);
+      default:
+        return localize("devices.sensor_source_none", lang);
+    }
+  }
+
+  private _formatAge(ageSeconds: number): string {
+    const age = Math.max(0, Number(ageSeconds) || 0);
+    if (age < 60) return `${Math.round(age)}s`;
+    if (age < 3600) return `${Math.round(age / 60)}m`;
+    return `${Math.round(age / 3600)}h`;
   }
 
   private _renderWindowExtras(lang: string) {

@@ -152,6 +152,45 @@ class SensorFusionManager:
         """Return the current learned bias for an auxiliary sensor."""
         return self._biases.get(entity_id, SensorBiasState())
 
+    def diagnostics(
+        self,
+        observations: list[TemperatureObservation],
+        *,
+        power_fraction: float,
+        q_fan_mix: float = 0.0,
+    ) -> list[dict[str, Any]]:
+        """Return read-only diagnostics for current temperature fusion state."""
+        pf = max(0.0, min(1.0, power_fraction))
+        mix = max(0.0, min(1.0, q_fan_mix))
+        result: list[dict[str, Any]] = []
+        for observation in observations:
+            entity_id = observation.entity_id or ""
+            bias = self.get_bias(entity_id)
+            effective_k_mix = bias.k_mix if bias.k_mix > 0.0 else self._MIX_ACTIVE_BIAS_REDUCTION
+            correction_pf = pf * (1.0 - effective_k_mix * mix)
+            active_c = 0.0 if observation.is_primary else bias.active_c * correction_pf
+            static_c = 0.0 if observation.is_primary else bias.static_c
+            corrected = observation.value - (static_c + active_c)
+            result.append(
+                {
+                    "entity_id": entity_id,
+                    "is_primary": observation.is_primary,
+                    "value": round(observation.value, 3),
+                    "corrected_value": round(corrected, 3),
+                    "static_bias": round(static_c, 3),
+                    "active_bias": round(active_c, 3),
+                    "k_mix": round(0.0 if observation.is_primary else effective_k_mix, 3),
+                    "age_s": round(observation.age_s, 1),
+                    "variance": round(observation.variance, 4),
+                    "freshness_source": self._freshness_source(observation),
+                    "freshness_status": self._freshness_status(observation.age_s),
+                    "last_reported": self._timestamp_iso(observation.last_reported),
+                    "last_updated": self._timestamp_iso(observation.last_updated),
+                    "last_changed": self._timestamp_iso(observation.last_changed),
+                }
+            )
+        return result
+
     def to_dict(self) -> dict:
         """Serialize learned auxiliary sensor biases."""
         return {
@@ -197,6 +236,31 @@ class SensorFusionManager:
             if isinstance(value, datetime):
                 return value
         return None
+
+    @staticmethod
+    def _freshness_source(observation: TemperatureObservation) -> str:
+        """Return which HA timestamp is driving observation age."""
+        if observation.last_reported is not None:
+            return "last_reported"
+        if observation.last_updated is not None:
+            return "last_updated"
+        if observation.last_changed is not None:
+            return "last_changed"
+        return "none"
+
+    @staticmethod
+    def _freshness_status(age_s: float) -> str:
+        """Return a coarse freshness bucket for UI diagnostics."""
+        if age_s > MAX_SENSOR_STALENESS:
+            return "stale"
+        if age_s > UPDATE_INTERVAL * 2:
+            return "aging"
+        return "fresh"
+
+    @staticmethod
+    def _timestamp_iso(value: datetime | None) -> str | None:
+        """Serialize HA timestamps for frontend diagnostics."""
+        return value.isoformat() if isinstance(value, datetime) else None
 
     def _clamp(self, value: float, lower: float, upper: float) -> float:
         """Clamp *value* to the inclusive range [lower, upper]."""

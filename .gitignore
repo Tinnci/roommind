@@ -2,6 +2,7 @@
 __pycache__/
 *.py[codz]
 *$py.class
+.DS_Store
 
 # C extensions
 *.so
@@ -96,10 +97,7 @@ ipython_config.py
 #Pipfile.lock
 
 # UV
-#   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-uv.lock
+#   Keep uv.lock tracked for reproducible Home Assistant test environments.
 
 # poetry
 #   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
@@ -210,7 +208,7 @@ __marimo__/
 # Frontend
 frontend/node_modules/
 frontend/dist/
-frontend/bun.lock
+frontend/package-lock.json
 frontend/.preview-artifacts/
 custom_components/roommind/frontend/roommind-panel.js
 

@@ -719,6 +719,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             has_external_sensor,
             temperature_observations,
         ) = self._read_room_sensors(room, area_id)
+        sensor_conflict = airflow_sensor_conflict(temperature_observations)
 
         # --- Outdoor room: skip all control logic ---
         if room.get("is_outdoor", False):
@@ -758,6 +759,12 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 "airflow_plan_level": 0.0,
                 "airflow_devices_status": [],
                 "airflow_command_status": [],
+                "sensor_conflict": sensor_conflict,
+                "sensor_fusion_status": self._sensor_fusion.diagnostics(
+                    temperature_observations,
+                    power_fraction=0.0,
+                    q_fan_mix=0.0,
+                ),
                 "hvac_output_status": None,
                 "night_mode": {"active": False},
                 "night_control_status": [],
@@ -861,7 +868,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         airflow_has_ventilation = any(
             status.available and status.role == AIRFLOW_ROLE_VENTILATION for status in airflow.statuses
         )
-        airflow_mix_score = max(airflow.q_fan_mix, airflow_sensor_conflict(temperature_observations))
+        airflow_mix_score = max(airflow.q_fan_mix, sensor_conflict)
         airflow_capacity_curve = self._select_airflow_curve(room, "fan_capacity_curve")
         airflow_power_curve = self._select_airflow_curve(room, "fan_power_curve")
         coupling_terms = self._build_coupling_terms(area_id, room)
@@ -1280,6 +1287,12 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             airflow_plan_level=airflow_plan_level,
             airflow_devices_status=airflow.as_status_dicts(),
             airflow_command_status=airflow_command_status,
+            sensor_conflict=sensor_conflict,
+            sensor_fusion_status=self._sensor_fusion.diagnostics(
+                temperature_observations,
+                power_fraction=power_fraction,
+                q_fan_mix=airflow.q_fan_mix,
+            ),
             hvac_output_status=self._observe_hvac_output(room, airflow.as_status_dicts(), current_temp_raw),
             night_mode_active=night_mode_active,
             night_control_status=night_control_status,
@@ -1515,6 +1528,8 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         airflow_plan_level: float,
         airflow_devices_status: list[dict],
         airflow_command_status: list[dict],
+        sensor_conflict: float,
+        sensor_fusion_status: list[dict],
         hvac_output_status: dict | None,
         night_mode_active: bool,
         night_control_status: list[dict],
@@ -1598,6 +1613,8 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             "airflow_plan_level": airflow_plan_level,
             "airflow_devices_status": airflow_devices_status,
             "airflow_command_status": airflow_command_status,
+            "sensor_conflict": sensor_conflict,
+            "sensor_fusion_status": sensor_fusion_status,
             "hvac_output_status": hvac_output_status,
             "night_mode": {
                 "active": night_mode_active,

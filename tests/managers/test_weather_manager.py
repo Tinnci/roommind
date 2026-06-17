@@ -17,6 +17,13 @@ def _make_hass(fahrenheit: bool = False) -> MagicMock:
     return hass
 
 
+def _make_available_state(attributes: dict | None = None) -> MagicMock:
+    state = MagicMock()
+    state.state = "cloudy"
+    state.attributes = attributes or {}
+    return state
+
+
 @pytest.mark.asyncio
 async def test_no_weather_entity_returns_empty():
     """When no weather_entity is configured, forecast is empty."""
@@ -30,6 +37,7 @@ async def test_no_weather_entity_returns_empty():
 async def test_forecast_entry_without_temperature():
     """Forecast entry without 'temperature' key is passed through unchanged."""
     hass = _make_hass()
+    hass.states.get = MagicMock(return_value=_make_available_state())
     hass.services.async_call = AsyncMock(
         return_value={
             "weather.home": {
@@ -108,6 +116,7 @@ def test_extract_cloud_series_all_missing_returns_none():
 async def test_service_response_parsed_and_stored():
     """Successful get_forecasts service call returns converted forecast."""
     hass = _make_hass()
+    hass.states.get = MagicMock(return_value=_make_available_state())
     hass.services.async_call = AsyncMock(
         return_value={"weather.home": {"forecast": [{"temperature": 10.0}, {"temperature": 12.0}]}}
     )
@@ -124,6 +133,7 @@ async def test_service_response_parsed_and_stored():
 async def test_service_response_converts_fahrenheit():
     """Forecast temperatures are converted from °F to °C when HA uses Fahrenheit."""
     hass = _make_hass(fahrenheit=True)
+    hass.states.get = MagicMock(return_value=_make_available_state())
     hass.services.async_call = AsyncMock(
         return_value={
             "weather.home": {"forecast": [{"temperature": 50.0}]}  # 50°F = 10°C
@@ -162,9 +172,7 @@ async def test_service_failure_falls_back_to_state_attributes():
     hass = _make_hass()
     hass.services.async_call = AsyncMock(side_effect=Exception("service unavailable"))
 
-    state = MagicMock()
-    state.attributes = {"forecast": [{"temperature": 8.0}]}
-    hass.states.get = MagicMock(return_value=state)
+    hass.states.get = MagicMock(return_value=_make_available_state({"forecast": [{"temperature": 8.0}]}))
 
     mgr = WeatherManager(hass)
     result = await mgr.async_read_forecast({"weather_entity": "weather.home"})
@@ -184,3 +192,20 @@ async def test_service_failure_no_state_returns_empty():
     result = await mgr.async_read_forecast({"weather_entity": "weather.home"})
 
     assert result == []
+
+
+@pytest.mark.asyncio
+async def test_unavailable_weather_entity_skips_service_call():
+    """Unavailable weather entities are skipped until HA has loaded them."""
+    hass = _make_hass()
+    state = _make_available_state()
+    state.state = "unavailable"
+    hass.states.get = MagicMock(return_value=state)
+    hass.services.async_call = AsyncMock()
+
+    mgr = WeatherManager(hass)
+    result = await mgr.async_read_forecast({"weather_entity": "weather.home"})
+
+    assert result == []
+    assert mgr.forecast == []
+    hass.services.async_call.assert_not_called()
