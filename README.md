@@ -1,7 +1,7 @@
 # RoomMind
 
 [![HACS Default](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/hacs/integration)
-[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.2%2B-blue.svg)](https://www.home-assistant.io/)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.6%2B-blue.svg)](https://www.home-assistant.io/)
 [![License](https://img.shields.io/github/license/snazzybean/roommind)](https://github.com/snazzybean/roommind/blob/main/LICENSE)
 [![Tests](https://github.com/snazzybean/roommind/actions/workflows/ci.yml/badge.svg)](https://github.com/snazzybean/roommind/actions/workflows/ci.yml)
 ![Coverage](https://raw.githubusercontent.com/snazzybean/roommind/python-coverage-comment-action-data/badge.svg)
@@ -38,7 +38,7 @@
 - **Outdoor Areas** - Mark rooms as outdoor (e.g. balcony) to disable climate control while keeping monitoring.
 - **Analytics Dashboard** - Temperature charts with heating power, solar irradiance, and model predictions over 24h to 90 days.
 - **Mobile Ready** - Responsive layout with HA-native toolbar for the companion app.
-- **Multilingual** - English and German, auto-detected from your HA language setting.
+- **Multilingual** - English, German, and Simplified Chinese, auto-detected from your HA language setting.
 
 ## Installation
 
@@ -132,7 +132,7 @@ These can be used in HA automations, dashboards, or other integrations.
 
 ## Requirements
 
-- **Home Assistant** 2026.2+
+- **Home Assistant** 2026.6+
 - **HACS** custom repository or default listing
 - At least one HA area with a `climate.*` entity
 - Optional: temperature sensor, humidity sensor, window sensors, weather entity, schedule helpers, person entities

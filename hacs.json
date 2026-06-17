@@ -1,6 +1,6 @@
 {
   "name": "RoomMind",
-  "homeassistant": "2026.2.0",
+  "homeassistant": "2026.6.0",
   "render_readme": true,
   "zip_release": true,
   "filename": "roommind.zip"
