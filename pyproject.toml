@@ -5,7 +5,7 @@
 [project]
 name = "roommind"
 version = "0.1.0"
-requires-python = ">=3.13.2"
+requires-python = ">=3.14.2,<3.15"
 dependencies = []
 
 [tool.ruff]
@@ -33,7 +33,7 @@ ignore = [
 known-first-party = ["custom_components.roommind"]
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.14"
 check_untyped_defs = true
 disallow_untyped_defs = true
 ignore_missing_imports = true
@@ -43,6 +43,9 @@ warn_unused_configs = true
 [[tool.mypy.overrides]]
 module = "homeassistant.*"
 follow_imports = "skip"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
 
 [tool.coverage.run]
 relative_files = true
@@ -58,12 +61,12 @@ do_not_mutate = [
 
 [dependency-groups]
 dev = [
-    "homeassistant==2026.2.3",
+    "homeassistant==2026.6.3",
     "mypy>=2.1.0",
     "pre-commit>=4.6.0",
     "pytest-cov>=7.0.0",
     "pytest-freezer>=0.4.9",
-    "pytest-homeassistant-custom-component==0.13.316",
+    "pytest-homeassistant-custom-component==0.13.339",
     "pytest-sugar>=1.0.0",
     "pytest-xdist>=3.8.0",
     "ruff>=0.15.14",

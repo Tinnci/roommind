@@ -405,6 +405,97 @@ async def test_climate_preset_is_selected_by_context_and_guarded(hass):
 
 
 @pytest.mark.asyncio
+async def test_fan_command_confidence_becomes_conflicting_after_observed_mismatch(hass):
+    state = _state("off", {"percentage": 0})
+    hass.states.get.return_value = state
+    mgr = AirflowControlManager(hass)
+    room = {
+        "airflow_devices": [
+            {"entity_id": "fan.living", "role": "circulation", "controllable": True, "control_enabled": True}
+        ]
+    }
+
+    first = await mgr.async_apply("living", room, level=0.8, mode="cooling")
+    state.state = "on"
+    state.attributes = {"percentage": 20}
+    second = await mgr.async_apply("living", room, level=0.8, mode="cooling")
+
+    assert first[0]["assumed_state_confidence"] == "assumed"
+    assert second[0]["assumed_state_confidence"] == "conflicting"
+    assert second[0]["commanded_level"] == 0.8
+    assert second[0]["observed_q"] == 0.2
+
+
+@pytest.mark.asyncio
+async def test_climate_command_confidence_becomes_conflicting_after_observed_mismatch(hass):
+    state = _state(
+        "cool",
+        {
+            "fan_mode": "low",
+            "fan_modes": ["low", "medium", "high"],
+            "supported_features": int(ClimateEntityFeature.FAN_MODE),
+        },
+    )
+    hass.states.get.return_value = state
+    mgr = AirflowControlManager(hass)
+    room = {
+        "airflow_devices": [
+            {"entity_id": "climate.ac", "role": "hvac_fan", "controllable": True, "control_enabled": True}
+        ]
+    }
+
+    first = await mgr.async_apply("living", room, level=1.0, mode="cooling")
+    second = await mgr.async_apply("living", room, level=1.0, mode="cooling")
+
+    assert first[0]["assumed_state_confidence"] == "assumed"
+    assert second[0]["assumed_state_confidence"] == "conflicting"
+    assert second[0]["commanded_level"] == 1.0
+    assert second[0]["observed_q"] == pytest.approx(1 / 3)
+
+
+@pytest.mark.asyncio
+async def test_command_confidence_consumes_first_cycle_even_without_observation(hass):
+    hass.states.get.return_value = None
+    mgr = AirflowControlManager(hass)
+    room = {
+        "airflow_devices": [
+            {"entity_id": "fan.living", "role": "circulation", "controllable": True, "control_enabled": True}
+        ]
+    }
+
+    first = await mgr.async_apply("living", room, level=0.8, mode="cooling")
+    hass.states.get.return_value = _state("on", {"percentage": 20})
+    second = await mgr.async_apply("living", room, level=0.8, mode="cooling")
+
+    assert first[0]["assumed_state_confidence"] == "assumed"
+    assert first[0]["observed_q"] is None
+    assert second[0]["assumed_state_confidence"] == "conflicting"
+    assert second[0]["observed_q"] == 0.2
+
+
+@pytest.mark.asyncio
+async def test_stale_command_confidence_still_takes_precedence(hass):
+    hass.states.get.return_value = _state("on", {"percentage": 20})
+    mgr = AirflowControlManager(hass)
+    room = {
+        "airflow_devices": [
+            {
+                "entity_id": "fan.living",
+                "role": "circulation",
+                "controllable": True,
+                "control_enabled": True,
+                "assumed_state_ttl": 0,
+            }
+        ]
+    }
+
+    await mgr.async_apply("living", room, level=0.8, mode="cooling")
+    statuses = await mgr.async_apply("living", room, level=0.8, mode="cooling")
+
+    assert statuses[0]["assumed_state_confidence"] == "stale"
+
+
+@pytest.mark.asyncio
 async def test_night_mode_caps_mix_level_and_reports_skip_reasons(hass):
     hass.states.get.return_value = _state(
         "on",

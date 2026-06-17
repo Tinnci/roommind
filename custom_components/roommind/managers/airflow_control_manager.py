@@ -26,6 +26,7 @@ from .environmental_factor_manager import (
 _LOGGER = logging.getLogger(__name__)
 
 OUTCOME_FAILED = "failed"
+COMMAND_LEVEL_TOLERANCE = 0.15
 
 
 class AirflowControlManager:
@@ -85,7 +86,7 @@ class AirflowControlManager:
                 _LOGGER.warning("Room '%s': airflow command failed for '%s'", area_id, entity_id, exc_info=True)
                 status.update({"outcome": OUTCOME_FAILED, "skip_reason": "service_error"})
             status["roommind_fan_only"] = entity_id in self._roommind_fan_only
-            status.update(self._assumed_status(entity_id, target, config))
+            status.update(self._assumed_status(entity_id, config))
             statuses.append(status)
         return statuses
 
@@ -185,9 +186,17 @@ class AirflowControlManager:
         }
 
     def _record_assumed_command(self, entity_id: str, level: float) -> None:
-        self._assumed_commands[entity_id] = {"level": _clamp_level(level), "at": time.time()}
+        level = _clamp_level(level)
+        existing = self._assumed_commands.get(entity_id)
+        if existing and existing.get("level") == level:
+            return
+        self._assumed_commands[entity_id] = {
+            "level": level,
+            "at": time.time(),
+            "awaiting_first_status": True,
+        }
 
-    def _assumed_status(self, entity_id: str, target: float, config: dict) -> dict[str, Any]:
+    def _assumed_status(self, entity_id: str, config: dict) -> dict[str, Any]:
         command = self._assumed_commands.get(entity_id)
         if not command:
             return {"assumed_state_confidence": "observed", "commanded_level": None, "commanded_at": None}
@@ -204,7 +213,7 @@ class AirflowControlManager:
                 observed = _fan_observed_q(str(state.state), state.attributes) if domain == "fan" else None
                 if domain == "climate":
                     observed = _climate_observed_q(str(state.state), state.attributes)
-            confidence = "observed" if observed is not None and abs(observed - target) <= 0.15 else "assumed"
+            confidence = _command_confidence(command, observed)
         return {
             "assumed_state_confidence": confidence,
             "commanded_level": command["level"],
@@ -214,6 +223,17 @@ class AirflowControlManager:
 
 def _clamp_level(level: float) -> float:
     return max(0.0, min(1.0, float(level)))
+
+
+def _command_confidence(command: dict[str, Any], observed: float | None) -> str:
+    awaiting_first_status = bool(command.pop("awaiting_first_status", False))
+    if observed is None:
+        return "assumed"
+    if abs(observed - float(command["level"])) <= COMMAND_LEVEL_TOLERANCE:
+        return "observed"
+    if awaiting_first_status:
+        return "assumed"
+    return "conflicting"
 
 
 def _is_night_context(config: dict) -> bool:

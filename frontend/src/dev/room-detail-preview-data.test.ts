@@ -12,6 +12,9 @@ describe("room detail preview model", () => {
     expect(model.config.airflow_devices?.map((device) => device.entity_id)).toContain(
       "fan.bedroom_ceiling_fan",
     );
+    expect(model.config.live?.airflow_command_status?.[0]?.assumed_state_confidence).toBe(
+      "conflicting",
+    );
     expect(model.config.quiet_hours).toEqual({ start: "22:30", end: "06:30" });
     expect(model.config.live?.night_mode?.active).toBe(true);
     expect(model.hass.states[model.config.temperature_sensor]?.state).toBe("20.8");
