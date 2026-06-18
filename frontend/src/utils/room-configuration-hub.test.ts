@@ -19,6 +19,8 @@ describe("buildConfigurationHubItems", () => {
         titleKey: "room.section.devices",
         metaKey: "room.config.devices_summary",
         metaParams: { count: "2" },
+        actionKey: "room.config.action_review_devices",
+        tone: "complete",
         editable: true,
         editSection: "devices",
       },
@@ -27,7 +29,9 @@ describe("buildConfigurationHubItems", () => {
         icon: "mdi:thermometer",
         titleKey: "room.section.sensors",
         metaKey: "room.config.sensors_summary",
-        metaParams: { temp: "1", humidity: "1", windows: "3" },
+        metaParams: { temp: "1", humidity: "1", occupancy: "0", windows: "3", primary: "" },
+        actionKey: "room.config.action_review_sensor_fusion",
+        tone: "complete",
         editable: true,
         editSection: "sensors",
       },
@@ -36,6 +40,8 @@ describe("buildConfigurationHubItems", () => {
         icon: "mdi:swap-horizontal",
         titleKey: "room.section.heat_source",
         metaKey: "comfort.inactive",
+        actionKey: "room.config.action_optional",
+        tone: "inactive",
         editable: true,
         editSection: "heatSource",
       },
@@ -50,7 +56,21 @@ describe("buildConfigurationHubItems", () => {
       icon: "mdi:tree",
       titleKey: "room.outdoor_toggle",
       metaKey: "room.outdoor_hint",
+      actionKey: "room.config.action_toggle_outdoor",
+      tone: "inactive",
       editable: false,
+    });
+  });
+
+  test("marks missing core sensor setup as actionable", () => {
+    const [sensors] = buildConfigurationHubItems(["sensors"], {
+      temperatureSensorCount: 0,
+      humiditySensorConfigured: false,
+    });
+
+    expect(sensors).toMatchObject({
+      tone: "missing",
+      actionKey: "room.config.action_add_primary_sensor",
     });
   });
 });

@@ -249,6 +249,18 @@ async function run(): Promise<void> {
     console.log("Settings preview checked");
 
     await navigate(cdp, "/dev/room-detail-preview.html");
+    const detailText = await waitForText(cdp, "Primary sensor");
+    assertIncludes(detailText, "Device setpoint");
+    assertIncludes(detailText, "Configuration");
+    await screenshot(cdp, "room-detail-desktop", true);
+    console.log("Room detail desktop checked");
+
+    await openRoomEditSection(cdp, "sensors");
+    const sensorsText = await waitForText(cdp, "Primary temperature source");
+    assertIncludes(sensorsText, "Auxiliary fusion sensors");
+    await screenshot(cdp, "sensors-desktop");
+    console.log("Sensors desktop checked");
+
     await openRoomEditSection(cdp, "comfort");
     const comfortText = await waitForText(cdp, "Advanced control constraints");
     assertIncludes(comfortText, "Night controls");
@@ -267,6 +279,44 @@ async function run(): Promise<void> {
       deviceScaleFactor: 1,
       mobile: true,
     });
+    await openRoomEditSection(cdp, "sensors");
+    await waitForText(cdp, "Primary temperature source");
+    const backdropBackground = await evaluate<string>(
+      cdp,
+      `(() => {
+        const detail = document.querySelector("rs-room-detail");
+        const router = detail?.shadowRoot?.querySelector("rs-room-edit-dialog-router");
+        const dialog = router?.querySelector("rs-edit-dialog");
+        const backdrop = dialog?.shadowRoot?.querySelector(".backdrop");
+        return backdrop ? getComputedStyle(backdrop).backgroundColor : "";
+      })()`,
+    );
+    if (backdropBackground !== "rgb(5, 8, 12)") {
+      throw new Error(`Expected opaque dialog backdrop, got ${backdropBackground}`);
+    }
+    const topPath = await evaluate<string>(
+      cdp,
+      `(() => {
+        const names = [];
+        let root = document;
+        let el = root.elementFromPoint(50, 150);
+        while (el) {
+          names.push(el.tagName.toLowerCase());
+          if (!el.shadowRoot) break;
+          root = el.shadowRoot;
+          el = root.elementFromPoint(50, 150);
+        }
+        return names.join(">");
+      })()`,
+    );
+    if (!topPath.includes("rs-sensor-section")) {
+      throw new Error(`Expected dialog stack above room detail, got ${topPath}`);
+    }
+    await Bun.sleep(700);
+    await screenshot(cdp, "sensors-mobile");
+    console.log("Sensors mobile checked");
+
+    await openRoomEditSection(cdp, "airflow");
     await screenshot(cdp, "airflow-mobile");
     await waitForText(cdp, "Behavior preferences");
     console.log("Airflow mobile checked");

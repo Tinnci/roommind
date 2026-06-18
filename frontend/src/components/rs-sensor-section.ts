@@ -23,7 +23,7 @@ export class RsSensorSection extends LitElement {
   @property({ type: String }) public heatingSystemType = "";
   @property({ type: Number }) public sensorConflict = 0;
   @property({ attribute: false }) public sensorFusionStatus: SensorFusionStatus[] = [];
-  @property({ type: Boolean }) public editing = false;
+  @property({ type: Boolean, reflect: true }) public editing = false;
   @property() public language = "en";
 
   @state() private _pickerOpen = false;
@@ -36,12 +36,16 @@ export class RsSensorSection extends LitElement {
         display: block;
       }
 
+      :host([editing]) {
+        background: #11161d;
+      }
+
       .sensor-block {
         display: flex;
         flex-direction: column;
         gap: 6px;
         padding: 12px 14px;
-        background: rgba(255, 255, 255, 0.02);
+        background: #151a21;
         border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.08));
         border-radius: 8px;
       }
@@ -118,6 +122,107 @@ export class RsSensorSection extends LitElement {
         overflow-y: auto;
         overflow-x: hidden;
         scrollbar-width: thin;
+      }
+
+      .temperature-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .sensor-table {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .sensor-table-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--primary-text-color);
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0;
+      }
+
+      .sensor-table-title ha-icon {
+        --mdc-icon-size: 17px;
+        color: var(--secondary-text-color);
+      }
+
+      .sensor-table-row {
+        display: grid;
+        grid-template-columns: 32px minmax(0, 1fr) auto auto auto;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+        min-height: 44px;
+        padding: 7px 8px;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        background: #111720;
+        cursor: pointer;
+      }
+
+      .sensor-table-row:hover {
+        background: #151d27;
+      }
+
+      .sensor-table-row.selected {
+        border-color: rgba(3, 169, 244, 0.38);
+        background: #102636;
+      }
+
+      .sensor-table-row ha-checkbox,
+      .sensor-table-row ha-radio {
+        margin: -4px 0;
+      }
+
+      .role-chip,
+      .health-chip {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 20px;
+        padding: 2px 7px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1.35;
+        white-space: nowrap;
+      }
+
+      .role-chip {
+        color: var(--primary-color);
+        background: rgba(3, 169, 244, 0.12);
+      }
+
+      .role-chip.aux {
+        color: var(--secondary-text-color);
+        background: rgba(255, 255, 255, 0.06);
+      }
+
+      .health-chip {
+        color: var(--secondary-text-color);
+        background: rgba(255, 255, 255, 0.06);
+      }
+
+      .health-chip.fresh {
+        color: var(--success-color, #4caf50);
+        background: rgba(76, 175, 80, 0.12);
+      }
+
+      .health-chip.aging {
+        color: var(--warning-color, #ff9800);
+        background: rgba(255, 152, 0, 0.12);
+      }
+
+      .health-chip.stale,
+      .health-chip.unavailable {
+        color: var(--error-color, #f44336);
+        background: rgba(244, 67, 54, 0.12);
       }
 
       .row {
@@ -398,7 +503,7 @@ export class RsSensorSection extends LitElement {
         margin: 0 0 12px 0;
         border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.08));
         border-radius: 8px;
-        background: rgba(255, 255, 255, 0.02);
+        background: #151a21;
       }
 
       .fusion-header {
@@ -488,6 +593,18 @@ export class RsSensorSection extends LitElement {
       }
 
       @media (max-width: 520px) {
+        .sensor-table-row {
+          grid-template-columns: 32px minmax(0, 1fr);
+          align-items: start;
+        }
+
+        .sensor-table-row .value-chip,
+        .sensor-table-row .health-chip,
+        .sensor-table-row .role-chip {
+          grid-column: 2 / -1;
+          justify-self: start;
+        }
+
         .fusion-row {
           grid-template-columns: minmax(0, 1fr);
         }
@@ -684,15 +801,7 @@ export class RsSensorSection extends LitElement {
     const lang = this.hass.language;
 
     return html`
-      ${this._renderBlock({
-        kind: "temp",
-        icon: "mdi:thermometer",
-        title: localize("devices.temp_sensors", lang),
-        emptyText: localize("devices.no_temp_sensors", lang),
-        areaSensors: areaTempSensors,
-        externalSensors: externalTempSensors,
-        selectedCount: this._temperatureSensorIds().length,
-      })}
+      ${this._renderTemperatureBlock(areaTempSensors, externalTempSensors, lang)}
       ${this._renderFusionDiagnostics(lang)}
       ${this._renderBlock({
         kind: "humidity",
@@ -723,6 +832,128 @@ export class RsSensorSection extends LitElement {
         extras: this._renderWindowExtras(lang),
       })}
       ${this._renderGlobalAdd(lang)}
+    `;
+  }
+
+  private _renderTemperatureBlock(
+    areaSensors: { entity_id: string }[],
+    externalSensors: string[],
+    lang: string,
+  ) {
+    const total = areaSensors.length + externalSensors.length;
+    const isCollapsed = this._collapsed.temp ?? false;
+    const ids = [
+      ...areaSensors.map((e) => ({ entityId: e.entity_id, external: false })),
+      ...externalSensors.map((entityId) => ({ entityId, external: true })),
+    ];
+    const auxiliaryIds = ids.filter(({ entityId }) => entityId !== this.temperatureSensor);
+
+    return html`
+      <div class="sensor-block ${isCollapsed ? "collapsed" : ""}">
+        <div class="block-header" @click=${() => this._toggleBlock("temp")}>
+          <ha-icon icon="mdi:thermometer"></ha-icon>
+          <div class="block-title">${localize("devices.temp_sensors", lang)}</div>
+          ${this._temperatureSensorIds().length > 0
+            ? html`<span class="count-chip has-selection"
+                >${this._temperatureSensorIds().length}</span
+              >`
+            : total > 0
+              ? html`<span class="count-chip">${total}</span>`
+              : nothing}
+          <ha-icon
+            class="chevron ${isCollapsed ? "collapsed" : ""}"
+            icon="mdi:chevron-down"
+          ></ha-icon>
+        </div>
+        ${isCollapsed
+          ? nothing
+          : html`
+              <div class="block-body temperature-stack">
+                ${ids.length > 0
+                  ? html`
+                      <div class="sensor-table">
+                        <div class="sensor-table-title">
+                          <ha-icon icon="mdi:crosshairs-gps"></ha-icon>
+                          ${localize("devices.primary_temperature_source", lang)}
+                        </div>
+                        ${ids.map(({ entityId, external }) =>
+                          this._renderTemperatureRoleRow(entityId, external, "primary"),
+                        )}
+                      </div>
+                      <div class="sensor-table">
+                        <div class="sensor-table-title">
+                          <ha-icon icon="mdi:chart-timeline-variant"></ha-icon>
+                          ${localize("devices.auxiliary_fusion_sensors", lang)}
+                        </div>
+                        ${auxiliaryIds.length > 0
+                          ? auxiliaryIds.map(({ entityId, external }) =>
+                              this._renderTemperatureRoleRow(entityId, external, "auxiliary"),
+                            )
+                          : html`<div class="empty-row">
+                              ${localize("devices.no_auxiliary_sensors", lang)}
+                            </div>`}
+                      </div>
+                    `
+                  : html`<div class="empty-row">${localize("devices.no_temp_sensors", lang)}</div>`}
+              </div>
+            `}
+      </div>
+    `;
+  }
+
+  private _renderTemperatureRoleRow(
+    entityId: string,
+    external: boolean,
+    role: "primary" | "auxiliary",
+  ) {
+    const state = this.hass.states[entityId];
+    const friendlyName = (state?.attributes?.friendly_name as string) || entityId;
+    const lang = this.hass.language;
+    const isPrimary = this.temperatureSensor === entityId;
+    const isAuxiliary = this.temperatureSensors.has(entityId) && !isPrimary;
+    const selected = role === "primary" ? isPrimary : isAuxiliary;
+    const formatted = this._formatSensorValue(entityId, "temp");
+    const health = this._sensorHealth(entityId);
+    return html`
+      <div
+        class="sensor-table-row ${selected ? "selected" : ""}"
+        @click=${(e: Event) => {
+          const tag = (e.target as HTMLElement).tagName;
+          if (tag === "HA-CHECKBOX" || tag === "HA-RADIO") return;
+          if (role === "primary") this._onSensorSelected(isPrimary ? "" : entityId, "temp");
+          else this._onTemperatureSensorToggle(entityId, !isAuxiliary);
+        }}
+      >
+        ${role === "primary"
+          ? html`<ha-radio
+              .checked=${isPrimary}
+              name="temp-primary-sensor"
+              @change=${() => this._onSensorSelected(entityId, "temp")}
+            ></ha-radio>`
+          : html`<ha-checkbox
+              .checked=${isAuxiliary}
+              @change=${(e: Event) => {
+                const target = e.target as HTMLElement & { checked: boolean };
+                this._onTemperatureSensorToggle(entityId, target.checked);
+              }}
+            ></ha-checkbox>`}
+        <div class="row-info">
+          <div class="row-name-line">
+            <span class="row-name">${friendlyName}</span>
+            ${external
+              ? html`<span class="external-badge">${localize("devices.other_area", lang)}</span>`
+              : nothing}
+          </div>
+          <div class="row-eid">${entityId}</div>
+        </div>
+        <span class="value-chip">${formatted || localize("room.status.not_set", lang)}</span>
+        <span class="health-chip ${health.className}">${health.label}</span>
+        <span class="role-chip ${role === "auxiliary" ? "aux" : ""}">
+          ${role === "primary"
+            ? localize("devices.primary_sensor", lang)
+            : localize("devices.sensor_auxiliary", lang)}
+        </span>
+      </div>
     `;
   }
 
@@ -1035,6 +1266,42 @@ export class RsSensorSection extends LitElement {
         ${formatted ? html`<span class="value-chip">${formatted}</span>` : nothing}
       </div>
     `;
+  }
+
+  private _formatSensorValue(entityId: string, kind: "temp" | "humidity"): string {
+    const state = this.hass.states[entityId];
+    const unit = kind === "temp" ? tempUnit(this.hass) : "%";
+    const currentValue = entityId.startsWith("climate.")
+      ? state?.attributes?.current_temperature
+      : state?.state;
+    if (currentValue == null || currentValue === "unknown" || currentValue === "unavailable") {
+      return "";
+    }
+    const value = Number(currentValue);
+    if (!Number.isFinite(value)) return "";
+    return `${kind === "humidity" ? Math.round(value) : value.toFixed(1)}${unit}`;
+  }
+
+  private _sensorHealth(entityId: string): { label: string; className: string } {
+    const lang = this.hass.language;
+    const fusion = this.sensorFusionStatus.find((status) => status.entity_id === entityId);
+    if (fusion) {
+      return {
+        label: this._freshnessLabel(fusion.freshness_status, lang),
+        className: fusion.freshness_status,
+      };
+    }
+    const state = this.hass.states[entityId];
+    if (!state || state.state === "unknown" || state.state === "unavailable") {
+      return {
+        label: localize("devices.sensor_freshness_stale", lang),
+        className: "unavailable",
+      };
+    }
+    return {
+      label: localize("devices.sensor_freshness_fresh", lang),
+      className: "fresh",
+    };
   }
 
   private _globalEntityFilter = (entity: { entity_id: string }): boolean => {

@@ -25,12 +25,12 @@ export class RsRoomConfigurationHub extends LitElement {
         icon="mdi:tune-variant"
         .heading=${localize("room.section.configuration", this.language)}
       >
-        <div class="config-list">
+        <div class="config-grid">
           ${items.map((item) =>
             item.editable
               ? html`
                   <button
-                    class="config-row"
+                    class="config-group ${item.tone}"
                     type="button"
                     @click=${() => this._emitEdit(item.editSection!)}
                     aria-label=${`${localize("panel.edit", this.language)} ${localize(
@@ -38,29 +38,12 @@ export class RsRoomConfigurationHub extends LitElement {
                       this.language,
                     )}`}
                   >
-                    <ha-icon icon=${item.icon}></ha-icon>
-                    <span class="config-row-main">
-                      <span class="config-row-title"
-                        >${localize(item.titleKey, this.language)}</span
-                      >
-                      <span class="config-row-meta"
-                        >${localize(item.metaKey, this.language, item.metaParams)}</span
-                      >
-                    </span>
-                    <ha-icon class="config-chevron" icon="mdi:chevron-right"></ha-icon>
+                    ${this._renderGroupBody(item)}
                   </button>
                 `
               : html`
-                  <div class="config-row config-row-static">
-                    <ha-icon icon=${item.icon}></ha-icon>
-                    <span class="config-row-main">
-                      <span class="config-row-title"
-                        >${localize(item.titleKey, this.language)}</span
-                      >
-                      <span class="config-row-meta"
-                        >${localize(item.metaKey, this.language, item.metaParams)}</span
-                      >
-                    </span>
+                  <div class="config-group config-row-static ${item.tone}">
+                    ${this._renderGroupBody(item)}
                     <ha-switch
                       .checked=${this.isOutdoor}
                       @change=${(e: Event) =>
@@ -72,6 +55,38 @@ export class RsRoomConfigurationHub extends LitElement {
         </div>
       </rs-section-card>
     `;
+  }
+
+  private _renderGroupBody(item: ReturnType<typeof buildConfigurationHubItems>[number]) {
+    return html`
+      <span class="config-icon"><ha-icon icon=${item.icon}></ha-icon></span>
+      <span class="config-main">
+        <span class="config-title-line">
+          <span class="config-title">${localize(item.titleKey, this.language)}</span>
+          <span class="config-status">${this._toneLabel(item.tone)}</span>
+        </span>
+        <span class="config-meta">${localize(item.metaKey, this.language, item.metaParams)}</span>
+        <span class="config-action"
+          >${localize(item.actionKey, this.language, item.actionParams)}</span
+        >
+      </span>
+      ${item.editable
+        ? html`<ha-icon class="config-chevron" icon="mdi:chevron-right"></ha-icon>`
+        : nothing}
+    `;
+  }
+
+  private _toneLabel(tone: string) {
+    switch (tone) {
+      case "complete":
+        return localize("room.config.status_complete", this.language);
+      case "partial":
+        return localize("room.config.status_partial", this.language);
+      case "missing":
+        return localize("room.config.status_missing", this.language);
+      default:
+        return localize("room.config.status_optional", this.language);
+    }
   }
 
   private _emitEdit(section: ConfigurationEditSection) {
@@ -99,32 +114,44 @@ export class RsRoomConfigurationHub extends LitElement {
       display: block;
     }
 
-    .config-list {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
+    .config-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+      gap: 8px;
     }
 
-    .config-row {
+    .config-group {
       display: grid;
-      grid-template-columns: 28px minmax(0, 1fr) auto;
-      align-items: center;
+      grid-template-columns: 30px minmax(0, 1fr) auto;
+      align-items: start;
       gap: 12px;
       width: 100%;
-      min-height: 48px;
-      border: 0;
+      min-height: 92px;
+      border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.08));
       border-radius: var(--roommind-radius-control, 8px);
-      padding: 8px 10px;
-      background: transparent;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.02);
       color: var(--primary-text-color);
       font: inherit;
       text-align: left;
       cursor: pointer;
     }
 
-    .config-row:hover,
-    .config-row:focus-visible {
-      background: rgba(var(--rgb-primary-text-color, 0, 0, 0), 0.045);
+    .config-group.complete {
+      border-color: rgba(76, 175, 80, 0.24);
+    }
+
+    .config-group.partial {
+      border-color: rgba(255, 152, 0, 0.24);
+    }
+
+    .config-group.missing {
+      border-color: rgba(244, 67, 54, 0.24);
+    }
+
+    .config-group:hover,
+    .config-group:focus-visible {
+      background: rgba(var(--rgb-primary-text-color, 255, 255, 255), 0.045);
       outline: none;
     }
 
@@ -133,22 +160,42 @@ export class RsRoomConfigurationHub extends LitElement {
     }
 
     .config-row-static:hover {
-      background: transparent;
+      background: rgba(255, 255, 255, 0.02);
     }
 
-    .config-row ha-icon {
+    .config-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .config-icon ha-icon,
+    .config-chevron {
       --mdc-icon-size: 20px;
       color: var(--secondary-text-color);
     }
 
-    .config-row-main {
+    .config-main {
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 4px;
       min-width: 0;
     }
 
-    .config-row-title {
+    .config-title-line {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .config-title {
+      flex: 1;
+      min-width: 0;
       font-size: 14px;
       font-weight: 600;
       overflow: hidden;
@@ -156,7 +203,35 @@ export class RsRoomConfigurationHub extends LitElement {
       white-space: nowrap;
     }
 
-    .config-row-meta {
+    .config-status {
+      flex-shrink: 0;
+      min-height: 18px;
+      padding: 1px 7px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--secondary-text-color);
+      font-size: 10.5px;
+      font-weight: 600;
+      line-height: 1.5;
+    }
+
+    .complete .config-status {
+      background: rgba(76, 175, 80, 0.14);
+      color: var(--success-color, #4caf50);
+    }
+
+    .partial .config-status {
+      background: rgba(255, 152, 0, 0.14);
+      color: var(--warning-color, #ff9800);
+    }
+
+    .missing .config-status {
+      background: rgba(244, 67, 54, 0.12);
+      color: var(--error-color, #f44336);
+    }
+
+    .config-meta,
+    .config-action {
       color: var(--secondary-text-color);
       font-size: 12px;
       line-height: 1.35;
@@ -165,8 +240,19 @@ export class RsRoomConfigurationHub extends LitElement {
       white-space: nowrap;
     }
 
+    .config-action {
+      color: var(--primary-color);
+    }
+
     .config-chevron {
       opacity: 0.54;
+      margin-top: 5px;
+    }
+
+    @media (max-width: 520px) {
+      .config-grid {
+        grid-template-columns: 1fr;
+      }
     }
   `;
 }

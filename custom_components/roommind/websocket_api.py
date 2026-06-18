@@ -288,6 +288,8 @@ async def websocket_list_rooms(
             "airflow_vent_plan_level": live.get("airflow_vent_plan_level", 0.0),
             "airflow_devices_status": live.get("airflow_devices_status", []),
             "airflow_command_status": live.get("airflow_command_status", []),
+            "sensor_conflict": live.get("sensor_conflict", 0.0),
+            "sensor_fusion_status": live.get("sensor_fusion_status", []),
             "hvac_output_status": live.get("hvac_output_status"),
             "night_mode": live.get("night_mode", {"active": False}),
             "night_control_status": live.get("night_control_status", []),

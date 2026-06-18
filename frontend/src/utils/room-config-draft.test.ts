@@ -119,6 +119,29 @@ describe("room config draft", () => {
     expect([...byList.selectedTempSensors]).toEqual(["sensor.secondary"]);
   });
 
+  test("keeps primary temperature source when auxiliary fusion sensors change", () => {
+    const result = applySensorConfigChange(
+      {
+        selectedTempSensor: "sensor.main",
+        selectedTempSensors: new Set(["sensor.main", "sensor.bedside"]),
+        selectedHumiditySensor: "",
+        selectedOccupancySensors: new Set(),
+        selectedWindowSensors: new Set(),
+        windowOpenDelay: 0,
+        windowCloseDelay: 0,
+      },
+      "temperature_sensors",
+      ["sensor.main", "sensor.bedside", "sensor.radiator"],
+    );
+
+    expect(result.selectedTempSensor).toBe("sensor.main");
+    expect([...result.selectedTempSensors]).toEqual([
+      "sensor.main",
+      "sensor.bedside",
+      "sensor.radiator",
+    ]);
+  });
+
   test("removes per-cover settings when a cover is deselected", () => {
     const result = applyCoverSelectionChange(
       {

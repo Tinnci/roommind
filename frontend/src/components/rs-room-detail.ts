@@ -22,6 +22,8 @@ import "../components/shared/rs-toggle-card";
 import "../components/shared/rs-info-icon";
 import { localize } from "../utils/localize";
 import { fireSaveStatus } from "../utils/events";
+import { formatMode } from "../utils/room-state";
+import { formatTemp, tempUnit } from "../utils/temperature";
 import {
   getRoomDetailLayout,
   type ConfigurationRoomSection,
@@ -86,6 +88,70 @@ export class RsRoomDetail extends LitElement {
       width: 100%;
     }
 
+    rs-room-edit-dialog-router {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      pointer-events: none;
+    }
+
+    rs-room-edit-dialog-router rs-edit-dialog {
+      pointer-events: auto;
+    }
+
+    .status-summary {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.08));
+      border-radius: var(--roommind-radius-card, 8px);
+      background: rgba(255, 255, 255, 0.025);
+    }
+
+    .status-item {
+      display: grid;
+      grid-template-columns: 24px minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+      min-height: 48px;
+      padding: 8px;
+      border-radius: var(--roommind-radius-control, 8px);
+      background: rgba(255, 255, 255, 0.025);
+    }
+
+    .status-item ha-icon {
+      --mdc-icon-size: 20px;
+      color: var(--secondary-text-color);
+    }
+
+    .status-copy {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .status-label {
+      color: var(--secondary-text-color);
+      font-size: 11px;
+      line-height: 1.2;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .status-value {
+      color: var(--primary-text-color);
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.3;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
     @media (min-width: 1900px) {
       .detail-grid {
         grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -93,9 +159,19 @@ export class RsRoomDetail extends LitElement {
     }
 
     @media (max-width: 760px) {
+      .status-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
       .detail-grid {
         grid-template-columns: 1fr;
         gap: 12px;
+      }
+    }
+
+    @media (max-width: 420px) {
+      .status-summary {
+        grid-template-columns: 1fr;
       }
     }
 
@@ -566,8 +642,11 @@ export class RsRoomDetail extends LitElement {
       deviceCount: this._devices.length,
       temperatureSensorCount: this._temperatureSensorIdsForSave().length,
       humiditySensorConfigured: !!this._selectedHumiditySensor,
+      occupancySensorCount: this._selectedOccupancySensors.size,
       windowSensorCount: this._selectedWindowSensors.size,
+      primaryTemperatureSensorName: this._entityName(this._selectedTempSensor),
       quietHours: this._quietHours,
+      nightModeEnabled: this._nightModeEnabled,
       airflowDeviceCount: this._airflowDevices.length,
       presencePersonCount: this._selectedPresencePersons.length,
       coverCount: this._selectedCovers.size,
@@ -601,6 +680,7 @@ export class RsRoomDetail extends LitElement {
           .climateControlActive=${this.climateControlActive && this._climateControlEnabled}
           @display-name-changed=${this._onDisplayNameChanged}
         ></rs-hero-status>
+        ${!this._isOutdoor ? this._renderStatusSummary() : nothing}
 
         <div class="detail-grid">
           ${layout.primarySections.map((section) => this._renderPrimarySection(section))}
@@ -643,6 +723,90 @@ export class RsRoomDetail extends LitElement {
         ></rs-room-edit-dialog-router>
       </div>
     `;
+  }
+
+  private _renderStatusSummary() {
+    const live = this.config?.live;
+    const unit = tempUnit(this.hass);
+    const mode = live?.mode ?? "idle";
+    const targetValue = this._formatTarget(live);
+    const nightValue = live?.night_mode?.active
+      ? localize("room.status.night_active", this.hass.language)
+      : this._quietHours
+        ? localize("room.status.night_scheduled", this.hass.language, {
+            hours: `${this._quietHours.start}-${this._quietHours.end}`,
+          })
+        : localize("room.status.not_set", this.hass.language);
+    const sensorValue =
+      this._entityName(this._selectedTempSensor) ||
+      localize("room.status.not_set", this.hass.language);
+    const setpointValue =
+      live?.device_setpoint != null
+        ? `${formatTemp(live.device_setpoint, this.hass)}${unit}`
+        : localize("room.status.not_set", this.hass.language);
+
+    return html`
+      <div class="status-summary">
+        ${this._renderStatusItem(
+          "mdi:state-machine",
+          localize("room.status.action", this.hass.language),
+          formatMode(mode, this.hass.language),
+        )}
+        ${this._renderStatusItem(
+          "mdi:target",
+          localize("room.status.target", this.hass.language),
+          targetValue,
+        )}
+        ${this._renderStatusItem(
+          "mdi:weather-night",
+          localize("room.status.night", this.hass.language),
+          nightValue,
+        )}
+        ${this._renderStatusItem(
+          "mdi:thermometer",
+          localize("room.status.primary_sensor", this.hass.language),
+          sensorValue,
+        )}
+        ${this._renderStatusItem(
+          "mdi:tune-vertical",
+          localize("room.status.device_setpoint", this.hass.language),
+          setpointValue,
+        )}
+      </div>
+    `;
+  }
+
+  private _renderStatusItem(icon: string, label: string, value: string) {
+    return html`
+      <div class="status-item">
+        <ha-icon icon=${icon}></ha-icon>
+        <span class="status-copy">
+          <span class="status-label">${label}</span>
+          <span class="status-value" title=${value}>${value}</span>
+        </span>
+      </div>
+    `;
+  }
+
+  private _formatTarget(live: RoomConfig["live"] | undefined): string {
+    const unit = tempUnit(this.hass);
+    if (!live) return localize("room.status.not_set", this.hass.language);
+    if (
+      live.heat_target != null &&
+      live.cool_target != null &&
+      live.heat_target !== live.cool_target
+    ) {
+      return `${formatTemp(live.heat_target, this.hass)}-${formatTemp(live.cool_target, this.hass)}${unit}`;
+    }
+    const target = live.target_temp ?? live.heat_target ?? live.cool_target;
+    return target != null
+      ? `${formatTemp(target, this.hass)}${unit}`
+      : localize("room.status.not_set", this.hass.language);
+  }
+
+  private _entityName(entityId: string): string {
+    if (!entityId) return "";
+    return (this.hass.states[entityId]?.attributes?.friendly_name as string) || entityId;
   }
 
   private _renderPrimarySection(section: PrimaryRoomSection) {

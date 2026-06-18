@@ -37,12 +37,17 @@ export class RsEditDialog extends LitElement {
       display: contents;
     }
 
-    .backdrop {
+    :host([open]) {
       position: fixed;
       inset: 0;
-      z-index: 1000;
-      background: rgba(0, 0, 0, 0.55);
-      backdrop-filter: blur(2px);
+      z-index: 10000;
+      display: block;
+    }
+
+    .backdrop {
+      position: absolute;
+      inset: 0;
+      background: #05080c;
       display: flex;
       align-items: flex-start;
       justify-content: center;
@@ -60,7 +65,7 @@ export class RsEditDialog extends LitElement {
     }
 
     .dialog {
-      background: var(--card-background-color, #1c1c1c);
+      background: #11161d;
       color: var(--primary-text-color);
       border-radius: var(--roommind-radius-card, 8px);
       box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
@@ -91,6 +96,7 @@ export class RsEditDialog extends LitElement {
       align-items: center;
       gap: 4px;
       padding: 18px 24px;
+      background: #11161d;
       border-bottom: var(
         --roommind-border-subtle,
         1px solid var(--divider-color, rgba(255, 255, 255, 0.08))
@@ -141,6 +147,7 @@ export class RsEditDialog extends LitElement {
       flex: 1;
       overflow-y: auto;
       padding: 20px 24px 24px;
+      background: #11161d;
     }
 
     .dialog-body ::slotted(*) {
