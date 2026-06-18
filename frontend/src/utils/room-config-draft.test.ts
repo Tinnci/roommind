@@ -18,6 +18,7 @@ const baseConfig: RoomConfig = {
   temperature_sensor: "sensor.main_temp",
   temperature_sensors: ["sensor.secondary_temp", "sensor.main_temp"],
   humidity_sensor: "",
+  humidity_sensors: [],
   window_sensors: [],
   window_open_delay: 0,
   window_close_delay: 0,
@@ -68,8 +69,25 @@ describe("room config draft", () => {
       devices: draft.devices,
       temperature_sensor: "sensor.secondary_temp",
       temperature_sensors: ["sensor.secondary_temp", "sensor.main_temp"],
+      humidity_sensors: [],
       climate_mode: "auto",
       climate_control_enabled: true,
+    });
+  });
+
+  test("builds humidity source priority with primary first and no duplicates", () => {
+    const draft = createRoomConfigDraft({
+      ...baseConfig,
+      humidity_sensor: "sensor.main_humidity",
+      humidity_sensors: ["sensor.backup_humidity", "sensor.main_humidity"],
+    });
+    draft.selectedHumiditySensor = "sensor.backup_humidity";
+
+    const payload = buildRoomSavePayload("living_room", draft);
+
+    expect(payload).toMatchObject({
+      humidity_sensor: "sensor.backup_humidity",
+      humidity_sensors: ["sensor.backup_humidity", "sensor.main_humidity"],
     });
   });
 
@@ -101,6 +119,7 @@ describe("room config draft", () => {
         selectedTempSensor: "",
         selectedTempSensors: new Set(["sensor.secondary"]),
         selectedHumiditySensor: "",
+        selectedHumiditySensors: new Set(),
         selectedOccupancySensors: new Set(),
         selectedWindowSensors: new Set(),
         windowOpenDelay: 0,
@@ -125,6 +144,7 @@ describe("room config draft", () => {
         selectedTempSensor: "sensor.main",
         selectedTempSensors: new Set(["sensor.main", "sensor.bedside"]),
         selectedHumiditySensor: "",
+        selectedHumiditySensors: new Set(),
         selectedOccupancySensors: new Set(),
         selectedWindowSensors: new Set(),
         windowOpenDelay: 0,
@@ -140,6 +160,36 @@ describe("room config draft", () => {
       "sensor.bedside",
       "sensor.radiator",
     ]);
+  });
+
+  test("keeps humidity source priority internally consistent", () => {
+    const byPrimary = applySensorConfigChange(
+      {
+        selectedTempSensor: "",
+        selectedTempSensors: new Set(),
+        selectedHumiditySensor: "",
+        selectedHumiditySensors: new Set(["sensor.backup_humidity"]),
+        selectedOccupancySensors: new Set(),
+        selectedWindowSensors: new Set(),
+        windowOpenDelay: 0,
+        windowCloseDelay: 0,
+      },
+      "humidity_sensor",
+      "sensor.main_humidity",
+    );
+
+    expect(byPrimary.selectedHumiditySensor).toBe("sensor.main_humidity");
+    expect([...byPrimary.selectedHumiditySensors]).toEqual([
+      "sensor.main_humidity",
+      "sensor.backup_humidity",
+    ]);
+
+    const byList = applySensorConfigChange(byPrimary, "humidity_sensors", [
+      "sensor.backup_humidity",
+    ]);
+
+    expect(byList.selectedHumiditySensor).toBe("sensor.backup_humidity");
+    expect([...byList.selectedHumiditySensors]).toEqual(["sensor.backup_humidity"]);
   });
 
   test("removes per-cover settings when a cover is deselected", () => {

@@ -453,7 +453,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             else:
                 del self._last_valid_temps[area_id]
 
-        current_humidity = read_sensor_value(self.hass, room.get("humidity_sensor"), area_id, "humidity")
+        current_humidity = self._read_room_humidity(room, area_id, now)
 
         return current_temp, current_temp_raw, current_humidity, has_external_sensor, observations
 
@@ -465,6 +465,55 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             sensor_ids.append(primary)
 
         extra_sensors = room.get("temperature_sensors", []) or []
+        if isinstance(extra_sensors, str):
+            extra_sensors = [extra_sensors]
+        for item in extra_sensors:
+            entity_id = item.get("entity_id") if isinstance(item, dict) else item
+            if entity_id and entity_id not in sensor_ids:
+                sensor_ids.append(entity_id)
+
+        return sensor_ids
+
+    def _read_room_humidity(self, room: dict, area_id: str, now: datetime) -> float | None:
+        """Read configured humidity sources and return a freshness-weighted value."""
+        sensor_ids = self._humidity_sensor_ids(room)
+        weighted_values: list[tuple[float, float]] = []
+        fallback_values: list[float] = []
+        primary = room.get("humidity_sensor") or ""
+
+        for sensor_id in sensor_ids:
+            value = read_sensor_value(self.hass, sensor_id, area_id, "humidity")
+            if value is None:
+                continue
+            fallback_values.append(value)
+            state = self.hass.states.get(sensor_id)
+            freshness_ts = getattr(state, "last_reported", None) or getattr(state, "last_updated", None)
+            weight = 1.0
+            if isinstance(freshness_ts, datetime):
+                age_s = max(0.0, (now - freshness_ts).total_seconds())
+                if age_s > MAX_SENSOR_STALENESS:
+                    continue
+                weight = 1.0 / (1.0 + age_s / 900.0)
+            if sensor_id == primary:
+                weight *= 1.25
+            weighted_values.append((value, weight))
+
+        if weighted_values:
+            total_weight = sum(weight for _, weight in weighted_values)
+            if total_weight > 0:
+                return round(sum(value * weight for value, weight in weighted_values) / total_weight, 2)
+        if fallback_values:
+            return round(fallback_values[0], 2)
+        return None
+
+    def _humidity_sensor_ids(self, room: dict) -> list[str]:
+        """Return configured humidity sensors with the primary sensor first."""
+        sensor_ids: list[str] = []
+        primary = room.get("humidity_sensor")
+        if primary:
+            sensor_ids.append(primary)
+
+        extra_sensors = room.get("humidity_sensors", []) or []
         if isinstance(extra_sensors, str):
             extra_sensors = [extra_sensors]
         for item in extra_sensors:

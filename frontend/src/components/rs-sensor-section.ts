@@ -16,6 +16,7 @@ export class RsSensorSection extends LitElement {
   @property({ type: String }) public temperatureSensor = "";
   @property({ attribute: false }) public temperatureSensors: Set<string> = new Set();
   @property({ type: String }) public humiditySensor = "";
+  @property({ attribute: false }) public humiditySensors: Set<string> = new Set();
   @property({ attribute: false }) public occupancySensors: Set<string> = new Set();
   @property({ attribute: false }) public windowSensors: Set<string> = new Set();
   @property({ type: Number }) public windowOpenDelay = 0;
@@ -147,6 +148,13 @@ export class RsSensorSection extends LitElement {
         letter-spacing: 0;
       }
 
+      .sensor-table-hint {
+        color: var(--secondary-text-color);
+        font-size: 11.5px;
+        line-height: 1.45;
+        margin: -2px 0 4px 25px;
+      }
+
       .sensor-table-title ha-icon {
         --mdc-icon-size: 17px;
         color: var(--secondary-text-color);
@@ -202,6 +210,47 @@ export class RsSensorSection extends LitElement {
       .role-chip.aux {
         color: var(--secondary-text-color);
         background: rgba(255, 255, 255, 0.06);
+      }
+
+      .role-chip.disabled {
+        color: var(--secondary-text-color);
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .priority-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+      }
+
+      .priority-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        padding: 0;
+        border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.08));
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--secondary-text-color);
+        cursor: pointer;
+      }
+
+      .priority-button:hover:not(:disabled),
+      .priority-button:focus-visible:not(:disabled) {
+        color: var(--primary-color);
+        border-color: rgba(3, 169, 244, 0.4);
+        outline: none;
+      }
+
+      .priority-button:disabled {
+        opacity: 0.35;
+        cursor: default;
+      }
+
+      .priority-button ha-icon {
+        --mdc-icon-size: 17px;
       }
 
       .health-chip {
@@ -600,7 +649,8 @@ export class RsSensorSection extends LitElement {
 
         .sensor-table-row .value-chip,
         .sensor-table-row .health-chip,
-        .sensor-table-row .role-chip {
+        .sensor-table-row .role-chip,
+        .sensor-table-row .priority-actions {
           grid-column: 2 / -1;
           justify-self: start;
         }
@@ -627,8 +677,9 @@ export class RsSensorSection extends LitElement {
 
   private _renderViewMode() {
     const tempSensorIds = this._temperatureSensorIds();
+    const humiditySensorIds = this._humiditySensorIds();
     const hasTempSensors = tempSensorIds.length > 0;
-    const hasHumiditySensor = !!this.humiditySensor;
+    const hasHumiditySensor = humiditySensorIds.length > 0;
     const hasOccupancySensors = this.occupancySensors.size > 0;
     const hasWindowSensors = this.windowSensors.size > 0;
 
@@ -647,7 +698,7 @@ export class RsSensorSection extends LitElement {
       ${hasHumiditySensor
         ? html`
             <div class="section-subtitle">${localize("devices.humidity_sensors", lang)}</div>
-            ${this._renderSensorViewRow(this.humiditySensor, "humidity")}
+            ${humiditySensorIds.map((id) => this._renderSensorViewRow(id, "humidity"))}
           `
         : nothing}
       ${hasOccupancySensors
@@ -778,8 +829,9 @@ export class RsSensorSection extends LitElement {
     const externalTempSensors = this._temperatureSensorIds().filter((id) => !areaTempIds.has(id));
 
     const areaHumidityIds = new Set(areaHumiditySensors.map((e) => e.entity_id));
-    const externalHumiditySensor =
-      this.humiditySensor && !areaHumidityIds.has(this.humiditySensor) ? this.humiditySensor : null;
+    const externalHumiditySensors = this._humiditySensorIds().filter(
+      (id) => !areaHumidityIds.has(id),
+    );
 
     const areaOccupancyIds = new Set(areaOccupancySensors.map((e) => e.entity_id));
     const externalOccupancySensors = [...this.occupancySensors].filter(
@@ -803,15 +855,7 @@ export class RsSensorSection extends LitElement {
     return html`
       ${this._renderTemperatureBlock(areaTempSensors, externalTempSensors, lang)}
       ${this._renderFusionDiagnostics(lang)}
-      ${this._renderBlock({
-        kind: "humidity",
-        icon: "mdi:water-percent",
-        title: localize("devices.humidity_sensors", lang),
-        emptyText: localize("devices.no_humidity_sensors", lang),
-        areaSensors: areaHumiditySensors,
-        externalSensors: externalHumiditySensor ? [externalHumiditySensor] : [],
-        selectedCount: this.humiditySensor ? 1 : 0,
-      })}
+      ${this._renderHumidityBlock(areaHumiditySensors, externalHumiditySensors, lang)}
       ${this._renderBlock({
         kind: "occupancy",
         icon: "mdi:account-eye",
@@ -846,7 +890,7 @@ export class RsSensorSection extends LitElement {
       ...areaSensors.map((e) => ({ entityId: e.entity_id, external: false })),
       ...externalSensors.map((entityId) => ({ entityId, external: true })),
     ];
-    const auxiliaryIds = ids.filter(({ entityId }) => entityId !== this.temperatureSensor);
+    const selectedIds = this._temperatureSensorIds();
 
     return html`
       <div class="sensor-block ${isCollapsed ? "collapsed" : ""}">
@@ -873,25 +917,20 @@ export class RsSensorSection extends LitElement {
                   ? html`
                       <div class="sensor-table">
                         <div class="sensor-table-title">
-                          <ha-icon icon="mdi:crosshairs-gps"></ha-icon>
-                          ${localize("devices.primary_temperature_source", lang)}
+                          <ha-icon icon="mdi:sort-ascending"></ha-icon>
+                          ${localize("devices.temperature_priority_sources", lang)}
+                        </div>
+                        <div class="sensor-table-hint">
+                          ${localize("devices.temperature_priority_hint", lang)}
                         </div>
                         ${ids.map(({ entityId, external }) =>
-                          this._renderTemperatureRoleRow(entityId, external, "primary"),
+                          this._renderPrioritySensorRow(
+                            entityId,
+                            external,
+                            "temp",
+                            selectedIds.indexOf(entityId),
+                          ),
                         )}
-                      </div>
-                      <div class="sensor-table">
-                        <div class="sensor-table-title">
-                          <ha-icon icon="mdi:chart-timeline-variant"></ha-icon>
-                          ${localize("devices.auxiliary_fusion_sensors", lang)}
-                        </div>
-                        ${auxiliaryIds.length > 0
-                          ? auxiliaryIds.map(({ entityId, external }) =>
-                              this._renderTemperatureRoleRow(entityId, external, "auxiliary"),
-                            )
-                          : html`<div class="empty-row">
-                              ${localize("devices.no_auxiliary_sensors", lang)}
-                            </div>`}
                       </div>
                     `
                   : html`<div class="empty-row">${localize("devices.no_temp_sensors", lang)}</div>`}
@@ -901,42 +940,102 @@ export class RsSensorSection extends LitElement {
     `;
   }
 
-  private _renderTemperatureRoleRow(
+  private _renderHumidityBlock(
+    areaSensors: { entity_id: string }[],
+    externalSensors: string[],
+    lang: string,
+  ) {
+    const total = areaSensors.length + externalSensors.length;
+    const isCollapsed = this._collapsed.humidity ?? true;
+    const ids = [
+      ...areaSensors.map((e) => ({ entityId: e.entity_id, external: false })),
+      ...externalSensors.map((entityId) => ({ entityId, external: true })),
+    ];
+    const selectedIds = this._humiditySensorIds();
+
+    return html`
+      <div class="sensor-block ${isCollapsed ? "collapsed" : ""}">
+        <div class="block-header" @click=${() => this._toggleBlock("humidity")}>
+          <ha-icon icon="mdi:water-percent"></ha-icon>
+          <div class="block-title">${localize("devices.humidity_sensors", lang)}</div>
+          ${selectedIds.length > 0
+            ? html`<span class="count-chip has-selection">${selectedIds.length}</span>`
+            : total > 0
+              ? html`<span class="count-chip">${total}</span>`
+              : nothing}
+          <ha-icon
+            class="chevron ${isCollapsed ? "collapsed" : ""}"
+            icon="mdi:chevron-down"
+          ></ha-icon>
+        </div>
+        ${isCollapsed
+          ? nothing
+          : html`
+              <div class="block-body temperature-stack">
+                ${ids.length > 0
+                  ? html`
+                      <div class="sensor-table">
+                        <div class="sensor-table-title">
+                          <ha-icon icon="mdi:sort-ascending"></ha-icon>
+                          ${localize("devices.humidity_priority_sources", lang)}
+                        </div>
+                        <div class="sensor-table-hint">
+                          ${localize("devices.humidity_priority_hint", lang)}
+                        </div>
+                        ${ids.map(({ entityId, external }) =>
+                          this._renderPrioritySensorRow(
+                            entityId,
+                            external,
+                            "humidity",
+                            selectedIds.indexOf(entityId),
+                          ),
+                        )}
+                      </div>
+                    `
+                  : html`<div class="empty-row">
+                      ${localize("devices.no_humidity_sensors", lang)}
+                    </div>`}
+              </div>
+            `}
+      </div>
+    `;
+  }
+
+  private _renderPrioritySensorRow(
     entityId: string,
     external: boolean,
-    role: "primary" | "auxiliary",
+    kind: "temp" | "humidity",
+    priorityIndex: number,
   ) {
     const state = this.hass.states[entityId];
     const friendlyName = (state?.attributes?.friendly_name as string) || entityId;
     const lang = this.hass.language;
-    const isPrimary = this.temperatureSensor === entityId;
-    const isAuxiliary = this.temperatureSensors.has(entityId) && !isPrimary;
-    const selected = role === "primary" ? isPrimary : isAuxiliary;
-    const formatted = this._formatSensorValue(entityId, "temp");
+    const selected = priorityIndex >= 0;
+    const formatted = this._formatSensorValue(entityId, kind);
     const health = this._sensorHealth(entityId);
+    const selectedIds = kind === "temp" ? this._temperatureSensorIds() : this._humiditySensorIds();
+    const roleLabel =
+      priorityIndex === 0
+        ? localize("devices.priority_primary", lang)
+        : selected
+          ? localize("devices.priority_backup", lang, { index: String(priorityIndex + 1) })
+          : localize("devices.priority_disabled", lang);
     return html`
       <div
         class="sensor-table-row ${selected ? "selected" : ""}"
         @click=${(e: Event) => {
           const tag = (e.target as HTMLElement).tagName;
-          if (tag === "HA-CHECKBOX" || tag === "HA-RADIO") return;
-          if (role === "primary") this._onSensorSelected(isPrimary ? "" : entityId, "temp");
-          else this._onTemperatureSensorToggle(entityId, !isAuxiliary);
+          if (tag === "HA-CHECKBOX" || tag === "BUTTON" || tag === "HA-ICON") return;
+          this._onPrioritySensorToggle(entityId, kind, !selected);
         }}
       >
-        ${role === "primary"
-          ? html`<ha-radio
-              .checked=${isPrimary}
-              name="temp-primary-sensor"
-              @change=${() => this._onSensorSelected(entityId, "temp")}
-            ></ha-radio>`
-          : html`<ha-checkbox
-              .checked=${isAuxiliary}
-              @change=${(e: Event) => {
-                const target = e.target as HTMLElement & { checked: boolean };
-                this._onTemperatureSensorToggle(entityId, target.checked);
-              }}
-            ></ha-checkbox>`}
+        <ha-checkbox
+          .checked=${selected}
+          @change=${(e: Event) => {
+            const target = e.target as HTMLElement & { checked: boolean };
+            this._onPrioritySensorToggle(entityId, kind, target.checked);
+          }}
+        ></ha-checkbox>
         <div class="row-info">
           <div class="row-name-line">
             <span class="row-name">${friendlyName}</span>
@@ -948,10 +1047,34 @@ export class RsSensorSection extends LitElement {
         </div>
         <span class="value-chip">${formatted || localize("room.status.not_set", lang)}</span>
         <span class="health-chip ${health.className}">${health.label}</span>
-        <span class="role-chip ${role === "auxiliary" ? "aux" : ""}">
-          ${role === "primary"
-            ? localize("devices.primary_sensor", lang)
-            : localize("devices.sensor_auxiliary", lang)}
+        <span class="role-chip ${priorityIndex > 0 ? "aux" : selected ? "" : "disabled"}">
+          ${roleLabel}
+        </span>
+        <span class="priority-actions">
+          <button
+            class="priority-button"
+            type="button"
+            title=${localize("devices.priority_move_up", lang)}
+            ?disabled=${!selected || priorityIndex <= 0}
+            @click=${(e: Event) => {
+              e.stopPropagation();
+              this._movePrioritySensor(entityId, kind, -1);
+            }}
+          >
+            <ha-icon icon="mdi:chevron-up"></ha-icon>
+          </button>
+          <button
+            class="priority-button"
+            type="button"
+            title=${localize("devices.priority_move_down", lang)}
+            ?disabled=${!selected || priorityIndex < 0 || priorityIndex >= selectedIds.length - 1}
+            @click=${(e: Event) => {
+              e.stopPropagation();
+              this._movePrioritySensor(entityId, kind, 1);
+            }}
+          >
+            <ha-icon icon="mdi:chevron-down"></ha-icon>
+          </button>
         </span>
       </div>
     `;
@@ -1311,6 +1434,7 @@ export class RsSensorSection extends LitElement {
     if (this.temperatureSensor === id) return false;
     if (this.temperatureSensors.has(id)) return false;
     if (this.humiditySensor === id) return false;
+    if (this.humiditySensors.has(id)) return false;
     if (this.occupancySensors.has(id)) return false;
     if (this.windowSensors.has(id)) return false;
     if (id.startsWith("sensor.")) {
@@ -1353,12 +1477,13 @@ export class RsSensorSection extends LitElement {
       if (!this.occupancySensors.has(entityId)) this._onOccupancyToggle(entityId, true);
     } else if (entityId.startsWith("input_number.")) {
       const uom = this.hass.states[entityId]?.attributes?.unit_of_measurement;
-      this._onSensorSelected(entityId, uom === "%" ? "humidity" : "temp");
+      if (uom === "%") this._onPrioritySensorToggle(entityId, "humidity", true);
+      else this._onPrioritySensorToggle(entityId, "temp", true);
     } else if (entityId.startsWith("climate.")) {
-      this._onSensorSelected(entityId, "temp");
+      this._onPrioritySensorToggle(entityId, "temp", true);
     } else {
       const dc = this.hass.states[entityId]?.attributes?.device_class;
-      this._onSensorSelected(entityId, dc === "humidity" ? "humidity" : "temp");
+      this._onPrioritySensorToggle(entityId, dc === "humidity" ? "humidity" : "temp", true);
     }
     this._pickerOpen = false;
   };
@@ -1387,6 +1512,50 @@ export class RsSensorSection extends LitElement {
     }
   }
 
+  private _onPrioritySensorToggle(entityId: string, kind: "temp" | "humidity", checked: boolean) {
+    const selectedIds = kind === "temp" ? this._temperatureSensorIds() : this._humiditySensorIds();
+    const next = checked
+      ? selectedIds.includes(entityId)
+        ? selectedIds
+        : [...selectedIds, entityId]
+      : selectedIds.filter((id) => id !== entityId);
+    this._emitPrioritySensors(kind, next);
+  }
+
+  private _movePrioritySensor(entityId: string, kind: "temp" | "humidity", direction: -1 | 1) {
+    const selectedIds = kind === "temp" ? this._temperatureSensorIds() : this._humiditySensorIds();
+    const index = selectedIds.indexOf(entityId);
+    const nextIndex = index + direction;
+    if (index < 0 || nextIndex < 0 || nextIndex >= selectedIds.length) return;
+    const next = [...selectedIds];
+    const current = next[index];
+    const target = next[nextIndex];
+    if (!current || !target) return;
+    next[index] = target;
+    next[nextIndex] = current;
+    this._emitPrioritySensors(kind, next);
+  }
+
+  private _emitPrioritySensors(kind: "temp" | "humidity", ids: string[]) {
+    const primaryKey = kind === "temp" ? "temperature_sensor" : "humidity_sensor";
+    const listKey = kind === "temp" ? "temperature_sensors" : "humidity_sensors";
+    const primary = ids[0] ?? "";
+    this.dispatchEvent(
+      new CustomEvent("sensor-changed", {
+        detail: { key: primaryKey, value: primary },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    this.dispatchEvent(
+      new CustomEvent("sensor-changed", {
+        detail: { key: listKey, value: ids },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
   private _onTemperatureSensorToggle(entityId: string, checked: boolean) {
     const next = new Set(this.temperatureSensors);
     if (checked) next.add(entityId);
@@ -1404,6 +1573,15 @@ export class RsSensorSection extends LitElement {
     const ids: string[] = [];
     if (this.temperatureSensor) ids.push(this.temperatureSensor);
     for (const id of this.temperatureSensors) {
+      if (id && !ids.includes(id)) ids.push(id);
+    }
+    return ids;
+  }
+
+  private _humiditySensorIds(): string[] {
+    const ids: string[] = [];
+    if (this.humiditySensor) ids.push(this.humiditySensor);
+    for (const id of this.humiditySensors) {
       if (id && !ids.includes(id)) ids.push(id);
     }
     return ids;

@@ -145,6 +145,30 @@ export class RsComfortSection extends LitElement {
         width: 100%;
       }
 
+      .native-select-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .native-select-field label {
+        color: var(--secondary-text-color);
+        font-size: 12px;
+        line-height: 1.2;
+      }
+
+      .native-select {
+        width: 100%;
+        min-height: 46px;
+        box-sizing: border-box;
+        border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.12));
+        border-radius: 8px;
+        padding: 0 12px;
+        background: rgba(255, 255, 255, 0.08);
+        color: var(--primary-text-color);
+        font: inherit;
+      }
+
       .list {
         display: flex;
         flex-direction: column;
@@ -511,35 +535,39 @@ export class RsComfortSection extends LitElement {
           this._updateNightControl(index, { entity_id: e.detail?.value || "" })}
       ></ha-entity-picker>
       <div class="field-row">
-        <ha-select
-          .label=${localize("comfort.night_control_role", lang)}
-          .value=${item.role ?? "other"}
-          @selected=${(e: Event) =>
-            this._updateNightControl(index, {
-              role: (getSelectValue(e) as NightControlConfig["role"]) ?? "other",
-            })}
-          @closed=${(e: Event) => e.stopPropagation()}
-          fixedMenuPosition
-        >
-          <ha-list-item value="indicator_light"
-            >${localize("comfort.role_indicator_light", lang)}</ha-list-item
+        <div class="native-select-field">
+          <label>${localize("comfort.night_control_role", lang)}</label>
+          <select
+            class="native-select"
+            .value=${item.role ?? "other"}
+            @change=${(e: Event) =>
+              this._updateNightControl(index, {
+                role:
+                  ((e.target as HTMLSelectElement).value as NightControlConfig["role"]) ?? "other",
+              })}
           >
-          <ha-list-item value="display">${localize("comfort.role_display", lang)}</ha-list-item>
-          <ha-list-item value="beeper">${localize("comfort.role_beeper", lang)}</ha-list-item>
-          <ha-list-item value="sound">${localize("comfort.role_sound", lang)}</ha-list-item>
-          <ha-list-item value="other">${localize("comfort.role_other", lang)}</ha-list-item>
-        </ha-select>
-        <ha-select
-          .label=${localize("comfort.restore_after_night", lang)}
-          .value=${item.restore_after_night === false ? "false" : "true"}
-          @selected=${(e: Event) =>
-            this._updateNightControl(index, { restore_after_night: getSelectValue(e) !== "false" })}
-          @closed=${(e: Event) => e.stopPropagation()}
-          fixedMenuPosition
-        >
-          <ha-list-item value="true">${localize("common.yes", lang)}</ha-list-item>
-          <ha-list-item value="false">${localize("common.no", lang)}</ha-list-item>
-        </ha-select>
+            <option value="indicator_light">
+              ${localize("comfort.role_indicator_light", lang)}
+            </option>
+            <option value="display">${localize("comfort.role_display", lang)}</option>
+            <option value="beeper">${localize("comfort.role_beeper", lang)}</option>
+            <option value="sound">${localize("comfort.role_sound", lang)}</option>
+            <option value="other">${localize("comfort.role_other", lang)}</option>
+          </select>
+        </div>
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-title">${localize("comfort.restore_after_night", lang)}</div>
+            <div class="toggle-hint">${localize("comfort.restore_after_night_hint", lang)}</div>
+          </div>
+          <ha-switch
+            .checked=${item.restore_after_night !== false}
+            @change=${(e: Event) =>
+              this._updateNightControl(index, {
+                restore_after_night: (e.target as HTMLInputElement).checked,
+              })}
+          ></ha-switch>
+        </div>
       </div>
       <div class="field-row">
         <ha-textfield

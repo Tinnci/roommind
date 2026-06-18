@@ -49,6 +49,7 @@ def _migrate_room(room: dict) -> dict:
     """Apply all read-time migrations (safety net)."""
     _migrate_room_temps(room)
     room.setdefault("temperature_sensors", [])
+    room.setdefault("humidity_sensors", [])
     room.setdefault("airflow_devices", [])
     room.setdefault("room_volume_m3", None)
     room.setdefault("control_target", "air_temperature")
@@ -64,6 +65,7 @@ def _migrate_room(room: dict) -> dict:
         if isinstance(adjacent, dict):
             adjacent.setdefault("allow_borrowed_conditioning", True)
     _normalize_temperature_sensors(room)
+    _normalize_humidity_sensors(room)
     migrate_heat_pump_devices(room.get("devices", []))
     ensure_room_has_devices(room)
     return room
@@ -85,6 +87,24 @@ def _normalize_temperature_sensors(room: dict) -> None:
         if entity_id and entity_id not in sensor_ids:
             sensor_ids.append(entity_id)
     room["temperature_sensors"] = sensor_ids
+
+
+def _normalize_humidity_sensors(room: dict) -> None:
+    """Keep the primary humidity sensor as the first fused humidity source."""
+    primary = room.get("humidity_sensor") or ""
+    if not primary:
+        room["humidity_sensors"] = []
+        return
+
+    raw_sensors = room.get("humidity_sensors", []) or []
+    if isinstance(raw_sensors, str):
+        raw_sensors = [raw_sensors]
+    sensor_ids = [primary]
+    for item in raw_sensors:
+        entity_id = item.get("entity_id") if isinstance(item, dict) else item
+        if entity_id and entity_id not in sensor_ids:
+            sensor_ids.append(entity_id)
+    room["humidity_sensors"] = sensor_ids
 
 
 _ORPHAN_SETTINGS_KEYS = ("heating_threshold", "cooling_threshold")
@@ -227,6 +247,8 @@ class RoomMindStore:
         self._sync_devices(existing, config)
         if "temperature_sensor" in config or "temperature_sensors" in config:
             _normalize_temperature_sensors(existing)
+        if "humidity_sensor" in config or "humidity_sensors" in config:
+            _normalize_humidity_sensors(existing)
         return existing
 
     def _create_room(self, area_id: str, config: dict) -> dict:
@@ -251,6 +273,7 @@ class RoomMindStore:
             "sleep_temp_ramp_c": config.get("sleep_temp_ramp_c", 0.0),
             "adjacent_rooms": config.get("adjacent_rooms", []),
             "humidity_sensor": config.get("humidity_sensor", ""),
+            "humidity_sensors": config.get("humidity_sensors", []),
             "occupancy_sensors": config.get("occupancy_sensors", []),
             "climate_mode": config.get("climate_mode", "auto"),
             "schedules": config.get("schedules", []),
@@ -311,6 +334,7 @@ class RoomMindStore:
         room.setdefault("thermostats", [])
         room.setdefault("acs", [])
         _normalize_temperature_sensors(room)
+        _normalize_humidity_sensors(room)
         return room
 
     async def async_save_room(self, area_id: str, config: dict) -> dict:
@@ -338,6 +362,8 @@ class RoomMindStore:
         self._data[area_id].update(changes)
         if "temperature_sensor" in changes or "temperature_sensors" in changes:
             _normalize_temperature_sensors(self._data[area_id])
+        if "humidity_sensor" in changes or "humidity_sensors" in changes:
+            _normalize_humidity_sensors(self._data[area_id])
         await self._async_save()
         return self._data[area_id]
 

@@ -22,6 +22,7 @@ async def test_save_room_creates_new(store):
     assert room["temperature_sensor"] == ""
     assert room["temperature_sensors"] == []
     assert room["humidity_sensor"] == ""
+    assert room["humidity_sensors"] == []
     assert room["climate_mode"] == "auto"
     assert room["schedules"] == []
     assert room["schedule_selector_entity"] == ""
@@ -59,6 +60,7 @@ async def test_save_room_with_all_fields(store):
             "temperature_sensor": "sensor.sz_temp",
             "temperature_sensors": ["sensor.sz_temp", "sensor.sz_trv_temp"],
             "humidity_sensor": "sensor.sz_humidity",
+            "humidity_sensors": ["sensor.sz_humidity", "sensor.sz_backup_humidity"],
             "climate_mode": "heat_only",
             "schedules": [{"entity_id": "schedule.bedroom_heating"}],
             "schedule_selector_entity": "",
@@ -73,6 +75,7 @@ async def test_save_room_with_all_fields(store):
     assert room["temperature_sensor"] == "sensor.sz_temp"
     assert room["temperature_sensors"] == ["sensor.sz_temp", "sensor.sz_trv_temp"]
     assert room["humidity_sensor"] == "sensor.sz_humidity"
+    assert room["humidity_sensors"] == ["sensor.sz_humidity", "sensor.sz_backup_humidity"]
     assert room["climate_mode"] == "heat_only"
     assert room["schedules"] == [{"entity_id": "schedule.bedroom_heating"}]
     assert room["schedule_selector_entity"] == ""
@@ -97,6 +100,26 @@ async def test_save_room_normalizes_temperature_sensor_list(store):
 
 
 @pytest.mark.asyncio
+async def test_save_room_normalizes_humidity_sensor_list(store):
+    """The primary humidity sensor is persisted first and duplicates are removed."""
+    await store.async_load()
+
+    room = await store.async_save_room(
+        "wohnzimmer",
+        {
+            "humidity_sensor": "sensor.wall_humidity",
+            "humidity_sensors": [
+                "sensor.backup_humidity",
+                "sensor.wall_humidity",
+                "sensor.backup_humidity",
+            ],
+        },
+    )
+
+    assert room["humidity_sensors"] == ["sensor.wall_humidity", "sensor.backup_humidity"]
+
+
+@pytest.mark.asyncio
 async def test_save_room_clears_temperature_sensors_without_primary(store):
     """A room without a primary sensor must not retain auxiliary-only observations."""
     await store.async_load()
@@ -110,6 +133,22 @@ async def test_save_room_clears_temperature_sensors_without_primary(store):
     )
 
     assert room["temperature_sensors"] == []
+
+
+@pytest.mark.asyncio
+async def test_save_room_clears_humidity_sensors_without_primary(store):
+    """A room without a primary humidity sensor must not retain auxiliary-only humidity."""
+    await store.async_load()
+
+    room = await store.async_save_room(
+        "wohnzimmer",
+        {
+            "humidity_sensor": "",
+            "humidity_sensors": ["sensor.backup_humidity"],
+        },
+    )
+
+    assert room["humidity_sensors"] == []
 
 
 @pytest.mark.asyncio

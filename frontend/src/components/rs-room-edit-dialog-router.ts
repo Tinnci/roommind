@@ -230,6 +230,7 @@ export class RsRoomEditDialogRouter extends LitElement {
           .temperatureSensor=${draft.selectedTempSensor}
           .temperatureSensors=${draft.selectedTempSensors}
           .humiditySensor=${draft.selectedHumiditySensor}
+          .humiditySensors=${draft.selectedHumiditySensors}
           .occupancySensors=${draft.selectedOccupancySensors}
           .windowSensors=${draft.selectedWindowSensors}
           .windowOpenDelay=${draft.windowOpenDelay}

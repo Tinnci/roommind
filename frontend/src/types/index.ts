@@ -263,6 +263,7 @@ export interface RoomConfig {
   temperature_sensor: string;
   temperature_sensors?: string[];
   humidity_sensor: string;
+  humidity_sensors?: string[];
   occupancy_sensors?: string[];
   window_sensors: string[];
   window_open_delay: number;

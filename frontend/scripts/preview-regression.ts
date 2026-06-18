@@ -256,8 +256,8 @@ async function run(): Promise<void> {
     console.log("Room detail desktop checked");
 
     await openRoomEditSection(cdp, "sensors");
-    const sensorsText = await waitForText(cdp, "Primary temperature source");
-    assertIncludes(sensorsText, "Auxiliary fusion sensors");
+    const sensorsText = await waitForText(cdp, "Temperature source priority");
+    assertIncludes(sensorsText, "Humidity sensors");
     await screenshot(cdp, "sensors-desktop");
     console.log("Sensors desktop checked");
 
@@ -280,7 +280,7 @@ async function run(): Promise<void> {
       mobile: true,
     });
     await openRoomEditSection(cdp, "sensors");
-    await waitForText(cdp, "Primary temperature source");
+    await waitForText(cdp, "Temperature source priority");
     const backdropBackground = await evaluate<string>(
       cdp,
       `(() => {
@@ -318,7 +318,7 @@ async function run(): Promise<void> {
 
     await openRoomEditSection(cdp, "airflow");
     await screenshot(cdp, "airflow-mobile");
-    await waitForText(cdp, "Behavior preferences");
+    await waitForText(cdp, "Airflow preference");
     console.log("Airflow mobile checked");
 
     await cdp.send("Emulation.setEmulatedMedia", {

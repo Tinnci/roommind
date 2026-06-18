@@ -243,6 +243,47 @@ export class RsAirflowSection extends LitElement {
         font: inherit;
       }
 
+      .preference-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      .preference-button {
+        min-height: 56px;
+        border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.1));
+        border-radius: 8px;
+        padding: 8px;
+        background: rgba(255, 255, 255, 0.03);
+        color: var(--primary-text-color);
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .preference-button:hover,
+      .preference-button:focus-visible,
+      .preference-button.selected {
+        border-color: rgba(3, 169, 244, 0.55);
+        background: rgba(3, 169, 244, 0.12);
+        outline: none;
+      }
+
+      .preference-title {
+        display: block;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .preference-copy {
+        display: block;
+        margin-top: 3px;
+        color: var(--secondary-text-color);
+        font-size: 11px;
+        line-height: 1.35;
+      }
+
       .detail-field + .detail-field,
       .detail-field + .detail-toggle-row,
       .detail-toggle-row + .detail-toggle-row,
@@ -301,6 +342,10 @@ export class RsAirflowSection extends LitElement {
 
         .view-name {
           flex-basis: 100%;
+        }
+
+        .preference-grid {
+          grid-template-columns: 1fr;
         }
       }
     `,
@@ -374,6 +419,7 @@ export class RsAirflowSection extends LitElement {
           >${friendlyName}</span
         >
         <span class="pill">${this._roleLabel(device.role)}</span>
+        <span class="pill">${this._preferenceLabel(device.effect_weight ?? 1)}</span>
         ${device.control_enabled
           ? html`<span class="pill active"
               >${localize("airflow.control_enabled_short", lang)}</span
@@ -556,6 +602,8 @@ export class RsAirflowSection extends LitElement {
         </ha-select>
       </div>
 
+      ${this._renderWindPreference(entityId, device)}
+
       <div class="detail-toggle-row">
         <div class="toggle-text">
           <div class="toggle-title">${localize("airflow.controllable", lang)}</div>
@@ -641,6 +689,52 @@ export class RsAirflowSection extends LitElement {
             : nothing}
         </div>
       </details>
+    `;
+  }
+
+  private _renderWindPreference(entityId: string, device: AirflowDeviceConfig) {
+    const lang = this.language;
+    const selected = this._preferenceKey(device.effect_weight ?? 1);
+    const options = [
+      {
+        key: "gentle",
+        value: 0.65,
+        title: localize("airflow.preference_gentle", lang),
+        copy: localize("airflow.preference_gentle_hint", lang),
+      },
+      {
+        key: "balanced",
+        value: 1,
+        title: localize("airflow.preference_balanced", lang),
+        copy: localize("airflow.preference_balanced_hint", lang),
+      },
+      {
+        key: "strong",
+        value: 1.35,
+        title: localize("airflow.preference_strong", lang),
+        copy: localize("airflow.preference_strong_hint", lang),
+      },
+    ] as const;
+
+    return html`
+      <div class="detail-group">
+        <div class="toggle-title">${localize("airflow.wind_preference", lang)}</div>
+        <div class="toggle-hint">${localize("airflow.wind_preference_hint", lang)}</div>
+        <div class="preference-grid">
+          ${options.map(
+            (option) => html`
+              <button
+                class="preference-button ${selected === option.key ? "selected" : ""}"
+                type="button"
+                @click=${() => this._updateDevice(entityId, { effect_weight: option.value })}
+              >
+                <span class="preference-title">${option.title}</span>
+                <span class="preference-copy">${option.copy}</span>
+              </button>
+            `,
+          )}
+        </div>
+      </div>
     `;
   }
 
@@ -1030,6 +1124,17 @@ export class RsAirflowSection extends LitElement {
           ? "airflow.role_hvac_fan"
           : "airflow.role_circulation";
     return localize(key, this.language);
+  }
+
+  private _preferenceKey(weight: number): "gentle" | "balanced" | "strong" {
+    if (weight < 0.85) return "gentle";
+    if (weight > 1.15) return "strong";
+    return "balanced";
+  }
+
+  private _preferenceLabel(weight: number): string {
+    const key = this._preferenceKey(weight);
+    return localize(`airflow.preference_${key}` as TranslationKey, this.language);
   }
 
   private _statusFor(entityId: string): AirflowDeviceStatus | undefined {

@@ -25,6 +25,7 @@ export interface RoomConfigDraft {
   selectedTempSensor: string;
   selectedTempSensors: Set<string>;
   selectedHumiditySensor: string;
+  selectedHumiditySensors: Set<string>;
   selectedOccupancySensors: Set<string>;
   selectedWindowSensors: Set<string>;
   windowOpenDelay: number;
@@ -80,6 +81,7 @@ export function createEmptyRoomConfigDraft(): RoomConfigDraft {
     selectedTempSensor: "",
     selectedTempSensors: new Set(),
     selectedHumiditySensor: "",
+    selectedHumiditySensors: new Set(),
     selectedOccupancySensors: new Set(),
     selectedWindowSensors: new Set(),
     windowOpenDelay: 0,
@@ -162,6 +164,20 @@ export function createRoomConfigDraft(config: RoomConfig | null): RoomConfigDraf
     draft.selectedTempSensors = new Set([draft.selectedTempSensor, ...draft.selectedTempSensors]);
   }
   draft.selectedHumiditySensor = config.humidity_sensor ?? "";
+  draft.selectedHumiditySensors = new Set(
+    config.humidity_sensors?.length
+      ? config.humidity_sensors
+      : config.humidity_sensor
+        ? [config.humidity_sensor]
+        : [],
+  );
+  if (draft.selectedHumiditySensor) {
+    draft.selectedHumiditySensors.delete(draft.selectedHumiditySensor);
+    draft.selectedHumiditySensors = new Set([
+      draft.selectedHumiditySensor,
+      ...draft.selectedHumiditySensors,
+    ]);
+  }
   draft.selectedOccupancySensors = new Set(config.occupancy_sensors ?? []);
   draft.selectedWindowSensors = new Set(config.window_sensors ?? []);
   draft.windowOpenDelay = config.window_open_delay ?? 0;
@@ -240,6 +256,7 @@ export interface SensorConfigDraftState {
   selectedTempSensor: string;
   selectedTempSensors: Set<string>;
   selectedHumiditySensor: string;
+  selectedHumiditySensors: Set<string>;
   selectedOccupancySensors: Set<string>;
   selectedWindowSensors: Set<string>;
   windowOpenDelay: number;
@@ -250,6 +267,7 @@ export type SensorConfigChangeKey =
   | "temperature_sensor"
   | "temperature_sensors"
   | "humidity_sensor"
+  | "humidity_sensors"
   | "occupancy_sensors"
   | "window_sensors"
   | "window_open_delay"
@@ -264,6 +282,7 @@ export function applySensorConfigChange(
     selectedTempSensor: state.selectedTempSensor,
     selectedTempSensors: new Set(state.selectedTempSensors),
     selectedHumiditySensor: state.selectedHumiditySensor,
+    selectedHumiditySensors: new Set(state.selectedHumiditySensors),
     selectedOccupancySensors: new Set(state.selectedOccupancySensors),
     selectedWindowSensors: new Set(state.selectedWindowSensors),
     windowOpenDelay: state.windowOpenDelay,
@@ -284,6 +303,16 @@ export function applySensorConfigChange(
     next.selectedTempSensors = selectedTempSensors;
   } else if (key === "humidity_sensor") {
     next.selectedHumiditySensor = value as string;
+    next.selectedHumiditySensors = next.selectedHumiditySensor
+      ? new Set([next.selectedHumiditySensor, ...next.selectedHumiditySensors])
+      : new Set();
+  } else if (key === "humidity_sensors") {
+    const selectedHumiditySensors = new Set(value as string[]);
+    if (next.selectedHumiditySensor && !selectedHumiditySensors.has(next.selectedHumiditySensor)) {
+      next.selectedHumiditySensor = [...selectedHumiditySensors][0] ?? "";
+    }
+    if (next.selectedHumiditySensor) selectedHumiditySensors.add(next.selectedHumiditySensor);
+    next.selectedHumiditySensors = selectedHumiditySensors;
   } else if (key === "occupancy_sensors") {
     next.selectedOccupancySensors = new Set(value as string[]);
   } else if (key === "window_sensors") {
@@ -334,6 +363,17 @@ export function temperatureSensorIdsForSave(
   return ids;
 }
 
+export function humiditySensorIdsForSave(
+  draft: Pick<RoomConfigDraft, "selectedHumiditySensor" | "selectedHumiditySensors">,
+): string[] {
+  const ids: string[] = [];
+  if (draft.selectedHumiditySensor) ids.push(draft.selectedHumiditySensor);
+  for (const id of draft.selectedHumiditySensors) {
+    if (id && !ids.includes(id)) ids.push(id);
+  }
+  return ids;
+}
+
 export function buildRoomSavePayload(
   areaId: string,
   draft: RoomConfigDraft,
@@ -356,6 +396,7 @@ export function buildRoomSavePayload(
     temperature_sensor: draft.selectedTempSensor,
     temperature_sensors: temperatureSensorIdsForSave(draft),
     humidity_sensor: draft.selectedHumiditySensor,
+    humidity_sensors: humiditySensorIdsForSave(draft),
     occupancy_sensors: [...draft.selectedOccupancySensors],
     window_sensors: [...draft.selectedWindowSensors],
     window_open_delay: draft.windowOpenDelay,

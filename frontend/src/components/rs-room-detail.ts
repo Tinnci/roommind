@@ -386,6 +386,12 @@ export class RsRoomDetail extends LitElement {
   private set _selectedHumiditySensor(selectedHumiditySensor: string) {
     this._patchDraft({ selectedHumiditySensor });
   }
+  private get _selectedHumiditySensors() {
+    return this._draft.selectedHumiditySensors;
+  }
+  private set _selectedHumiditySensors(selectedHumiditySensors: Set<string>) {
+    this._patchDraft({ selectedHumiditySensors });
+  }
   private get _selectedOccupancySensors() {
     return this._draft.selectedOccupancySensors;
   }
@@ -973,6 +979,7 @@ export class RsRoomDetail extends LitElement {
         selectedTempSensor: this._selectedTempSensor,
         selectedTempSensors: this._selectedTempSensors,
         selectedHumiditySensor: this._selectedHumiditySensor,
+        selectedHumiditySensors: this._selectedHumiditySensors,
         selectedOccupancySensors: this._selectedOccupancySensors,
         selectedWindowSensors: this._selectedWindowSensors,
         windowOpenDelay: this._windowOpenDelay,
@@ -984,6 +991,7 @@ export class RsRoomDetail extends LitElement {
     this._selectedTempSensor = next.selectedTempSensor;
     this._selectedTempSensors = next.selectedTempSensors;
     this._selectedHumiditySensor = next.selectedHumiditySensor;
+    this._selectedHumiditySensors = next.selectedHumiditySensors;
     this._selectedOccupancySensors = next.selectedOccupancySensors;
     this._selectedWindowSensors = next.selectedWindowSensors;
     this._windowOpenDelay = next.windowOpenDelay;
