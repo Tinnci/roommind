@@ -1,8 +1,9 @@
 name: Release
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
       tag_name:
@@ -11,11 +12,11 @@ on:
         type: string
 
 concurrency:
-  group: release-${{ github.event.release.tag_name || inputs.tag_name || github.ref }}
+  group: release-${{ inputs.tag_name || github.ref_name }}
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-and-upload:
@@ -28,10 +29,13 @@ jobs:
       - name: Resolve release tag
         id: release
         run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
-            tag="${{ github.event.release.tag_name }}"
-          else
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             tag="${{ inputs.tag_name }}"
+          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            tag="${GITHUB_REF_NAME}"
+          else
+            echo "Release workflow must run from a tag push or workflow_dispatch." >&2
+            exit 1
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
@@ -80,7 +84,16 @@ jobs:
           path: dist/roommind.zip
           if-no-files-found: error
 
-      - name: Upload release asset
+      - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ steps.release.outputs.tag }}" dist/roommind.zip --clobber
+        run: |
+          tag="${{ steps.release.outputs.tag }}"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" dist/roommind.zip --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$tag" dist/roommind.zip \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "RoomMind $tag" \
+              --generate-notes
+          fi
