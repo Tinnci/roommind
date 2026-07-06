@@ -27,6 +27,7 @@ export class RsTemperatureControlPanel extends LitElement {
 
   @state() private _targetTempC = 21;
   @state() private _targetDirty = false;
+  @state() private _durationHours = 2;
   @state() private _overrideError = "";
   @state() private _optimisticOverride: {
     type: OverrideType;
@@ -132,7 +133,7 @@ export class RsTemperatureControlPanel extends LitElement {
         min-width: 0;
         border: var(--roommind-border-subtle);
         border-radius: var(--roommind-radius-control, 8px);
-        background: var(--roommind-surface-subtle);
+        background: var(--roommind-surface);
       }
 
       .target-zone {
@@ -166,6 +167,7 @@ export class RsTemperatureControlPanel extends LitElement {
 
       .step-button,
       .mode-button,
+      .duration-button,
       .preset-button,
       .action-button {
         display: inline-flex;
@@ -175,7 +177,7 @@ export class RsTemperatureControlPanel extends LitElement {
         min-width: 0;
         border-radius: var(--roommind-radius-control, 8px);
         border: var(--roommind-border-subtle);
-        background: var(--roommind-surface-muted);
+        background: var(--roommind-panel-surface);
         color: var(--primary-text-color);
         font: inherit;
         cursor: pointer;
@@ -209,7 +211,7 @@ export class RsTemperatureControlPanel extends LitElement {
         box-sizing: border-box;
         border: var(--roommind-border-subtle);
         border-radius: var(--roommind-radius-control, 8px);
-        background: var(--roommind-panel-surface);
+        background: var(--roommind-surface);
         padding: 0 12px;
       }
 
@@ -260,7 +262,7 @@ export class RsTemperatureControlPanel extends LitElement {
       }
 
       button:disabled:hover {
-        background: var(--roommind-surface-muted);
+        background: var(--roommind-panel-surface);
         border-color: var(--divider-color);
       }
 
@@ -268,6 +270,33 @@ export class RsTemperatureControlPanel extends LitElement {
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
+      }
+
+      .pending-note {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 18px;
+        color: var(--primary-color);
+        font-size: 12px;
+        font-weight: 650;
+        line-height: 1.35;
+      }
+
+      .pending-note ha-icon {
+        --mdc-icon-size: 15px;
+        flex: 0 0 auto;
+      }
+
+      .duration-row {
+        display: grid;
+        gap: 8px;
+      }
+
+      .duration-buttons {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 6px;
       }
 
       .action-button {
@@ -283,21 +312,60 @@ export class RsTemperatureControlPanel extends LitElement {
         color: var(--primary-color);
       }
 
-      .metrics-grid {
+      .insight-grid {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 8px;
       }
 
-      .metric {
+      .insight {
+        display: grid;
+        grid-template-columns: 28px minmax(0, 1fr);
+        align-items: center;
+        gap: 8px;
         min-width: 0;
         padding: 9px 10px;
         border-radius: var(--roommind-radius-control, 8px);
-        background: var(--roommind-panel-surface);
+        background: var(--roommind-surface);
         border: var(--roommind-border-faint);
       }
 
-      .metric-label {
+      .insight.warning {
+        border-color: var(--roommind-warning-border);
+        background: var(--roommind-warning-tint);
+      }
+
+      .insight.critical {
+        border-color: var(--roommind-error-border);
+        background: var(--roommind-error-tint);
+      }
+
+      .insight-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: var(--roommind-radius-small, 4px);
+        background: var(--roommind-primary-subtle);
+        color: var(--secondary-text-color);
+      }
+
+      .insight.warning .insight-icon {
+        background: var(--roommind-warning-tint);
+        color: var(--warning-color, #ff9800);
+      }
+
+      .insight.critical .insight-icon {
+        background: var(--roommind-error-tint);
+        color: var(--error-color, #f44336);
+      }
+
+      .insight-icon ha-icon {
+        --mdc-icon-size: 17px;
+      }
+
+      .insight-label {
         display: block;
         color: var(--secondary-text-color);
         font-size: 11px;
@@ -307,7 +375,7 @@ export class RsTemperatureControlPanel extends LitElement {
         white-space: nowrap;
       }
 
-      .metric-value {
+      .insight-value {
         display: block;
         margin-top: 3px;
         color: var(--primary-text-color);
@@ -334,6 +402,7 @@ export class RsTemperatureControlPanel extends LitElement {
       }
 
       .mode-button,
+      .duration-button,
       .preset-button {
         min-height: 38px;
         padding: 0 9px;
@@ -344,6 +413,7 @@ export class RsTemperatureControlPanel extends LitElement {
       }
 
       .mode-button[active],
+      .duration-button[active],
       .preset-button[active] {
         border-color: var(--roommind-primary-border);
         background: var(--roommind-primary-strong);
@@ -402,9 +472,13 @@ export class RsTemperatureControlPanel extends LitElement {
           font-size: 24px;
         }
 
-        .metrics-grid,
+        .insight-grid,
         .mode-buttons {
           grid-template-columns: 1fr;
+        }
+
+        .duration-buttons {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
         .preset-buttons {
@@ -509,6 +583,7 @@ export class RsTemperatureControlPanel extends LitElement {
                     .value=${this._targetDisplayValue(targetC)}
                     ?disabled=${disabled}
                     @input=${this._onTargetInput}
+                    @keydown=${this._onTargetKeyDown}
                   />
                   <span class="target-unit">${tempUnit(this.hass)}</span>
                 </label>
@@ -531,7 +606,7 @@ export class RsTemperatureControlPanel extends LitElement {
                   @click=${this._onApplyTarget}
                 >
                   <ha-icon icon="mdi:check"></ha-icon>
-                  ${localize("room.temperature_panel.apply", this.language)}
+                  ${this._applyLabel(targetC)}
                 </button>
                 ${ov.active
                   ? html`
@@ -547,21 +622,59 @@ export class RsTemperatureControlPanel extends LitElement {
                     `
                   : nothing}
               </div>
+              ${this._targetDirty
+                ? html`
+                    <div class="pending-note">
+                      <ha-icon icon="mdi:alert-circle-outline"></ha-icon>
+                      ${localize("room.temperature_panel.pending_hint", this.language)}
+                    </div>
+                  `
+                : nothing}
               ${this._overrideError
                 ? html`<div class="error">${this._overrideError}</div>`
                 : nothing}
+              <div class="duration-row">
+                <span class="section-label"
+                  >${localize("room.temperature_panel.hold", this.language)}</span
+                >
+                <div class="duration-buttons">
+                  ${this._renderDurationButton(1, "room.temperature_panel.hold_1h", disabled)}
+                  ${this._renderDurationButton(2, "room.temperature_panel.hold_2h", disabled)}
+                  ${this._renderDurationButton(4, "room.temperature_panel.hold_4h", disabled)}
+                  ${this._renderDurationButton(
+                    0,
+                    "room.temperature_panel.hold_permanent",
+                    disabled,
+                  )}
+                </div>
+              </div>
             </section>
 
             <section class="side-zone">
-              <div class="metrics-grid">
-                ${this._renderMetric(
+              <span class="section-label"
+                >${localize("room.temperature_panel.dynamics", this.language)}</span
+              >
+              <div class="insight-grid">
+                ${this._renderInsight(
                   "room.temperature_panel.current",
                   this._formatTemp(this._currentTemp()),
+                  "mdi:thermometer",
                 )}
-                ${this._renderMetric("room.temperature_panel.target", this._formatTemp(targetC))}
-                ${this._renderMetric(
-                  "room.temperature_panel.device",
-                  this._formatTemp(this.config?.live?.device_setpoint ?? null),
+                ${this._renderInsight(
+                  "room.temperature_panel.humidity",
+                  this._humidityValue(),
+                  "mdi:water-percent",
+                  this._humidityTone(),
+                )}
+                ${this._renderInsight(
+                  "room.temperature_panel.model",
+                  this._modelValue(),
+                  "mdi:brain",
+                )}
+                ${this._renderInsight(
+                  "room.temperature_panel.airflow",
+                  this._airflowValue(),
+                  "mdi:fan",
                 )}
               </div>
 
@@ -592,12 +705,31 @@ export class RsTemperatureControlPanel extends LitElement {
     `;
   }
 
-  private _renderMetric(labelKey: TranslationKey, value: string) {
+  private _renderInsight(labelKey: TranslationKey, value: string, icon: string, tone = "") {
     return html`
-      <span class="metric">
-        <span class="metric-label">${localize(labelKey, this.language)}</span>
-        <span class="metric-value" title=${value}>${value}</span>
+      <span class="insight ${tone}">
+        <span class="insight-icon"><ha-icon icon=${icon}></ha-icon></span>
+        <span class="insight-copy">
+          <span class="insight-label">${localize(labelKey, this.language)}</span>
+          <span class="insight-value" title=${value}>${value}</span>
+        </span>
       </span>
+    `;
+  }
+
+  private _renderDurationButton(hours: number, labelKey: TranslationKey, disabled: boolean) {
+    return html`
+      <button
+        class="duration-button"
+        type="button"
+        ?active=${this._durationHours === hours}
+        ?disabled=${disabled}
+        @click=${() => {
+          this._durationHours = hours;
+        }}
+      >
+        ${localize(labelKey, this.language)}
+      </button>
     `;
   }
 
@@ -642,6 +774,12 @@ export class RsTemperatureControlPanel extends LitElement {
     if (!this.climateControlEnabled) {
       return localize("room.temperature_panel.status_off", this.language);
     }
+    if (this._targetDirty) {
+      return localize("room.temperature_panel.pending_status", this.language, {
+        target: this._formatTemp(this._targetC(ov)),
+        duration: this._durationLabel(),
+      });
+    }
     if (ov.active) {
       const label =
         ov.type === "boost"
@@ -650,7 +788,7 @@ export class RsTemperatureControlPanel extends LitElement {
             ? localize("override.eco", this.language)
             : localize("override.custom", this.language);
       const temp = ov.temp != null ? ` · ${this._formatTemp(ov.temp)}` : "";
-      return `${label}${temp} · ${localize("hero.permanent", this.language)}`;
+      return `${label}${temp} · ${this._overrideDurationText(ov.until)}`;
     }
     return this.climateControlActive
       ? localize("room.temperature_panel.status_on", this.language)
@@ -678,6 +816,69 @@ export class RsTemperatureControlPanel extends LitElement {
       return live.perceived_temp;
     }
     return live.current_temp;
+  }
+
+  private _humidityValue(): string {
+    const humidity = this.config?.live?.current_humidity;
+    return humidity == null
+      ? localize("room.status.not_set", this.language)
+      : `${Math.round(humidity)}%`;
+  }
+
+  private _humidityTone(): string {
+    const risk = this.config?.live?.mold_risk_level;
+    if (risk === "critical") return "critical";
+    if (risk === "warning" || this.config?.live?.mold_prevention_active) return "warning";
+    return "";
+  }
+
+  private _modelValue(): string {
+    const live = this.config?.live;
+    const label = live?.mpc_active
+      ? localize("card.mpc_active", this.language)
+      : localize("card.mpc_learning", this.language);
+    if (live?.confidence == null) return label;
+    return `${label} · ${Math.round(live.confidence * 100)}%`;
+  }
+
+  private _airflowValue(): string {
+    const live = this.config?.live;
+    if (!live || (!live.airflow_active && !live.airflow_ach)) {
+      return localize("room.temperature_panel.airflow_idle", this.language);
+    }
+    const ach = `${live.airflow_ach?.toFixed(1) ?? "0.0"} ${localize("airflow.ach", this.language)}`;
+    const plan = Math.round((live.airflow_plan_level ?? 0) * 100);
+    return plan > 0 ? `${ach} · ${plan}%` : ach;
+  }
+
+  private _overrideDurationText(until: number | null): string {
+    if (!until) return localize("hero.permanent", this.language);
+    const remaining = Math.max(0, until - Date.now() / 1000);
+    const hours = Math.floor(remaining / 3600);
+    const minutes = Math.ceil((remaining % 3600) / 60);
+    const time =
+      hours > 0 ? `${hours}h ${String(minutes).padStart(2, "0")}m` : `${Math.max(1, minutes)}m`;
+    return localize("hero.remaining", this.language, { time });
+  }
+
+  private _durationLabel(): string {
+    switch (this._durationHours) {
+      case 1:
+        return localize("room.temperature_panel.hold_1h", this.language);
+      case 2:
+        return localize("room.temperature_panel.hold_2h", this.language);
+      case 4:
+        return localize("room.temperature_panel.hold_4h", this.language);
+      default:
+        return localize("room.temperature_panel.hold_permanent", this.language);
+    }
+  }
+
+  private _applyLabel(targetC: number): string {
+    return localize("room.temperature_panel.apply_value", this.language, {
+      target: this._formatTemp(targetC),
+      duration: this._durationLabel(),
+    });
   }
 
   private _formatTemp(value: number | null | undefined): string {
@@ -724,6 +925,12 @@ export class RsTemperatureControlPanel extends LitElement {
     this._setTargetDisplay(raw);
   };
 
+  private _onTargetKeyDown = (e: KeyboardEvent): void => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    void this._onApplyTarget();
+  };
+
   private _setTargetDisplay(displayValue: number): void {
     const range = tempRange(5, 35, this.hass);
     const min = Number(range.min);
@@ -735,7 +942,7 @@ export class RsTemperatureControlPanel extends LitElement {
   }
 
   private _onApplyTarget = async (): Promise<void> => {
-    await this._setOverride("custom", this._targetC());
+    await this._setOverride("custom", this._targetC(), this._durationHours);
   };
 
   private _onPreset = async (type: Extract<OverrideType, "boost" | "eco">): Promise<void> => {
@@ -749,14 +956,22 @@ export class RsTemperatureControlPanel extends LitElement {
           : this.ecoHeat;
     this._targetTempC = temp;
     this._targetDirty = false;
-    await this._setOverride(type, temp);
+    await this._setOverride(type, temp, this._durationHours);
   };
 
-  private async _setOverride(type: OverrideType, temp: number): Promise<void> {
+  private async _setOverride(
+    type: OverrideType,
+    temp: number,
+    durationHours: number,
+  ): Promise<void> {
     if (!this.config) return;
     this._busy = true;
     this._overrideError = "";
-    this._optimisticOverride = { type, temp, until: null };
+    this._optimisticOverride = {
+      type,
+      temp,
+      until: durationHours > 0 ? Date.now() / 1000 + durationHours * 3600 : null,
+    };
     this._optimisticClear = false;
 
     const msg: Record<string, unknown> = {
@@ -764,6 +979,9 @@ export class RsTemperatureControlPanel extends LitElement {
       area_id: this.config.area_id,
       override_type: type,
     };
+    if (durationHours > 0) {
+      msg.duration = durationHours;
+    }
     if (type === "custom") {
       msg.temperature = temp;
     }
