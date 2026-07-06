@@ -28,7 +28,7 @@ export const infoIconStyles = css`
   .info-panel {
     padding: 12px;
     border-radius: 8px;
-    background: var(--secondary-background-color, rgba(128, 128, 128, 0.06));
+    background: var(--roommind-surface-muted);
     font-size: 13px;
     line-height: 1.6;
     color: var(--secondary-text-color);
@@ -42,8 +42,8 @@ export const infoIconStyles = css`
   }
 
   .info-panel .yaml-block {
-    background: var(--primary-background-color, #f5f5f5);
-    border: 1px solid var(--divider-color, #e0e0e0);
+    background: var(--code-editor-background-color, var(--roommind-surface-muted));
+    border: var(--roommind-border-subtle);
     border-radius: 6px;
     padding: 10px 14px;
     margin: 8px 0;

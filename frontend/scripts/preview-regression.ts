@@ -2,8 +2,8 @@ import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 
 const HOST = "127.0.0.1";
-const VITE_PORT = 5176;
-const DEBUG_PORT = 9326;
+const VITE_PORT = Number(Bun.env.VITE_PORT ?? 5176);
+const DEBUG_PORT = Number(Bun.env.DEBUG_PORT ?? 9326);
 const BASE_URL = `http://${HOST}:${VITE_PORT}`;
 const ARTIFACT_DIR = join(import.meta.dir, "..", ".preview-artifacts");
 const CHROME_PATH =
@@ -242,6 +242,8 @@ async function run(): Promise<void> {
     });
     await navigate(cdp, "/dev/settings-preview.html");
     const settingsText = await waitForText(cdp, "Advanced control tuning");
+    assertIncludes(settingsText, "MPC");
+    assertIncludes(settingsText, "Comfort 70");
     assertIncludes(settingsText, "Optimizer strategy");
     assertIncludes(settingsText, "Horizon search");
     await openAllDetails(cdp);
@@ -258,6 +260,8 @@ async function run(): Promise<void> {
     await openRoomEditSection(cdp, "sensors");
     const sensorsText = await waitForText(cdp, "Temperature source priority");
     assertIncludes(sensorsText, "Humidity sensors");
+    assertIncludes(sensorsText, "Changes save automatically");
+    assertIncludes(sensorsText, "Done");
     await screenshot(cdp, "sensors-desktop");
     console.log("Sensors desktop checked");
 
@@ -291,8 +295,8 @@ async function run(): Promise<void> {
         return backdrop ? getComputedStyle(backdrop).backgroundColor : "";
       })()`,
     );
-    if (backdropBackground !== "rgb(5, 8, 12)") {
-      throw new Error(`Expected opaque dialog backdrop, got ${backdropBackground}`);
+    if (backdropBackground !== "rgba(0, 0, 0, 0.54)") {
+      throw new Error(`Expected themed dialog backdrop, got ${backdropBackground}`);
     }
     const topPath = await evaluate<string>(
       cdp,

@@ -42,12 +42,12 @@ export const masterDetailStyles = css`
   }
 
   .master-row:hover {
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--roommind-surface-hover);
   }
 
   .master-row.focused {
-    background: rgba(3, 169, 244, 0.08);
-    border-color: rgba(3, 169, 244, 0.5);
+    background: var(--roommind-primary-muted);
+    border-color: var(--roommind-primary-border);
   }
 
   .master-row ha-checkbox {
@@ -96,12 +96,12 @@ export const masterDetailStyles = css`
     letter-spacing: 0;
     text-transform: uppercase;
     color: var(--secondary-text-color);
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--roommind-surface-muted);
   }
 
   .type-pill {
     color: var(--primary-color);
-    background: rgba(3, 169, 244, 0.12);
+    background: var(--roommind-primary-strong);
   }
 
   .external-badge {
@@ -111,7 +111,7 @@ export const masterDetailStyles = css`
     font-size: 10px;
     font-weight: 500;
     color: var(--warning-color, #ff9800);
-    background: rgba(255, 152, 0, 0.1);
+    background: var(--roommind-warning-tint);
     padding: 2px 8px;
     border-radius: var(--roommind-radius-control, 8px);
     letter-spacing: 0;
@@ -124,11 +124,8 @@ export const masterDetailStyles = css`
     flex-direction: column;
     gap: 12px;
     padding: 12px 16px;
-    background: rgba(255, 255, 255, 0.02);
-    border: var(
-      --roommind-border-subtle,
-      1px solid var(--divider-color, rgba(255, 255, 255, 0.08))
-    );
+    background: var(--roommind-surface-subtle);
+    border: var(--roommind-border-subtle);
     border-radius: var(--roommind-radius-card, 8px);
     min-width: 0;
     min-height: 200px;
@@ -159,7 +156,7 @@ export const masterDetailStyles = css`
     flex-direction: column;
     gap: 2px;
     padding-bottom: 6px;
-    border-bottom: 1px solid var(--divider-color, rgba(255, 255, 255, 0.06));
+    border-bottom: var(--roommind-border-faint);
   }
 
   .detail-title {
@@ -241,7 +238,7 @@ export const masterDetailStyles = css`
 
   .block-divider {
     height: 1px;
-    background: var(--divider-color, rgba(255, 255, 255, 0.08));
+    background: var(--divider-color);
     margin: 16px 0 8px;
   }
 

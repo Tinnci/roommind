@@ -66,9 +66,6 @@ export class RsRoomConfigurationHub extends LitElement {
           <span class="config-status">${this._toneLabel(item.tone)}</span>
         </span>
         <span class="config-meta">${localize(item.metaKey, this.language, item.metaParams)}</span>
-        <span class="config-action"
-          >${localize(item.actionKey, this.language, item.actionParams)}</span
-        >
       </span>
       ${item.editable
         ? html`<ha-icon class="config-chevron" icon="mdi:chevron-right"></ha-icon>`
@@ -122,15 +119,15 @@ export class RsRoomConfigurationHub extends LitElement {
 
     .config-group {
       display: grid;
-      grid-template-columns: 30px minmax(0, 1fr) auto;
-      align-items: start;
+      grid-template-columns: 30px minmax(0, 1fr) 20px;
+      align-items: center;
       gap: 12px;
       width: 100%;
-      min-height: 92px;
-      border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.08));
+      min-height: 74px;
+      border: var(--roommind-border-subtle);
       border-radius: var(--roommind-radius-control, 8px);
       padding: 10px;
-      background: rgba(255, 255, 255, 0.02);
+      background: var(--roommind-surface);
       color: var(--primary-text-color);
       font: inherit;
       text-align: left;
@@ -138,20 +135,20 @@ export class RsRoomConfigurationHub extends LitElement {
     }
 
     .config-group.complete {
-      border-color: rgba(76, 175, 80, 0.24);
+      border-color: var(--roommind-success-border);
     }
 
     .config-group.partial {
-      border-color: rgba(255, 152, 0, 0.24);
+      border-color: var(--roommind-warning-border);
     }
 
     .config-group.missing {
-      border-color: rgba(244, 67, 54, 0.24);
+      border-color: var(--roommind-error-border);
     }
 
     .config-group:hover,
     .config-group:focus-visible {
-      background: rgba(var(--rgb-primary-text-color, 255, 255, 255), 0.045);
+      background: var(--roommind-surface-hover);
       outline: none;
     }
 
@@ -160,7 +157,7 @@ export class RsRoomConfigurationHub extends LitElement {
     }
 
     .config-row-static:hover {
-      background: rgba(255, 255, 255, 0.02);
+      background: var(--roommind-surface);
     }
 
     .config-icon {
@@ -170,7 +167,7 @@ export class RsRoomConfigurationHub extends LitElement {
       width: 30px;
       height: 30px;
       border-radius: 8px;
-      background: rgba(255, 255, 255, 0.05);
+      background: var(--roommind-surface-muted);
     }
 
     .config-icon ha-icon,
@@ -182,7 +179,7 @@ export class RsRoomConfigurationHub extends LitElement {
     .config-main {
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 5px;
       min-width: 0;
     }
 
@@ -208,7 +205,7 @@ export class RsRoomConfigurationHub extends LitElement {
       min-height: 18px;
       padding: 1px 7px;
       border-radius: 6px;
-      background: rgba(255, 255, 255, 0.06);
+      background: var(--roommind-surface-muted);
       color: var(--secondary-text-color);
       font-size: 10.5px;
       font-weight: 600;
@@ -216,22 +213,21 @@ export class RsRoomConfigurationHub extends LitElement {
     }
 
     .complete .config-status {
-      background: rgba(76, 175, 80, 0.14);
+      background: var(--roommind-success-tint);
       color: var(--success-color, #4caf50);
     }
 
     .partial .config-status {
-      background: rgba(255, 152, 0, 0.14);
+      background: var(--roommind-warning-tint);
       color: var(--warning-color, #ff9800);
     }
 
     .missing .config-status {
-      background: rgba(244, 67, 54, 0.12);
+      background: var(--roommind-error-tint);
       color: var(--error-color, #f44336);
     }
 
-    .config-meta,
-    .config-action {
+    .config-meta {
       color: var(--secondary-text-color);
       font-size: 12px;
       line-height: 1.35;
@@ -240,13 +236,8 @@ export class RsRoomConfigurationHub extends LitElement {
       white-space: nowrap;
     }
 
-    .config-action {
-      color: var(--primary-color);
-    }
-
     .config-chevron {
       opacity: 0.54;
-      margin-top: 5px;
     }
 
     @media (max-width: 520px) {

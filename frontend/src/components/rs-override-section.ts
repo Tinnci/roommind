@@ -69,30 +69,30 @@ export class RsOverrideSection extends LitElement {
       }
 
       .override-preset:hover {
-        background: rgba(0, 0, 0, 0.04);
+        background: var(--roommind-surface-hover);
       }
 
       .override-preset.pending {
         border-color: var(--primary-color);
-        background: rgba(var(--rgb-primary-color, 33, 150, 243), 0.08);
+        background: var(--roommind-primary-muted);
       }
 
       .override-preset.active.boost {
         border-color: var(--warning-color, #ff9800);
-        background: rgba(255, 152, 0, 0.15);
+        background: var(--roommind-warning-tint);
         color: var(--warning-color, #ff9800);
       }
 
       .override-preset.active.eco {
         border-color: #4caf50;
-        background: rgba(76, 175, 80, 0.15);
+        background: var(--roommind-success-tint);
         color: #4caf50;
       }
 
       .override-preset.active.custom {
-        border-color: #2196f3;
-        background: rgba(33, 150, 243, 0.15);
-        color: #2196f3;
+        border-color: var(--roommind-info-color);
+        background: var(--roommind-info-tint);
+        color: var(--roommind-info-color);
       }
 
       .override-preset:disabled {
@@ -140,7 +140,7 @@ export class RsOverrideSection extends LitElement {
         padding: 6px 14px;
         font-size: 13px;
         font-weight: 500;
-        background: var(--card-background-color);
+        background: var(--roommind-surface);
         color: var(--primary-text-color);
         transition:
           border-color 0.15s ease,
@@ -148,8 +148,8 @@ export class RsOverrideSection extends LitElement {
       }
 
       .override-dur-chip:hover {
-        background: rgba(255, 255, 255, 0.04);
-        border-color: rgba(3, 169, 244, 0.4);
+        background: var(--roommind-surface-hover);
+        border-color: var(--roommind-primary-border);
       }
 
       .override-dur-chip:disabled {

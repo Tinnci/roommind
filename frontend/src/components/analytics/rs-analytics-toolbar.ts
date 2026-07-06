@@ -346,7 +346,7 @@ export class RsAnalyticsToolbar extends LitElement {
         display: inline-flex;
         border-radius: 8px;
         border: 1px solid var(--divider-color);
-        background: var(--card-background-color);
+        background: var(--roommind-surface);
       }
 
       .range-bar > :first-child {
@@ -378,7 +378,7 @@ export class RsAnalyticsToolbar extends LitElement {
       }
 
       .range-chip:hover:not([active]) {
-        background: rgba(var(--rgb-primary-color, 3, 169, 244), 0.08);
+        background: var(--roommind-primary-muted);
         color: var(--primary-text-color);
       }
 
@@ -431,7 +431,7 @@ export class RsAnalyticsToolbar extends LitElement {
         padding: 7px 14px;
         border: 1px solid var(--divider-color);
         border-radius: 8px;
-        background: var(--card-background-color);
+        background: var(--roommind-surface);
         color: var(--secondary-text-color);
         font-size: 12px;
         font-weight: 500;
@@ -464,7 +464,7 @@ export class RsAnalyticsToolbar extends LitElement {
         right: 0;
         margin-top: 4px;
         min-width: 100%;
-        background: var(--card-background-color);
+        background: var(--roommind-surface);
         border: 1px solid var(--divider-color);
         border-radius: 8px;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
@@ -489,7 +489,7 @@ export class RsAnalyticsToolbar extends LitElement {
       }
 
       .export-dropdown button:hover {
-        background: rgba(var(--rgb-primary-color, 3, 169, 244), 0.08);
+        background: var(--roommind-primary-muted);
       }
 
       .export-dropdown button + button {

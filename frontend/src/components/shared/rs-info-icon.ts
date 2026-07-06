@@ -62,14 +62,14 @@ export class RsInfoIcon extends LitElement {
     button:focus-visible {
       opacity: 1;
       color: var(--primary-color);
-      background: rgba(3, 169, 244, 0.1);
+      background: var(--roommind-primary-muted);
       outline: none;
     }
 
     button.open {
       opacity: 1;
       color: var(--primary-color);
-      background: rgba(3, 169, 244, 0.12);
+      background: var(--roommind-primary-strong);
     }
 
     ha-icon {
@@ -83,8 +83,8 @@ export class RsInfoIcon extends LitElement {
       min-width: 180px;
       width: max-content;
       padding: 10px 12px;
-      background: var(--card-background-color, #1f1f1f);
-      border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.12));
+      background: var(--roommind-surface, var(--card-background-color, #1f1f1f));
+      border: var(--roommind-border-subtle, 1px solid var(--divider-color));
       border-radius: 8px;
       font-size: 12px;
       font-weight: 400;

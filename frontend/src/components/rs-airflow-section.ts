@@ -97,8 +97,8 @@ export class RsAirflowSection extends LitElement {
         min-width: 0;
         padding: 8px 10px;
         border-radius: 8px;
-        background: rgba(255, 255, 255, 0.04);
-        border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.06));
+        background: var(--roommind-surface-subtle);
+        border: var(--roommind-border-faint);
       }
 
       .summary-label {
@@ -128,7 +128,7 @@ export class RsAirflowSection extends LitElement {
         font-size: 14px;
         color: var(--primary-text-color);
         min-width: 0;
-        border-top: 1px solid var(--divider-color, rgba(0, 0, 0, 0.06));
+        border-top: var(--roommind-border-faint);
       }
 
       .view-name {
@@ -156,7 +156,7 @@ export class RsAirflowSection extends LitElement {
         font-weight: 500;
         padding: 1px 7px;
         border-radius: 8px;
-        background: rgba(255, 255, 255, 0.05);
+        background: var(--roommind-surface-muted);
         color: var(--secondary-text-color);
         letter-spacing: 0;
         text-transform: uppercase;
@@ -164,12 +164,12 @@ export class RsAirflowSection extends LitElement {
       }
 
       .pill.active {
-        background: rgba(3, 169, 244, 0.12);
+        background: var(--roommind-primary-strong);
         color: var(--primary-color);
       }
 
       .pill.warning {
-        background: rgba(255, 152, 0, 0.1);
+        background: var(--roommind-warning-tint);
         color: var(--warning-color, #ff9800);
       }
 
@@ -192,7 +192,7 @@ export class RsAirflowSection extends LitElement {
         font-size: 10px;
         font-weight: 500;
         color: var(--secondary-text-color);
-        background: var(--divider-color, rgba(0, 0, 0, 0.06));
+        background: var(--roommind-surface-muted);
         padding: 1px 6px;
         border-radius: 4px;
         white-space: nowrap;
@@ -239,7 +239,7 @@ export class RsAirflowSection extends LitElement {
         border-radius: 8px;
         padding: 8px;
         color: var(--primary-text-color);
-        background: var(--card-background-color);
+        background: var(--roommind-surface);
         font: inherit;
       }
 
@@ -252,10 +252,10 @@ export class RsAirflowSection extends LitElement {
 
       .preference-button {
         min-height: 56px;
-        border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.1));
+        border: var(--roommind-border-subtle);
         border-radius: 8px;
         padding: 8px;
-        background: rgba(255, 255, 255, 0.03);
+        background: var(--roommind-surface-subtle);
         color: var(--primary-text-color);
         font: inherit;
         text-align: left;
@@ -265,8 +265,8 @@ export class RsAirflowSection extends LitElement {
       .preference-button:hover,
       .preference-button:focus-visible,
       .preference-button.selected {
-        border-color: rgba(3, 169, 244, 0.55);
-        background: rgba(3, 169, 244, 0.12);
+        border-color: var(--roommind-primary-border);
+        background: var(--roommind-primary-strong);
         outline: none;
       }
 
@@ -293,7 +293,7 @@ export class RsAirflowSection extends LitElement {
 
       .detail-group {
         margin-top: 14px;
-        border-top: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
+        border-top: var(--roommind-border-faint);
         padding-top: 12px;
       }
 

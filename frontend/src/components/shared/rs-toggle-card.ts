@@ -1,6 +1,7 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import "./rs-toggle-row";
+import { roommindThemeStyles } from "../../styles/theme-styles";
 
 @customElement("rs-toggle-card")
 export class RsToggleCard extends LitElement {
@@ -10,34 +11,42 @@ export class RsToggleCard extends LitElement {
   @property({ type: Boolean }) public checked = false;
   @property({ type: Boolean }) public disabled = false;
 
-  static override styles = css`
-    :host {
-      display: block;
-    }
+  static override styles = [
+    roommindThemeStyles,
+    css`
+      :host {
+        display: block;
+      }
 
-    ha-card {
-      padding: 16px 20px;
-      min-width: 0;
-    }
+      ha-card {
+        padding: 16px 20px;
+        min-width: 0;
+        border: var(--roommind-border-subtle);
+        border-radius: var(--roommind-radius-card, 8px);
+        background: var(--roommind-panel-surface);
+        color: var(--primary-text-color);
+        box-shadow: none;
+      }
 
-    .row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
 
-    .icon {
-      --mdc-icon-size: 18px;
-      color: var(--secondary-text-color);
-      opacity: 0.7;
-      flex-shrink: 0;
-    }
+      .icon {
+        --mdc-icon-size: 18px;
+        color: var(--secondary-text-color);
+        opacity: 0.7;
+        flex-shrink: 0;
+      }
 
-    rs-toggle-row {
-      flex: 1;
-      min-width: 0;
-    }
-  `;
+      rs-toggle-row {
+        flex: 1;
+        min-width: 0;
+      }
+    `,
+  ];
 
   override render() {
     return html`

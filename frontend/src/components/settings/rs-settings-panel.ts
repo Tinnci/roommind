@@ -10,6 +10,7 @@ import "../shared/rs-badge";
 export class RsSettingsPanel extends LitElement {
   @property({ type: String }) public icon = "";
   @property({ type: String }) public heading = "";
+  @property({ type: String }) public summary = "";
   @property({ type: String }) public intro = "";
   @property({ type: String }) public badge = "";
   @property({ type: String }) public badgeHint = "";
@@ -19,7 +20,10 @@ export class RsSettingsPanel extends LitElement {
       <ha-expansion-panel outlined>
         <div slot="header" class="panel-header">
           <ha-icon .icon=${this.icon}></ha-icon>
-          <span>${this.heading}</span>
+          <span class="header-copy">
+            <span class="panel-title">${this.heading}</span>
+            ${this.summary ? html`<span class="panel-summary">${this.summary}</span>` : nothing}
+          </span>
           ${this.badge
             ? html`<rs-badge .label=${this.badge} .hint=${this.badgeHint}></rs-badge>`
             : nothing}
@@ -46,9 +50,28 @@ export class RsSettingsPanel extends LitElement {
       min-width: 0;
     }
 
-    .panel-header span {
+    .header-copy {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .panel-title {
       color: var(--primary-text-color);
       font-weight: 600;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .panel-summary {
+      color: var(--secondary-text-color);
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.25;
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -63,11 +86,7 @@ export class RsSettingsPanel extends LitElement {
       color: var(--secondary-text-color);
       font-size: 13px;
       line-height: 1.5;
-      margin: 0 0 16px;
-      padding: 10px 12px;
-      border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
-      border-radius: 8px;
-      background: rgba(var(--rgb-primary-text-color, 0, 0, 0), 0.03);
+      margin: 0 0 14px;
     }
   `;
 }

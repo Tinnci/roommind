@@ -51,14 +51,14 @@ export class RsCoverSchedule extends RsScheduleBase {
         color: var(--primary-text-color);
         border: 1px solid var(--divider-color);
         border-radius: 8px;
-        background: var(--card-background-color);
+        background: var(--roommind-surface);
         transition:
           border-color 0.15s ease,
           background 0.15s ease;
       }
       .mode-option.active {
-        border-color: rgba(3, 169, 244, 0.4);
-        background: rgba(3, 169, 244, 0.08);
+        border-color: var(--roommind-primary-border);
+        background: var(--roommind-primary-muted);
       }
     `,
   ];

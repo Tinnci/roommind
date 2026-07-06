@@ -6,6 +6,7 @@ import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { HomeAssistant, RoomConfig, AnalyticsData } from "../types";
 import { localize } from "../utils/localize";
+import { roommindThemeStyles } from "../styles/theme-styles";
 import "./analytics/rs-analytics-toolbar";
 import "./analytics/rs-analytics-chart";
 import "./analytics/rs-analytics-model";
@@ -179,37 +180,40 @@ export class RsAnalytics extends LitElement {
     }
   }
 
-  static override styles = css`
-    :host {
-      display: block;
-    }
+  static override styles = [
+    roommindThemeStyles,
+    css`
+      :host {
+        display: block;
+      }
 
-    .no-data {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 80px 16px;
-      text-align: center;
-      color: var(--secondary-text-color);
-    }
+      .no-data {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 80px 16px;
+        text-align: center;
+        color: var(--secondary-text-color);
+      }
 
-    .no-data p {
-      font-size: 15px;
-      max-width: 400px;
-      line-height: 1.5;
-      margin-top: 16px;
-    }
+      .no-data p {
+        font-size: 15px;
+        max-width: 400px;
+        line-height: 1.5;
+        margin-top: 16px;
+      }
 
-    .loading {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 80px 16px;
-      color: var(--secondary-text-color);
-      font-size: 14px;
-    }
-  `;
+      .loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 80px 16px;
+        color: var(--secondary-text-color);
+        font-size: 14px;
+      }
+    `,
+  ];
 }
 
 declare global {

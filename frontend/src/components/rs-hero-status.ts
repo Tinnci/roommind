@@ -37,15 +37,21 @@ export class RsHeroStatus extends LitElement {
     css`
       :host {
         display: block;
+        --roommind-hero-tile: color-mix(
+          in srgb,
+          var(--roommind-surface, var(--card-background-color, #ffffff)) 96%,
+          var(--primary-text-color, #000000)
+        );
       }
 
       ha-card {
-        padding: 24px;
+        padding: 22px 24px 20px;
         position: relative;
         overflow: hidden;
         border-radius: 8px;
-        border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
+        border: var(--roommind-border-subtle);
         box-shadow: none;
+        background: var(--roommind-surface);
       }
 
       .hero-accent {
@@ -61,7 +67,11 @@ export class RsHeroStatus extends LitElement {
       }
 
       .hero-accent-cooling {
-        background: linear-gradient(90deg, #2196f3, #64b5f6);
+        background: linear-gradient(
+          90deg,
+          var(--roommind-info-color),
+          color-mix(in srgb, var(--roommind-info-color) 62%, white)
+        );
       }
 
       .hero-accent-idle {
@@ -77,7 +87,7 @@ export class RsHeroStatus extends LitElement {
         align-items: center;
         justify-content: space-between;
         gap: 16px;
-        margin-bottom: 16px;
+        margin-bottom: 18px;
       }
 
       .area-name {
@@ -89,6 +99,14 @@ export class RsHeroStatus extends LitElement {
       }
 
       .hero-temps {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(170px, 0.42fr);
+        gap: 16px;
+        align-items: stretch;
+        min-width: 0;
+      }
+
+      .hero-current-wrap {
         display: flex;
         align-items: baseline;
         gap: 8px;
@@ -96,7 +114,7 @@ export class RsHeroStatus extends LitElement {
       }
 
       .hero-current {
-        font-size: 48px;
+        font-size: 54px;
         font-weight: 300;
         color: var(--primary-text-color);
         line-height: 1;
@@ -109,9 +127,16 @@ export class RsHeroStatus extends LitElement {
       }
 
       .hero-target {
-        margin-left: auto;
-        text-align: right;
-        min-width: 128px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        min-width: 0;
+        padding: 12px 14px;
+        border-radius: 8px;
+        border: var(--roommind-border-faint);
+        background: var(--roommind-hero-tile);
+        text-align: left;
+        box-sizing: border-box;
       }
 
       .hero-target-label {
@@ -122,9 +147,10 @@ export class RsHeroStatus extends LitElement {
       }
 
       .hero-target-value {
-        font-size: 22px;
-        font-weight: 400;
+        font-size: 24px;
+        font-weight: 650;
         color: var(--primary-text-color);
+        line-height: 1.15;
       }
 
       /* Override-aware target styling */
@@ -133,11 +159,11 @@ export class RsHeroStatus extends LitElement {
       }
 
       .hero-target-label.override-eco {
-        color: #4caf50;
+        color: var(--success-color, #4caf50);
       }
 
       .hero-target-label.override-custom {
-        color: #2196f3;
+        color: var(--roommind-info-color);
       }
 
       .hero-target-label ha-icon {
@@ -161,8 +187,8 @@ export class RsHeroStatus extends LitElement {
         font-size: 13px;
         line-height: 1.25;
         color: var(--secondary-text-color);
-        background: rgba(var(--rgb-primary-text-color, 0, 0, 0), 0.04);
-        border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.06));
+        background: var(--roommind-surface-muted);
+        border: var(--roommind-border-faint);
         box-sizing: border-box;
       }
 
@@ -173,20 +199,20 @@ export class RsHeroStatus extends LitElement {
 
       .hero-metric.warning {
         color: var(--warning-color, #ff9800);
-        background: rgba(255, 152, 0, 0.1);
-        border-color: rgba(255, 152, 0, 0.22);
+        background: var(--roommind-warning-tint);
+        border-color: var(--roommind-warning-border);
       }
 
       .hero-metric.critical {
         color: var(--error-color, #db4437);
-        background: rgba(219, 68, 55, 0.1);
-        border-color: rgba(219, 68, 55, 0.22);
+        background: var(--roommind-error-tint);
+        border-color: var(--roommind-error-border);
       }
 
       .hero-metric.info {
-        color: var(--info-color, #2196f3);
-        background: rgba(33, 150, 243, 0.1);
-        border-color: rgba(33, 150, 243, 0.2);
+        color: var(--roommind-info-color);
+        background: var(--roommind-info-tint);
+        border-color: var(--roommind-info-border);
       }
 
       .hero-metrics {
@@ -217,7 +243,7 @@ export class RsHeroStatus extends LitElement {
         font-size: 13px;
         font-weight: 500;
         color: var(--warning-color, #ff9800);
-        background: rgba(255, 152, 0, 0.1);
+        background: var(--roommind-warning-tint);
       }
 
       .hero-window-open ha-icon {
@@ -307,12 +333,11 @@ export class RsHeroStatus extends LitElement {
         }
 
         .hero-temps {
-          flex-wrap: wrap;
+          grid-template-columns: 1fr;
+          gap: 12px;
         }
 
         .hero-target {
-          margin-left: 0;
-          text-align: left;
           width: 100%;
         }
       }
@@ -338,7 +363,7 @@ export class RsHeroStatus extends LitElement {
         font-size: 12px;
         line-height: 1.5;
         color: var(--secondary-text-color);
-        background: var(--secondary-background-color);
+        background: var(--roommind-surface-muted);
         border-radius: 8px;
       }
 
@@ -706,12 +731,16 @@ export class RsHeroStatus extends LitElement {
                   </div>`
                 : nothing}
               <div class="hero-temps">
-                ${live.current_temp !== null
-                  ? html`
-                      <span class="hero-current">${formatTemp(live.current_temp, this.hass)}</span>
-                      <span class="hero-unit">${tempUnit(this.hass)}</span>
-                    `
-                  : html`<span class="hero-current" style="opacity: 0.3">--</span>`}
+                <div class="hero-current-wrap">
+                  ${live.current_temp !== null
+                    ? html`
+                        <span class="hero-current"
+                          >${formatTemp(live.current_temp, this.hass)}</span
+                        >
+                        <span class="hero-unit">${tempUnit(this.hass)}</span>
+                      `
+                    : html`<span class="hero-current" style="opacity: 0.3">--</span>`}
+                </div>
                 ${!this.isOutdoor ? this._renderTargetSection(live) : nothing}
               </div>
               <div class="hero-metrics">

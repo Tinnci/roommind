@@ -39,13 +39,13 @@ export abstract class RsScheduleBase extends LitElement {
     }
 
     .schedule-row.active {
-      background: rgba(76, 175, 80, 0.1);
+      background: var(--roommind-success-tint);
     }
     .schedule-row.inactive {
-      background: rgba(0, 0, 0, 0.04);
+      background: var(--roommind-surface-muted);
     }
     .schedule-row.unreachable {
-      background: rgba(0, 0, 0, 0.02);
+      background: var(--roommind-surface-subtle);
       opacity: 0.4;
     }
 
@@ -187,7 +187,7 @@ export abstract class RsScheduleBase extends LitElement {
       margin-top: 8px;
       padding: 10px 14px;
       border-radius: 8px;
-      background: rgba(255, 152, 0, 0.08);
+      background: var(--roommind-warning-tint);
       color: var(--warning-color, #ff9800);
       font-size: 13px;
     }

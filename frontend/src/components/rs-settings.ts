@@ -15,6 +15,8 @@ import type {
 import { localize } from "../utils/localize";
 import { fireSaveStatus } from "../utils/events";
 import { VACATION_SENTINEL } from "../utils/constants";
+import { roommindThemeStyles } from "../styles/theme-styles";
+import { tempUnit, toDisplay } from "../utils/temperature";
 import "./settings/rs-settings-panel";
 import "./settings/rs-settings-general";
 import "./settings/rs-settings-sensors";
@@ -145,6 +147,7 @@ export class RsSettings extends LitElement {
       <rs-settings-panel
         icon="mdi:power"
         .heading=${localize("settings.general_title", l)}
+        .summary=${this._generalSummary(l)}
         .intro=${localize("settings.intro.general", l)}
       >
         <rs-settings-general
@@ -158,6 +161,7 @@ export class RsSettings extends LitElement {
       <rs-settings-panel
         icon="mdi:thermometer"
         .heading=${localize("settings.sensors_title", l)}
+        .summary=${this._sensorsSummary(l)}
         .intro=${localize("settings.intro.sensors", l)}
       >
         <rs-settings-sensors
@@ -173,6 +177,7 @@ export class RsSettings extends LitElement {
       <rs-settings-panel
         icon="mdi:tune-variant"
         .heading=${localize("settings.control_title", l)}
+        .summary=${this._controlSummary(l)}
         .intro=${localize("settings.intro.control", l)}
       >
         <rs-settings-control
@@ -191,6 +196,7 @@ export class RsSettings extends LitElement {
       <rs-settings-panel
         icon="mdi:home-account"
         .heading=${localize("presence.title", l)}
+        .summary=${this._presenceSummary(l)}
         .intro=${localize("settings.intro.presence", l)}
       >
         <rs-settings-presence
@@ -206,6 +212,7 @@ export class RsSettings extends LitElement {
       <rs-settings-panel
         icon="mdi:airplane"
         .heading=${localize("vacation.title", l)}
+        .summary=${this._vacationSummary(l)}
         .intro=${localize("settings.intro.vacation", l)}
       >
         <rs-settings-vacation
@@ -220,6 +227,7 @@ export class RsSettings extends LitElement {
       <rs-settings-panel
         icon="mdi:shield-refresh"
         .heading=${localize("valve_protection.title", l)}
+        .summary=${this._valveSummary(l)}
         .intro=${localize("settings.intro.valve", l)}
       >
         <rs-settings-valve
@@ -233,6 +241,7 @@ export class RsSettings extends LitElement {
       <rs-settings-panel
         icon="mdi:heat-pump-outline"
         .heading=${localize("compressor.title", l)}
+        .summary=${this._compressorSummary(l)}
         .intro=${localize("settings.intro.compressor", l)}
       >
         <rs-settings-compressor
@@ -245,6 +254,7 @@ export class RsSettings extends LitElement {
       <rs-settings-panel
         icon="mdi:water-alert"
         .heading=${localize("mold.title", l)}
+        .summary=${this._moldSummary(l)}
         .intro=${localize("settings.intro.mold", l)}
       >
         <rs-settings-mold
@@ -261,6 +271,7 @@ export class RsSettings extends LitElement {
       <rs-settings-panel
         icon="mdi:bell-outline"
         .heading=${localize("notifications.title", l)}
+        .summary=${this._notificationsSummary(l)}
         .intro=${localize("settings.intro.notifications", l)}
         .badge=${localize("badge.beta", l)}
         .badgeHint=${localize("badge.beta_hint", l)}
@@ -279,6 +290,7 @@ export class RsSettings extends LitElement {
       <rs-settings-panel
         icon="mdi:brain"
         .heading=${localize("settings.learning_title", l)}
+        .summary=${this._learningSummary(l)}
         .intro=${localize("settings.intro.learning", l)}
       >
         <rs-settings-learning
@@ -298,6 +310,7 @@ export class RsSettings extends LitElement {
       <rs-settings-panel
         icon="mdi:restart"
         .heading=${localize("settings.reset_title", l)}
+        .summary=${localize("settings.summary.data_tools", l)}
         .intro=${localize("settings.intro.reset", l)}
       >
         <rs-settings-reset .hass=${this.hass} .rooms=${this.rooms}></rs-settings-reset>
@@ -314,6 +327,147 @@ export class RsSettings extends LitElement {
     const { key, value } = e.detail;
     (this as Record<string, unknown>)[`_${key}`] = value;
     this._autoSave();
+  }
+
+  private _generalSummary(lang: string): string {
+    return this._summaryParts(
+      this._climateControlActive
+        ? localize("settings.summary.control_on", lang)
+        : localize("settings.summary.control_off", lang),
+      this._groupByFloor
+        ? localize("settings.summary.grouped", lang)
+        : localize("settings.summary.custom_order", lang),
+    );
+  }
+
+  private _sensorsSummary(lang: string): string {
+    const sourceCount = [
+      this._outdoorTempSensor,
+      this._outdoorHumiditySensor,
+      this._weatherEntity,
+    ].filter(Boolean).length;
+    return this._summaryParts(
+      localize("settings.summary.sources", lang, { count: sourceCount }),
+      this._weatherEntity
+        ? localize("settings.summary.forecast_on", lang)
+        : localize("settings.summary.forecast_off", lang),
+    );
+  }
+
+  private _controlSummary(lang: string): string {
+    return this._summaryParts(
+      this._controlMode === "mpc"
+        ? localize("settings.summary.mode_mpc", lang)
+        : localize("settings.summary.mode_simple", lang),
+      localize("settings.summary.comfort", lang, { value: this._comfortWeight }),
+      this._predictionEnabled
+        ? localize("settings.summary.prediction_on", lang)
+        : localize("settings.summary.prediction_off", lang),
+    );
+  }
+
+  private _presenceSummary(lang: string): string {
+    if (!this._presenceEnabled) return localize("settings.summary.off", lang);
+    return this._summaryParts(
+      localize("settings.summary.on", lang),
+      localize("settings.summary.people", lang, { count: this._presencePersons.length }),
+      this._presenceAwayAction === "eco"
+        ? localize("presence.away_action_eco", lang)
+        : localize("presence.away_action_off", lang),
+    );
+  }
+
+  private _vacationSummary(lang: string): string {
+    if (!this._vacationActive) return localize("settings.summary.off", lang);
+    return this._summaryParts(
+      localize("settings.summary.on", lang),
+      localize("settings.summary.temp", lang, {
+        temp: toDisplay(this._vacationTemp, this.hass),
+        unit: tempUnit(this.hass),
+      }),
+      this._vacationUntil
+        ? localize("settings.summary.until", lang, {
+            date: this._shortDate(this._vacationUntil, lang),
+          })
+        : localize("settings.summary.no_end", lang),
+    );
+  }
+
+  private _valveSummary(lang: string): string {
+    if (!this._valveProtectionEnabled) return localize("settings.summary.off", lang);
+    return this._summaryParts(
+      localize("settings.summary.on", lang),
+      localize("settings.summary.every_days", lang, { days: this._valveProtectionInterval }),
+    );
+  }
+
+  private _compressorSummary(lang: string): string {
+    const groups = this._compressorGroups.filter((group) => group.members.length > 0).length;
+    return groups > 0
+      ? localize("settings.summary.groups", lang, { count: groups })
+      : localize("settings.summary.no_groups", lang);
+  }
+
+  private _moldSummary(lang: string): string {
+    if (!this._moldDetectionEnabled && !this._moldPreventionEnabled) {
+      return localize("settings.summary.off", lang);
+    }
+    return this._summaryParts(
+      this._moldDetectionEnabled
+        ? localize("mold.detection", lang)
+        : localize("settings.summary.detection_off", lang),
+      this._moldPreventionEnabled
+        ? this._moldPreventionSummary(lang)
+        : localize("settings.summary.prevention_off", lang),
+    );
+  }
+
+  private _notificationsSummary(lang: string): string {
+    if (!this._moldNotificationsEnabled) return localize("settings.summary.off", lang);
+    const targets = this._moldNotificationTargets.filter((target) => target.entity_id).length;
+    return this._summaryParts(
+      localize("settings.summary.on", lang),
+      targets > 0
+        ? localize("settings.summary.targets", lang, { count: targets })
+        : localize("settings.summary.no_targets", lang),
+      localize("settings.summary.cooldown", lang, { minutes: this._moldNotificationCooldown }),
+    );
+  }
+
+  private _learningSummary(lang: string): string {
+    const paused = this._learningDisabledRooms.length;
+    return paused > 0
+      ? this._summaryParts(
+          localize("settings.summary.rooms_paused", lang, { count: paused }),
+          localize("settings.summary.rooms_total", lang, { count: Object.keys(this.rooms).length }),
+        )
+      : localize("settings.summary.all_learning", lang);
+  }
+
+  private _moldPreventionSummary(lang: string): string {
+    switch (this._moldPreventionIntensity) {
+      case "light":
+        return localize("settings.summary.prevention_light", lang);
+      case "strong":
+        return localize("settings.summary.prevention_strong", lang);
+      default:
+        return localize("settings.summary.prevention_medium", lang);
+    }
+  }
+
+  private _summaryParts(...parts: string[]): string {
+    return parts.filter(Boolean).join(" · ");
+  }
+
+  private _shortDate(value: string, lang: string): string {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return new Intl.DateTimeFormat(lang, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date);
   }
 
   private _tsToDatetimeLocal(ts: number): string {
@@ -379,20 +533,23 @@ export class RsSettings extends LitElement {
     }
   }
 
-  static override styles = css`
-    :host {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      padding: 0 16px;
-    }
+  static override styles = [
+    roommindThemeStyles,
+    css`
+      :host {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 0 16px;
+      }
 
-    .loading {
-      padding: 80px 16px;
-      text-align: center;
-      color: var(--secondary-text-color);
-    }
-  `;
+      .loading {
+        padding: 80px 16px;
+        text-align: center;
+        color: var(--secondary-text-color);
+      }
+    `,
+  ];
 }
 
 declare global {

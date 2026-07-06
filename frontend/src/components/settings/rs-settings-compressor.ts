@@ -37,7 +37,7 @@ export class RsSettingsCompressor extends LitElement {
         align-items: center;
         justify-content: space-between;
         padding: 4px 8px;
-        background: var(--card-background-color);
+        background: var(--roommind-surface-muted);
         border-radius: 4px;
       }
       .member-name {

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "bun --bun vite",
+    "dev:panel": "bun --bun vite --host 127.0.0.1 --open /dev/panel-preview.html",
     "dev:room-detail": "bun --bun vite --host 127.0.0.1 --open /dev/room-detail-preview.html",
     "typecheck": "bun --bun tsgo --noEmit",
     "build": "bun run typecheck && bun --bun vite build",

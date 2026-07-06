@@ -33,7 +33,7 @@ export class RsPresenceSection extends LitElement {
       padding: 8px 12px 8px 6px;
       border: 1px solid var(--divider-color);
       border-radius: 8px;
-      background: var(--card-background-color);
+      background: var(--roommind-surface);
       cursor: pointer;
       transition:
         border-color 0.15s ease,
@@ -42,12 +42,12 @@ export class RsPresenceSection extends LitElement {
     }
 
     .presence-card:hover {
-      background: rgba(255, 255, 255, 0.03);
+      background: var(--roommind-surface-hover);
     }
 
     .presence-card.active {
-      border-color: rgba(3, 169, 244, 0.4);
-      background: rgba(3, 169, 244, 0.08);
+      border-color: var(--roommind-primary-border);
+      background: var(--roommind-primary-muted);
     }
 
     .presence-card ha-checkbox {
@@ -90,11 +90,11 @@ export class RsPresenceSection extends LitElement {
     }
 
     .presence-row.home {
-      background: rgba(76, 175, 80, 0.1);
+      background: var(--roommind-success-tint);
     }
 
     .presence-row.away {
-      background: rgba(0, 0, 0, 0.04);
+      background: var(--roommind-surface-muted);
     }
 
     .presence-dot {

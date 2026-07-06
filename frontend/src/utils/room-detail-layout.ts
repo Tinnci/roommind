@@ -1,6 +1,6 @@
 import type { DeviceConfig } from "../types";
 
-export type PrimaryRoomSection = "climateControl" | "climateMode" | "schedule";
+export type PrimaryRoomSection = "schedule";
 
 export type ConfigurationRoomSection =
   | "devices"
@@ -54,7 +54,7 @@ export function getRoomDetailLayout(input: RoomDetailLayoutInput): RoomDetailLay
   configurationSections.push("outdoor");
 
   return {
-    primarySections: ["climateControl", "climateMode", "schedule"],
+    primarySections: ["schedule"],
     configurationSections,
   };
 }

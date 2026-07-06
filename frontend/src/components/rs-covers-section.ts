@@ -81,7 +81,7 @@ export class RsCoverSection extends LitElement {
         font-weight: 500;
         padding: 1px 7px;
         border-radius: 8px;
-        background: rgba(255, 255, 255, 0.05);
+        background: var(--roommind-surface-muted);
         color: var(--secondary-text-color);
         letter-spacing: 0;
         text-transform: uppercase;
@@ -108,10 +108,10 @@ export class RsCoverSection extends LitElement {
         transition: background 0.15s;
       }
       .device-row:hover {
-        background: rgba(0, 0, 0, 0.02);
+        background: var(--roommind-surface-hover);
       }
       .device-row.selected {
-        background: rgba(3, 169, 244, 0.035);
+        background: var(--roommind-primary-subtle);
       }
       .device-row ha-checkbox {
         flex-shrink: 0;
@@ -148,7 +148,7 @@ export class RsCoverSection extends LitElement {
         font-size: 10px;
         font-weight: 500;
         color: var(--secondary-text-color);
-        background: var(--divider-color, rgba(0, 0, 0, 0.06));
+        background: var(--roommind-surface-muted);
         padding: 1px 6px;
         border-radius: 4px;
         white-space: nowrap;
@@ -190,7 +190,7 @@ export class RsCoverSection extends LitElement {
         text-transform: uppercase;
         letter-spacing: 0;
         padding-bottom: 4px;
-        border-bottom: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
+        border-bottom: var(--roommind-border-faint);
       }
       .sub-section-header ha-icon {
         --mdc-icon-size: 18px;
@@ -225,7 +225,7 @@ export class RsCoverSection extends LitElement {
         font-weight: 500;
         padding: 1px 6px;
         border-radius: 8px;
-        background: var(--divider-color, rgba(0, 0, 0, 0.08));
+        background: var(--roommind-surface-muted);
         color: var(--secondary-text-color);
         white-space: nowrap;
       }
@@ -238,15 +238,15 @@ export class RsCoverSection extends LitElement {
         padding: 14px 16px;
         border: 1px solid var(--divider-color);
         border-radius: 8px;
-        background: var(--card-background-color);
+        background: var(--roommind-surface);
         transition:
           border-color 0.2s ease,
           background 0.2s ease;
       }
 
       .feature-card.enabled {
-        border-color: rgba(3, 169, 244, 0.4);
-        background: rgba(3, 169, 244, 0.06);
+        border-color: var(--roommind-primary-border);
+        background: var(--roommind-primary-muted);
       }
 
       .feature-text {
@@ -275,7 +275,7 @@ export class RsCoverSection extends LitElement {
         margin-top: 16px;
         border: 1px solid var(--divider-color);
         border-radius: 8px;
-        background: var(--card-background-color);
+        background: var(--roommind-surface);
         padding: 14px 16px;
         display: flex;
         flex-direction: column;

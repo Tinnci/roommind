@@ -25,6 +25,11 @@ export class RsAreaCard extends LitElement {
     css`
       :host {
         display: block;
+        --roommind-tile-surface: color-mix(
+          in srgb,
+          var(--roommind-surface, var(--card-background-color, #ffffff)) 94%,
+          var(--primary-text-color, #000000)
+        );
       }
 
       ha-card {
@@ -38,7 +43,7 @@ export class RsAreaCard extends LitElement {
         height: 100%;
         box-sizing: border-box;
         border-radius: 8px;
-        border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
+        border: var(--roommind-border-subtle);
         box-shadow: none;
       }
 
@@ -81,7 +86,7 @@ export class RsAreaCard extends LitElement {
       }
 
       .accent-cooling {
-        background: #2196f3;
+        background: var(--roommind-info-color);
       }
 
       .accent-idle {
@@ -129,122 +134,133 @@ export class RsAreaCard extends LitElement {
         height: 7px;
       }
 
-      /* Temperature display */
-      .temp-section {
-        display: flex;
-        align-items: baseline;
-        gap: 8px;
-        margin: 12px 0 0 0;
+      .metrics-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1.15fr) minmax(112px, 0.85fr);
+        gap: 10px;
+        margin-top: 14px;
       }
 
-      .current-temp {
+      .metric-block {
+        min-width: 0;
+        min-height: 76px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        background: var(--roommind-tile-surface);
+        border: var(--roommind-border-faint);
+        box-sizing: border-box;
+      }
+
+      .metric-label {
+        display: block;
+        color: var(--secondary-text-color);
+        font-size: 12px;
+        line-height: 1.25;
+        margin-bottom: 7px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .temp-value {
+        display: flex;
+        align-items: baseline;
+        gap: 5px;
+        min-width: 0;
+      }
+
+      .current-temp,
+      .target-temp {
         font-size: 36px;
-        font-weight: 300;
+        font-weight: 400;
         color: var(--primary-text-color);
         line-height: 1;
       }
 
+      .target-temp {
+        font-size: 24px;
+        font-weight: 600;
+      }
+
       .temp-unit {
-        font-size: 18px;
-        font-weight: 300;
+        font-size: 15px;
+        font-weight: 400;
         color: var(--secondary-text-color);
       }
 
       .target-info {
-        font-size: 13px;
-        color: var(--secondary-text-color);
-        margin-left: auto;
-        white-space: nowrap;
+        min-width: 0;
       }
 
       .target-value {
-        font-weight: 500;
+        display: inline-flex;
+        align-items: baseline;
+        min-width: 0;
+        font-weight: 600;
         color: var(--primary-text-color);
       }
 
-      .override-icon {
-        --mdc-icon-size: 14px;
-        vertical-align: middle;
-        margin-left: 4px;
-        color: var(--warning-color, #ff9800);
+      .delta-line {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 26px;
+        margin-top: 10px;
+        padding: 4px 9px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 500;
+        background: var(--roommind-tile-surface);
+        color: var(--secondary-text-color);
+        box-sizing: border-box;
       }
 
-      .window-icon {
-        --mdc-icon-size: 14px;
-        vertical-align: middle;
-        margin-left: 4px;
-        color: var(--warning-color, #ff9800);
+      .delta-line ha-icon {
+        --mdc-icon-size: 15px;
       }
 
-      .away-icon {
-        --mdc-icon-size: 14px;
-        vertical-align: middle;
-        margin-left: 4px;
-        color: var(--info-color, #2196f3);
+      .delta-line.below {
+        color: var(--roommind-warning-color);
+        background: var(--roommind-warning-tint);
+      }
+
+      .delta-line.above {
+        color: var(--roommind-info-color);
+        background: var(--roommind-info-tint);
+      }
+
+      .delta-line.on-target {
+        color: var(--roommind-success-color);
+        background: var(--roommind-success-tint);
       }
 
       /* Footer row: humidity + MPC status */
       .card-footer {
         display: flex;
-        align-items: flex-end;
+        align-items: flex-start;
         justify-content: space-between;
         gap: 10px;
-        margin-top: 8px;
+        margin-top: 10px;
         min-height: 20px;
       }
 
       .humidity-info {
-        font-size: 13px;
-        color: var(--secondary-text-color);
-      }
-
-      .mpc-badge {
         display: inline-flex;
         align-items: center;
         gap: 4px;
-        font-size: 11px;
+        font-size: 12px;
         font-weight: 500;
-        padding: 2px 8px 2px 6px;
-        border-radius: 8px;
-        --mdc-icon-size: 14px;
-      }
-
-      .mpc-badge.active {
-        color: var(--success-color, #4caf50);
-        background: rgba(76, 175, 80, 0.12);
-      }
-
-      .mpc-badge.learning {
         color: var(--secondary-text-color);
-        background: rgba(158, 158, 158, 0.1);
+        min-height: 22px;
       }
 
-      .mold-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        font-size: 11px;
-        font-weight: 500;
-        padding: 2px 8px 2px 6px;
-        border-radius: 8px;
-        --mdc-icon-size: 14px;
+      .humidity-info ha-icon {
+        --mdc-icon-size: 15px;
       }
 
-      .mold-badge.warning {
-        color: var(--warning-color, #ff9800);
-        background: rgba(255, 152, 0, 0.12);
-      }
-
-      .mold-badge.critical {
-        color: var(--error-color, #db4437);
-        background: rgba(219, 68, 55, 0.12);
-      }
-
-      .mold-badge.prevention {
-        color: var(--info-color, #2196f3);
-        background: rgba(33, 150, 243, 0.12);
-      }
-
+      .status-badge,
+      .mpc-badge,
+      .mold-badge,
       .outdoor-badge {
         display: inline-flex;
         align-items: center;
@@ -254,8 +270,51 @@ export class RsAreaCard extends LitElement {
         padding: 2px 8px 2px 6px;
         border-radius: 8px;
         --mdc-icon-size: 14px;
+      }
+
+      .status-badge.override {
+        color: var(--warning-color, #ff9800);
+        background: var(--roommind-warning-tint);
+      }
+
+      .status-badge.window {
+        color: var(--roommind-warning-color);
+        background: var(--roommind-warning-tint);
+      }
+
+      .status-badge.away {
+        color: var(--roommind-info-color);
+        background: var(--roommind-info-tint);
+      }
+
+      .mpc-badge.active {
         color: var(--success-color, #4caf50);
-        background: rgba(76, 175, 80, 0.12);
+        background: var(--roommind-success-tint);
+      }
+
+      .mpc-badge.learning {
+        color: var(--secondary-text-color);
+        background: var(--roommind-surface-muted);
+      }
+
+      .mold-badge.warning {
+        color: var(--warning-color, #ff9800);
+        background: var(--roommind-warning-tint);
+      }
+
+      .mold-badge.critical {
+        color: var(--error-color, #db4437);
+        background: var(--roommind-error-tint);
+      }
+
+      .mold-badge.prevention {
+        color: var(--roommind-info-color);
+        background: var(--roommind-info-tint);
+      }
+
+      .outdoor-badge {
+        color: var(--success-color, #4caf50);
+        background: var(--roommind-success-tint);
       }
 
       .badge-row {
@@ -263,6 +322,10 @@ export class RsAreaCard extends LitElement {
         gap: 6px;
         flex-wrap: wrap;
         justify-content: flex-end;
+      }
+
+      .sensor-only .metrics-row {
+        grid-template-columns: minmax(0, 1fr) minmax(104px, 0.72fr);
       }
 
       .no-temp {
@@ -357,7 +420,7 @@ export class RsAreaCard extends LitElement {
         justify-content: space-between;
         margin-top: 12px;
         padding-top: 12px;
-        border-top: 1px solid var(--divider-color, #eee);
+        border-top: var(--roommind-border-faint);
       }
 
       .configure-text {
@@ -376,6 +439,17 @@ export class RsAreaCard extends LitElement {
         color: var(--disabled-text-color, #9e9e9e);
         font-style: italic;
         margin-top: 8px;
+      }
+
+      @media (max-width: 430px) {
+        .metrics-row,
+        .sensor-only .metrics-row {
+          grid-template-columns: 1fr;
+        }
+
+        .metric-block {
+          min-height: 68px;
+        }
       }
     `,
   ];
@@ -473,24 +547,57 @@ export class RsAreaCard extends LitElement {
     const showMpcIcon = this.controlMode === "mpc";
 
     return html`
-      <div class="temp-section">
-        ${live.current_temp !== null
-          ? html`
-              <span class="current-temp">${formatTemp(live.current_temp, this.hass)}</span>
-              <span class="temp-unit">${tempUnit(this.hass)}</span>
-            `
-          : html`<span class="no-temp">--</span>`}
-        ${this._renderTargetInfo(live)}
+      <div class="metrics-row">
+        <div class="metric-block">
+          <span class="metric-label"
+            >${localize("room.temperature_panel.current", this.hass.language)}</span
+          >
+          <div class="temp-value">
+            ${live.current_temp !== null
+              ? html`
+                  <span class="current-temp">${formatTemp(live.current_temp, this.hass)}</span>
+                  <span class="temp-unit">${tempUnit(this.hass)}</span>
+                `
+              : html`<span class="no-temp">--</span>`}
+          </div>
+        </div>
+        <div class="metric-block target-info">
+          <span class="metric-label">${localize("card.target", this.hass.language)}</span>
+          ${this._renderTargetInfo(live)}
+        </div>
       </div>
+      ${this._renderDeltaLine(live)}
       <div class="card-footer">
         <span class="humidity-info">
           ${live.current_humidity !== null
-            ? localize("card.humidity", this.hass.language, {
-                value: live.current_humidity.toFixed(0),
-              })
+            ? html`<ha-icon icon="mdi:water-percent"></ha-icon> ${localize(
+                  "card.humidity",
+                  this.hass.language,
+                  {
+                    value: live.current_humidity.toFixed(0),
+                  },
+                )}`
             : nothing}
         </span>
         <span class="badge-row">
+          ${live.override_active
+            ? html`<span class="status-badge override">
+                <ha-icon icon="mdi:timer-outline"></ha-icon>
+                ${localize("card.override_active", this.hass.language)}
+              </span>`
+            : nothing}
+          ${live.window_open
+            ? html`<span class="status-badge window">
+                <ha-icon icon="mdi:window-open-variant"></ha-icon>
+                ${localize("card.window_open", this.hass.language)}
+              </span>`
+            : nothing}
+          ${live.presence_away
+            ? html`<span class="status-badge away">
+                <ha-icon icon="mdi:home-off-outline"></ha-icon>
+                ${localize("card.presence_away", this.hass.language)}
+              </span>`
+            : nothing}
           ${live.mold_risk_level && live.mold_risk_level !== "ok"
             ? html`<span class="mold-badge ${live.mold_risk_level}">
                 <ha-icon icon="mdi:water-alert"></ha-icon>
@@ -538,30 +645,54 @@ export class RsAreaCard extends LitElement {
       live.heat_target !== live.cool_target;
 
     const targetDisplay = showRange
-      ? html`<span class="target-value"
-          >${formatTemp(live.heat_target!, this.hass)} –
-          ${formatTemp(live.cool_target!, this.hass)}${tempUnit(this.hass)}</span
-        >`
-      : html`<span class="target-value"
-          >${formatTemp((live.target_temp ?? live.heat_target)!, this.hass)}${tempUnit(
-            this.hass,
-          )}</span
-        >`;
+      ? html`<span class="target-value">
+          <span class="target-temp">${formatTemp(live.heat_target!, this.hass)}</span>
+          <span class="temp-unit">
+            - ${formatTemp(live.cool_target!, this.hass)}${tempUnit(this.hass)}
+          </span>
+        </span>`
+      : html`<span class="target-value">
+          <span class="target-temp"
+            >${formatTemp((live.target_temp ?? live.heat_target)!, this.hass)}</span
+          ><span class="temp-unit">${tempUnit(this.hass)}</span>
+        </span>`;
 
-    return html`
-      <span class="target-info">
-        ${localize("card.target", this.hass.language)} ${targetDisplay}
-        ${live.override_active
-          ? html`<ha-icon class="override-icon" icon="mdi:timer-outline"></ha-icon>`
-          : nothing}
-        ${live.window_open
-          ? html`<ha-icon class="window-icon" icon="mdi:window-open-variant"></ha-icon>`
-          : nothing}
-        ${live.presence_away
-          ? html`<ha-icon class="away-icon" icon="mdi:home-off-outline"></ha-icon>`
-          : nothing}
-      </span>
-    `;
+    return html`${targetDisplay}`;
+  }
+
+  private _renderDeltaLine(live: NonNullable<RoomConfig["live"]>) {
+    const current = live.current_temp;
+    const target = this._effectiveTargetTemp(live);
+    if (current === null || target === null) return nothing;
+
+    const delta = current - target;
+    const absDelta = Math.abs(toDisplayDelta(delta, this.hass));
+    if (absDelta < 0.2) {
+      return html`<div class="delta-line on-target">
+        <ha-icon icon="mdi:check-circle-outline"></ha-icon>
+        ${localize("card.delta_on_target", this.hass.language)}
+      </div>`;
+    }
+
+    const key = delta > 0 ? "card.delta_above" : "card.delta_below";
+    const icon = delta > 0 ? "mdi:thermometer-chevron-down" : "mdi:thermometer-chevron-up";
+    return html`<div class="delta-line ${delta > 0 ? "above" : "below"}">
+      <ha-icon .icon=${icon}></ha-icon>
+      ${localize(key, this.hass.language, {
+        delta: absDelta.toFixed(1),
+        unit: tempUnit(this.hass),
+      })}
+    </div>`;
+  }
+
+  private _effectiveTargetTemp(live: NonNullable<RoomConfig["live"]>): number | null {
+    if (live.target_temp !== null) return live.target_temp;
+    if (live.mode === "cooling" && live.cool_target !== null) return live.cool_target;
+    if (live.mode === "heating" && live.heat_target !== null) return live.heat_target;
+    if (live.heat_target !== null && live.cool_target !== null) {
+      return (live.heat_target + live.cool_target) / 2;
+    }
+    return live.heat_target ?? live.cool_target ?? null;
   }
 
   private _renderSensorOnly() {
@@ -569,22 +700,34 @@ export class RsAreaCard extends LitElement {
     const isOutdoor = this.config?.is_outdoor ?? false;
 
     return html`
-      <div class="temp-section">
-        ${live.current_temp !== null
-          ? html`
-              <span class="current-temp">${formatTemp(live.current_temp, this.hass)}</span>
-              <span class="temp-unit">${tempUnit(this.hass)}</span>
-            `
-          : html`<span class="no-temp">--</span>`}
+      <div class="sensor-only">
+        <div class="metrics-row">
+          <div class="metric-block">
+            <span class="metric-label"
+              >${localize("room.temperature_panel.current", this.hass.language)}</span
+            >
+            <div class="temp-value">
+              ${live.current_temp !== null
+                ? html`
+                    <span class="current-temp">${formatTemp(live.current_temp, this.hass)}</span>
+                    <span class="temp-unit">${tempUnit(this.hass)}</span>
+                  `
+                : html`<span class="no-temp">--</span>`}
+            </div>
+          </div>
+          <div class="metric-block">
+            <span class="metric-label">${localize("card.humidity_label", this.hass.language)}</span>
+            <div class="temp-value">
+              ${live.current_humidity !== null
+                ? html`<span class="target-temp">${live.current_humidity.toFixed(0)}</span>
+                    <span class="temp-unit">%</span>`
+                : html`<span class="no-temp">--</span>`}
+            </div>
+          </div>
+        </div>
       </div>
       <div class="card-footer">
-        <span class="humidity-info">
-          ${live.current_humidity !== null
-            ? localize("card.humidity", this.hass.language, {
-                value: live.current_humidity.toFixed(0),
-              })
-            : nothing}
-        </span>
+        <span class="humidity-info"></span>
         <span class="badge-row">
           ${isOutdoor
             ? html`<span class="outdoor-badge">

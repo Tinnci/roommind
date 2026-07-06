@@ -11,19 +11,15 @@ import type {
   AirflowDeviceConfig,
 } from "../types";
 import "./rs-hero-status";
-import "./rs-climate-mode-selector";
+import "./rs-temperature-control-panel";
 import "./rs-schedule-settings";
 import "./rs-section-card";
 import "./rs-room-configuration-hub";
 import "./rs-room-edit-dialog-router";
-import "./rs-override-section";
-import "../components/shared/rs-toggle-row";
-import "../components/shared/rs-toggle-card";
-import "../components/shared/rs-info-icon";
 import { localize } from "../utils/localize";
 import { fireSaveStatus } from "../utils/events";
-import { formatMode } from "../utils/room-state";
 import { formatTemp, tempUnit } from "../utils/temperature";
+import { roommindThemeStyles } from "../styles/theme-styles";
 import {
   getRoomDetailLayout,
   type ConfigurationRoomSection,
@@ -42,7 +38,7 @@ import {
   type SensorConfigChangeKey,
 } from "../utils/room-config-draft";
 import type { RoomEditSection } from "../utils/room-edit-dialog";
-import type { RsOverrideSection } from "./rs-override-section";
+import type { RsTemperatureControlPanel } from "./rs-temperature-control-panel";
 
 @customElement("rs-room-detail")
 export class RsRoomDetail extends LitElement {
@@ -63,191 +59,197 @@ export class RsRoomDetail extends LitElement {
   private _prevAreaId: string | null = null;
   private _saveDebounce?: ReturnType<typeof setTimeout>;
 
-  static override styles = css`
-    :host {
-      display: block;
-      max-width: 2400px;
-      margin: 0 auto;
-    }
-
-    .detail-layout {
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-    }
-
-    .detail-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
-      gap: 14px;
-      align-items: start;
-    }
-
-    .detail-grid > * {
-      display: block;
-      width: 100%;
-    }
-
-    rs-room-edit-dialog-router {
-      position: fixed;
-      inset: 0;
-      z-index: 10000;
-      pointer-events: none;
-    }
-
-    rs-room-edit-dialog-router rs-edit-dialog {
-      pointer-events: auto;
-    }
-
-    .status-summary {
-      display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 8px;
-      padding: 10px;
-      border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.08));
-      border-radius: var(--roommind-radius-card, 8px);
-      background: rgba(255, 255, 255, 0.025);
-    }
-
-    .status-item {
-      display: grid;
-      grid-template-columns: 24px minmax(0, 1fr);
-      gap: 8px;
-      align-items: center;
-      min-width: 0;
-      min-height: 48px;
-      padding: 8px;
-      border-radius: var(--roommind-radius-control, 8px);
-      background: rgba(255, 255, 255, 0.025);
-    }
-
-    .status-item ha-icon {
-      --mdc-icon-size: 20px;
-      color: var(--secondary-text-color);
-    }
-
-    .status-copy {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      min-width: 0;
-    }
-
-    .status-label {
-      color: var(--secondary-text-color);
-      font-size: 11px;
-      line-height: 1.2;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .status-value {
-      color: var(--primary-text-color);
-      font-size: 13px;
-      font-weight: 600;
-      line-height: 1.3;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    @media (min-width: 1900px) {
-      .detail-grid {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+  static override styles = [
+    roommindThemeStyles,
+    css`
+      :host {
+        display: block;
+        max-width: 2400px;
+        margin: 0 auto;
       }
-    }
 
-    @media (max-width: 760px) {
+      .detail-layout {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        --roommind-detail-tile: color-mix(
+          in srgb,
+          var(--roommind-surface) 96%,
+          var(--primary-text-color, #000000)
+        );
+      }
+
+      .detail-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
+        gap: 14px;
+        align-items: start;
+      }
+
+      .detail-grid > * {
+        display: block;
+        width: 100%;
+      }
+
+      rs-room-edit-dialog-router {
+        position: fixed;
+        inset: 0;
+        z-index: 10000;
+        pointer-events: none;
+      }
+
+      rs-room-edit-dialog-router rs-edit-dialog {
+        pointer-events: auto;
+      }
+
       .status-summary {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 8px;
+        padding: 0;
       }
 
-      .detail-grid {
-        grid-template-columns: 1fr;
+      .status-item {
+        display: grid;
+        grid-template-columns: 24px minmax(0, 1fr);
+        gap: 8px;
+        align-items: center;
+        min-width: 0;
+        min-height: 48px;
+        padding: 8px;
+        border-radius: var(--roommind-radius-control, 8px);
+        border: var(--roommind-border-faint);
+        background: var(--roommind-detail-tile);
+      }
+
+      .status-item ha-icon {
+        --mdc-icon-size: 20px;
+        color: var(--secondary-text-color);
+      }
+
+      .status-copy {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+      }
+
+      .status-label {
+        color: var(--secondary-text-color);
+        font-size: 11px;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .status-value {
+        color: var(--primary-text-color);
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 1.3;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      @media (min-width: 1900px) {
+        .detail-grid {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 760px) {
+        .status-summary {
+          grid-template-columns: 1fr;
+        }
+
+        .detail-grid {
+          grid-template-columns: 1fr;
+          gap: 12px;
+        }
+      }
+
+      @media (max-width: 420px) {
+        .status-summary {
+          display: none;
+        }
+      }
+
+      /* Section cards handled by rs-section-card */
+
+      /* YAML code block for info panels (slotted into edit dialogs) */
+      .yaml-block {
+        background: var(--code-editor-background-color, var(--roommind-surface-muted));
+        border: var(--roommind-border-subtle);
+        border-radius: 6px;
+        padding: 10px 14px;
+        margin: 8px 0;
+        font-family: var(--code-font-family, monospace);
+        font-size: 12px;
+        line-height: 1.6;
+        white-space: pre;
+        overflow-x: auto;
+        color: var(--primary-text-color);
+      }
+      .yaml-key {
+        color: #82aaff;
+      }
+      .yaml-value {
+        color: #e2a76a;
+      }
+
+      /* Actions */
+      .actions {
+        display: flex;
+        align-items: center;
         gap: 12px;
+        margin-top: 8px;
+        margin-bottom: 24px;
       }
-    }
 
-    @media (max-width: 420px) {
-      .status-summary {
-        grid-template-columns: 1fr;
+      .error {
+        color: var(--error-color, #d32f2f);
+        font-size: 13px;
+        margin-top: 8px;
       }
-    }
 
-    /* Section cards handled by rs-section-card */
+      .field-hint {
+        color: var(--secondary-text-color);
+        font-size: 12px;
+      }
 
-    /* YAML code block for info panels (slotted into edit dialogs) */
-    .yaml-block {
-      background: var(--code-editor-background-color, rgba(0, 0, 0, 0.35));
-      border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.12));
-      border-radius: 6px;
-      padding: 10px 14px;
-      margin: 8px 0;
-      font-family: var(--code-font-family, monospace);
-      font-size: 12px;
-      line-height: 1.6;
-      white-space: pre;
-      overflow-x: auto;
-      color: var(--primary-text-color);
-    }
-    .yaml-key {
-      color: #82aaff;
-    }
-    .yaml-value {
-      color: #e2a76a;
-    }
+      .exceptions-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: none;
+        border: none;
+        padding: 8px 0 0;
+        margin: 0;
+        cursor: pointer;
+        font-size: 13px;
+        color: var(--primary-color);
+        font-family: inherit;
+      }
 
-    /* Actions */
-    .actions {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-top: 8px;
-      margin-bottom: 24px;
-    }
+      .exceptions-link:hover {
+        text-decoration: underline;
+      }
 
-    .error {
-      color: var(--error-color, #d32f2f);
-      font-size: 13px;
-      margin-top: 8px;
-    }
+      .helper-link {
+        display: inline-block;
+        margin-top: 12px;
+        color: var(--primary-color);
+        font-size: 12px;
+        text-decoration: none;
+      }
 
-    .field-hint {
-      color: var(--secondary-text-color);
-      font-size: 12px;
-    }
-
-    .exceptions-link {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      background: none;
-      border: none;
-      padding: 8px 0 0;
-      margin: 0;
-      cursor: pointer;
-      font-size: 13px;
-      color: var(--primary-color);
-      font-family: inherit;
-    }
-
-    .exceptions-link:hover {
-      text-decoration: underline;
-    }
-
-    .helper-link {
-      display: inline-block;
-      margin-top: 12px;
-      color: var(--primary-color);
-      font-size: 12px;
-      text-decoration: none;
-    }
-
-    .helper-link:hover {
-      text-decoration: underline;
-    }
-  `;
+      .helper-link:hover {
+        text-decoration: underline;
+      }
+    `,
+  ];
 
   override connectedCallback() {
     super.connectedCallback();
@@ -625,8 +627,8 @@ export class RsRoomDetail extends LitElement {
     until: number | null;
   } {
     const overrideEl = this.shadowRoot?.querySelector(
-      "rs-override-section",
-    ) as RsOverrideSection | null;
+      "rs-temperature-control-panel",
+    ) as RsTemperatureControlPanel | null;
     if (overrideEl) {
       return overrideEl.getEffectiveOverride();
     }
@@ -687,6 +689,7 @@ export class RsRoomDetail extends LitElement {
           @display-name-changed=${this._onDisplayNameChanged}
         ></rs-hero-status>
         ${!this._isOutdoor ? this._renderStatusSummary() : nothing}
+        ${!this._isOutdoor ? this._renderTemperatureControlPanel() : nothing}
 
         <div class="detail-grid">
           ${layout.primarySections.map((section) => this._renderPrimarySection(section))}
@@ -731,18 +734,28 @@ export class RsRoomDetail extends LitElement {
     `;
   }
 
+  private _renderTemperatureControlPanel() {
+    return html`
+      <rs-temperature-control-panel
+        .hass=${this.hass}
+        .config=${this.config}
+        .climateMode=${this._climateMode}
+        .climateControlEnabled=${this._climateControlEnabled}
+        .climateControlActive=${this.climateControlActive && this._climateControlEnabled}
+        .comfortHeat=${this._comfortHeat}
+        .comfortCool=${this._comfortCool}
+        .ecoHeat=${this._ecoHeat}
+        .ecoCool=${this._ecoCool}
+        .language=${this.hass.language}
+        @climate-control-toggle=${this._onClimateControlToggle}
+        @mode-changed=${this._onModeChanged}
+      ></rs-temperature-control-panel>
+    `;
+  }
+
   private _renderStatusSummary() {
     const live = this.config?.live;
     const unit = tempUnit(this.hass);
-    const mode = live?.mode ?? "idle";
-    const targetValue = this._formatTarget(live);
-    const nightValue = live?.night_mode?.active
-      ? localize("room.status.night_active", this.hass.language)
-      : this._quietHours
-        ? localize("room.status.night_scheduled", this.hass.language, {
-            hours: `${this._quietHours.start}-${this._quietHours.end}`,
-          })
-        : localize("room.status.not_set", this.hass.language);
     const sensorValue =
       this._entityName(this._selectedTempSensor) ||
       localize("room.status.not_set", this.hass.language);
@@ -753,21 +766,6 @@ export class RsRoomDetail extends LitElement {
 
     return html`
       <div class="status-summary">
-        ${this._renderStatusItem(
-          "mdi:state-machine",
-          localize("room.status.action", this.hass.language),
-          formatMode(mode, this.hass.language),
-        )}
-        ${this._renderStatusItem(
-          "mdi:target",
-          localize("room.status.target", this.hass.language),
-          targetValue,
-        )}
-        ${this._renderStatusItem(
-          "mdi:weather-night",
-          localize("room.status.night", this.hass.language),
-          nightValue,
-        )}
         ${this._renderStatusItem(
           "mdi:thermometer",
           localize("room.status.primary_sensor", this.hass.language),
@@ -794,22 +792,6 @@ export class RsRoomDetail extends LitElement {
     `;
   }
 
-  private _formatTarget(live: RoomConfig["live"] | undefined): string {
-    const unit = tempUnit(this.hass);
-    if (!live) return localize("room.status.not_set", this.hass.language);
-    if (
-      live.heat_target != null &&
-      live.cool_target != null &&
-      live.heat_target !== live.cool_target
-    ) {
-      return `${formatTemp(live.heat_target, this.hass)}-${formatTemp(live.cool_target, this.hass)}${unit}`;
-    }
-    const target = live.target_temp ?? live.heat_target ?? live.cool_target;
-    return target != null
-      ? `${formatTemp(target, this.hass)}${unit}`
-      : localize("room.status.not_set", this.hass.language);
-  }
-
   private _entityName(entityId: string): string {
     if (!entityId) return "";
     return (this.hass.states[entityId]?.attributes?.friendly_name as string) || entityId;
@@ -817,40 +799,6 @@ export class RsRoomDetail extends LitElement {
 
   private _renderPrimarySection(section: PrimaryRoomSection) {
     switch (section) {
-      case "climateControl":
-        return html`
-          <rs-toggle-card
-            icon="mdi:power"
-            .label=${localize("room.climate_control_toggle", this.hass.language)}
-            .hint=${localize("room.climate_control_hint", this.hass.language)}
-            .checked=${this._climateControlEnabled}
-            @toggle-changed=${this._onClimateControlToggle}
-          ></rs-toggle-card>
-        `;
-      case "climateMode":
-        return html`
-          <rs-section-card
-            icon="mdi:cog"
-            .heading=${localize("room.section.climate_mode", this.hass.language)}
-          >
-            <rs-info-icon
-              slot="header-extras"
-              .label=${localize("common.info", this.hass.language)}
-            >
-              <b>${localize("mode.auto", this.hass.language)}</b> —
-              ${localize("mode.auto_desc", this.hass.language)}<br />
-              <b>${localize("mode.heat_only", this.hass.language)}</b> —
-              ${localize("mode.heat_only_desc", this.hass.language)}<br />
-              <b>${localize("mode.cool_only", this.hass.language)}</b> —
-              ${localize("mode.cool_only_desc", this.hass.language)}
-            </rs-info-icon>
-            <rs-climate-mode-selector
-              .climateMode=${this._climateMode}
-              .language=${this.hass.language}
-              @mode-changed=${this._onModeChanged}
-            ></rs-climate-mode-selector>
-          </rs-section-card>
-        `;
       case "schedule":
         return html`
           <rs-section-card
@@ -877,20 +825,6 @@ export class RsRoomDetail extends LitElement {
               @eco-heat-changed=${this._onEcoHeatChanged}
               @eco-cool-changed=${this._onEcoCoolChanged}
             ></rs-schedule-settings>
-            ${this.config
-              ? html`
-                  <rs-override-section
-                    .hass=${this.hass}
-                    .config=${this.config}
-                    .climateMode=${this._climateMode}
-                    .comfortHeat=${this._comfortHeat}
-                    .comfortCool=${this._comfortCool}
-                    .ecoHeat=${this._ecoHeat}
-                    .ecoCool=${this._ecoCool}
-                    .language=${this.hass.language}
-                  ></rs-override-section>
-                `
-              : nothing}
           </rs-section-card>
         `;
     }

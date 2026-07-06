@@ -5,6 +5,7 @@ import { getEntitiesForArea } from "./utils/room-state";
 import { loadHaElements } from "./load-ha-elements";
 import { localize } from "./utils/localize";
 import { mdiEyeOff } from "./utils/icons";
+import { roommindThemeStyles } from "./styles/theme-styles";
 import "./components/rs-settings";
 import "./components/rs-analytics";
 
@@ -26,6 +27,15 @@ interface AreaInfo {
   config: RoomConfig | null;
   climateEntityCount: number;
   tempSensorCount: number;
+}
+
+type AreaGroupTone = "attention" | "active" | "normal" | "setup";
+
+interface AreaGroup {
+  id: string;
+  name: string;
+  tone: AreaGroupTone;
+  items: AreaInfo[];
 }
 
 @customElement("roommind-panel")
@@ -65,280 +75,457 @@ export class RoomMindPanel extends LitElement {
   private _boundVisibilityHandler: (() => void) | undefined;
   private _boundConnectionReady: (() => void) | undefined;
 
-  static override styles = css`
-    :host {
-      display: block;
-      font-family: var(--primary-font-family, Roboto, sans-serif);
-      color: var(--primary-text-color);
-      background: var(--primary-background-color);
-      min-height: 100vh;
-
-      /* Round the corners of all MDC-based inputs (ha-textfield, ha-select,
-         ha-entity-picker, ha-combo-box) to match the rest of the design.
-         The bottom corners are rounded via inputStyles in each component. */
-      --mdc-shape-small: var(--roommind-radius-control);
-      --mdc-shape-medium: var(--roommind-radius-control);
-      --md-filled-text-field-container-shape: var(--roommind-radius-control);
-      --md-outlined-text-field-container-shape: var(--roommind-radius-control);
-      --roommind-radius-card: 8px;
-      --roommind-radius-control: 8px;
-      --roommind-radius-small: 4px;
-      --roommind-border-subtle: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
-      --roommind-border-faint: 1px solid var(--divider-color, rgba(0, 0, 0, 0.06));
-      --roommind-shadow-soft: 0 2px 10px rgba(0, 0, 0, 0.08);
-      --roommind-header-min-height: 44px;
-    }
-
-    .toolbar {
-      display: flex;
-      align-items: center;
-      height: 56px;
-      padding: 0 12px;
-      font-size: 20px;
-      background-color: var(--app-header-background-color, var(--primary-background-color));
-      color: var(--app-header-text-color, var(--primary-text-color));
-      border-bottom: 1px solid var(--divider-color);
-      box-sizing: border-box;
-      position: sticky;
-      top: 0;
-      z-index: 4;
-    }
-
-    .toolbar .title {
-      margin-left: 4px;
-      font-weight: 400;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      flex: 1;
-    }
-
-    .toolbar ha-icon-button {
-      color: var(--app-header-text-color, var(--primary-text-color));
-    }
-
-    .save-indicator {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 13px;
-      font-weight: 400;
-      margin-right: 8px;
-      opacity: 1;
-      transition: opacity 0.3s ease;
-    }
-
-    .save-indicator.fade-out {
-      opacity: 0;
-    }
-
-    .save-indicator ha-icon {
-      --mdc-icon-size: 18px;
-    }
-
-    .save-indicator.saving {
-      color: var(--primary-color, #03a9f4);
-    }
-
-    .save-indicator.saved {
-      color: var(--success-color, #4caf50);
-    }
-
-    .save-indicator.error {
-      color: var(--error-color, #d32f2f);
-    }
-
-    .tabs {
-      display: flex;
-      gap: 0;
-      border-bottom: 1px solid var(--divider-color);
-      padding: 0 16px;
-      background: var(--primary-background-color);
-      position: sticky;
-      top: 56px;
-      z-index: 3;
-    }
-
-    .tab {
-      padding: 12px 24px;
-      cursor: pointer;
-      border: none;
-      background: none;
-      color: var(--secondary-text-color);
-      font-size: 14px;
-      font-weight: 500;
-      border-bottom: 2px solid transparent;
-      transition: all 0.2s ease;
-      font-family: inherit;
-    }
-
-    .tab:hover {
-      color: var(--primary-text-color);
-    }
-
-    .tab[active] {
-      color: var(--primary-color);
-      border-bottom-color: var(--primary-color);
-    }
-
-    .content {
-      padding: 20px;
-      max-width: 1200px;
-      margin: 0 auto;
-      box-sizing: border-box;
-    }
-
-    @media (max-width: 600px) {
-      .content {
-        padding: 16px;
+  static override styles = [
+    roommindThemeStyles,
+    css`
+      :host {
+        display: block;
+        font-family: var(--primary-font-family, Roboto, sans-serif);
+        color: var(--primary-text-color);
+        background: var(--roommind-page-background);
+        min-height: 100vh;
+        --roommind-tile-surface: color-mix(
+          in srgb,
+          var(--roommind-surface) 94%,
+          var(--primary-text-color, #000000)
+        );
       }
-    }
 
-    .placeholder {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 80px 16px;
-      text-align: center;
-      color: var(--secondary-text-color);
-    }
+      .toolbar {
+        display: flex;
+        align-items: center;
+        height: 56px;
+        padding: 0 12px;
+        font-size: 20px;
+        background-color: var(--app-header-background-color, var(--primary-background-color));
+        color: var(--app-header-text-color, var(--primary-text-color));
+        border-bottom: 1px solid var(--divider-color);
+        box-sizing: border-box;
+        position: sticky;
+        top: 0;
+        z-index: 4;
+      }
 
-    .placeholder ha-icon {
-      margin-bottom: 16px;
-    }
+      .toolbar .title {
+        margin-left: 4px;
+        font-weight: 400;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        flex: 1;
+      }
 
-    .placeholder p {
-      font-size: 15px;
-      max-width: 400px;
-      line-height: 1.5;
-    }
+      .toolbar ha-icon-button {
+        color: var(--app-header-text-color, var(--primary-text-color));
+      }
 
-    .area-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr));
-      gap: 14px;
-    }
+      .save-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        font-weight: 400;
+        margin-right: 8px;
+        opacity: 1;
+        transition: opacity 0.3s ease;
+      }
 
-    .loading {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 80px 16px;
-      color: var(--secondary-text-color);
-      font-size: 14px;
-    }
+      .save-indicator.fade-out {
+        opacity: 0;
+      }
 
-    .stats-separator {
-      width: 1px;
-      height: 28px;
-      background: var(--divider-color, #444);
-      margin: 0 4px;
-      flex-shrink: 0;
-    }
+      .save-indicator ha-icon {
+        --mdc-icon-size: 18px;
+      }
 
-    .stats-bar {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 10px 18px;
-      margin-bottom: 18px;
-      padding: 12px 14px;
-      border-radius: 8px;
-      border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
-      box-shadow: none;
-    }
+      .save-indicator.saving {
+        color: var(--primary-color, #03a9f4);
+      }
 
-    .stats-actions {
-      display: flex;
-      align-items: center;
-      margin-left: auto;
-      gap: 0;
-    }
+      .save-indicator.saved {
+        color: var(--success-color, #4caf50);
+      }
 
-    .hidden-rooms-toggle {
-      --mdc-icon-button-size: 36px;
-      --mdc-icon-size: 20px;
-      color: var(--secondary-text-color);
-    }
+      .save-indicator.error {
+        color: var(--error-color, #d32f2f);
+      }
 
-    .hidden-rooms-panel {
-      margin-bottom: 18px;
-      padding: 12px 16px;
-      border-radius: 8px;
-      border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
-      box-shadow: none;
-    }
+      .tabs {
+        display: flex;
+        gap: 0;
+        border-bottom: 1px solid var(--divider-color);
+        padding: 0 16px;
+        background: var(--primary-background-color);
+        position: sticky;
+        top: 56px;
+        z-index: 3;
+      }
 
-    .hidden-rooms-header {
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--secondary-text-color);
-      margin-bottom: 8px;
-    }
+      .tab {
+        padding: 12px 24px;
+        cursor: pointer;
+        border: none;
+        background: none;
+        color: var(--secondary-text-color);
+        font-size: 14px;
+        font-weight: 500;
+        border-bottom: 2px solid transparent;
+        transition: all 0.2s ease;
+        font-family: inherit;
+      }
 
-    .hidden-room-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 6px 0;
-    }
+      .tab:hover {
+        color: var(--primary-text-color);
+      }
 
-    .hidden-room-name {
-      font-size: 14px;
-      color: var(--primary-text-color);
-    }
+      .tab[active] {
+        color: var(--primary-color);
+        border-bottom-color: var(--primary-color);
+      }
 
-    .stat {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      min-width: 54px;
-    }
+      .content {
+        padding: 20px;
+        max-width: 1200px;
+        margin: 0 auto;
+        box-sizing: border-box;
+      }
 
-    .stat-value {
-      font-size: 20px;
-      font-weight: 500;
-      color: var(--primary-text-color);
-      --mdc-icon-size: 22px;
-      line-height: 1;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 24px;
-    }
+      @media (max-width: 600px) {
+        .content {
+          padding: 16px;
+        }
+      }
 
-    .stat-label {
-      font-size: 12px;
-      color: var(--secondary-text-color);
-      text-transform: uppercase;
-      letter-spacing: 0;
-    }
+      .placeholder {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 80px 16px;
+        text-align: center;
+        color: var(--secondary-text-color);
+      }
 
-    .floor-heading {
-      font-size: 14px;
-      font-weight: 500;
-      color: var(--secondary-text-color);
-      text-transform: uppercase;
-      letter-spacing: 0;
-      margin: 20px 0 8px 0;
-    }
+      .placeholder ha-icon {
+        margin-bottom: 16px;
+      }
 
-    .floor-heading:first-of-type {
-      margin-top: 0;
-    }
+      .placeholder p {
+        font-size: 15px;
+        max-width: 400px;
+        line-height: 1.5;
+      }
 
-    .reorder-btn {
-      --mdc-icon-button-size: 36px;
-      --mdc-icon-size: 20px;
-      color: var(--secondary-text-color);
-    }
+      .area-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr));
+        gap: 14px;
+      }
 
-    .reorder-done {
-      font-size: 14px;
-      margin-left: auto;
-    }
-  `;
+      .room-section {
+        margin-top: 20px;
+      }
+
+      .room-section:first-of-type {
+        margin-top: 0;
+      }
+
+      .room-section-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin: 0 0 8px;
+        min-width: 0;
+      }
+
+      .room-section-title {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        margin: 0;
+        color: var(--primary-text-color);
+        font-size: 15px;
+        font-weight: 650;
+        line-height: 1.3;
+      }
+
+      .room-section-title::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--secondary-text-color);
+        flex: 0 0 auto;
+      }
+
+      .room-section.attention .room-section-title::before {
+        background: var(--roommind-error-color);
+      }
+
+      .room-section.active .room-section-title::before {
+        background: var(--roommind-warning-color);
+      }
+
+      .room-section.setup .room-section-title::before {
+        background: var(--primary-color);
+      }
+
+      .room-section-count {
+        flex: 0 0 auto;
+        min-width: 24px;
+        padding: 2px 8px;
+        border-radius: 8px;
+        background: var(--roommind-tile-surface);
+        color: var(--secondary-text-color);
+        font-size: 12px;
+        font-weight: 600;
+        text-align: center;
+        box-sizing: border-box;
+      }
+
+      .loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 80px 16px;
+        color: var(--secondary-text-color);
+        font-size: 14px;
+      }
+
+      .overview-panel {
+        margin-bottom: 18px;
+        padding: 14px;
+        border-radius: 8px;
+        border: var(--roommind-border-subtle);
+        background: var(--roommind-surface);
+        box-shadow: none;
+      }
+
+      .overview-top {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        min-width: 0;
+      }
+
+      .overview-icon {
+        width: 40px;
+        height: 40px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        background: var(--roommind-primary-muted);
+        color: var(--primary-color);
+        flex: 0 0 auto;
+      }
+
+      .overview-icon.warning {
+        background: var(--roommind-error-tint);
+        color: var(--roommind-error-color);
+      }
+
+      .overview-icon.active {
+        background: var(--roommind-warning-tint);
+        color: var(--roommind-warning-color);
+      }
+
+      .overview-copy {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .overview-title {
+        margin: 0;
+        color: var(--primary-text-color);
+        font-size: 16px;
+        font-weight: 600;
+        line-height: 1.35;
+      }
+
+      .overview-subtitle {
+        margin-top: 3px;
+        color: var(--secondary-text-color);
+        font-size: 13px;
+        line-height: 1.4;
+      }
+
+      .stats-actions {
+        display: flex;
+        align-items: center;
+        margin-left: auto;
+        gap: 0;
+        flex: 0 0 auto;
+      }
+
+      .overview-flags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 10px;
+      }
+
+      .overview-flag {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        min-height: 24px;
+        padding: 2px 8px;
+        border-radius: 8px;
+        background: var(--roommind-tile-surface);
+        color: var(--secondary-text-color);
+        font-size: 12px;
+        font-weight: 500;
+        box-sizing: border-box;
+      }
+
+      .overview-flag ha-icon {
+        --mdc-icon-size: 15px;
+      }
+
+      .overview-flag.warning {
+        background: var(--roommind-error-tint);
+        color: var(--roommind-error-color);
+      }
+
+      .overview-flag.active {
+        background: var(--roommind-warning-tint);
+        color: var(--roommind-warning-color);
+      }
+
+      .overview-metrics {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .stat {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 3px;
+        min-width: 0;
+        min-height: 58px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        background: var(--roommind-tile-surface);
+        border: var(--roommind-border-faint);
+        box-sizing: border-box;
+      }
+
+      .hidden-rooms-toggle {
+        --mdc-icon-button-size: 36px;
+        --mdc-icon-size: 20px;
+        color: var(--secondary-text-color);
+      }
+
+      .hidden-rooms-panel {
+        margin-bottom: 18px;
+        padding: 12px 16px;
+        border-radius: 8px;
+        border: var(--roommind-border-subtle);
+        background: var(--roommind-surface-subtle);
+        box-shadow: none;
+      }
+
+      .hidden-rooms-header {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--secondary-text-color);
+        margin-bottom: 8px;
+      }
+
+      .hidden-room-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 0;
+      }
+
+      .hidden-room-name {
+        font-size: 14px;
+        color: var(--primary-text-color);
+      }
+
+      .stat-value {
+        font-size: 22px;
+        font-weight: 600;
+        color: var(--primary-text-color);
+        --mdc-icon-size: 22px;
+        line-height: 1.1;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+      }
+
+      .stat-value.heating {
+        color: var(--roommind-warning-color);
+      }
+
+      .stat-value.cooling {
+        color: var(--roommind-info-color);
+      }
+
+      .stat-value.warning {
+        color: var(--roommind-error-color);
+      }
+
+      .stat-label {
+        font-size: 12px;
+        color: var(--secondary-text-color);
+        letter-spacing: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .floor-heading {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--secondary-text-color);
+        text-transform: uppercase;
+        letter-spacing: 0;
+        margin: 20px 0 8px 0;
+      }
+
+      .floor-heading:first-of-type {
+        margin-top: 0;
+      }
+
+      .reorder-btn {
+        --mdc-icon-button-size: 36px;
+        --mdc-icon-size: 20px;
+        color: var(--secondary-text-color);
+      }
+
+      .reorder-done {
+        font-size: 14px;
+        margin-left: auto;
+      }
+
+      @media (max-width: 600px) {
+        .overview-top {
+          align-items: center;
+        }
+
+        .overview-icon {
+          width: 36px;
+          height: 36px;
+        }
+
+        .stats-actions {
+          align-self: flex-start;
+        }
+
+        .overview-metrics {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+    `,
+  ];
 
   override connectedCallback() {
     super.connectedCallback();
@@ -499,6 +686,7 @@ export class RoomMindPanel extends LitElement {
     const allAreaInfos = this._areaInfosCache;
     const areaInfos = allAreaInfos.filter((i) => !this._hiddenRooms.includes(i.area.area_id));
     const hiddenAreaInfos = allAreaInfos.filter((i) => this._hiddenRooms.includes(i.area.area_id));
+    const l = this.hass.language;
 
     if (allAreaInfos.length === 0) {
       return html`
@@ -517,93 +705,124 @@ export class RoomMindPanel extends LitElement {
     const configuredCount = areaInfos.filter((i) => i.config).length;
     const heatingCount = areaInfos.filter((i) => i.config?.live?.mode === "heating").length;
     const coolingCount = areaInfos.filter((i) => i.config?.live?.mode === "cooling").length;
+    const activeCount = heatingCount + coolingCount;
+    const windowOpenCount = areaInfos.filter((i) => i.config?.live?.window_open).length;
+    const awayCount = areaInfos.filter((i) => i.config?.live?.presence_away).length;
+    const overrideCount = areaInfos.filter((i) => i.config?.live?.override_active).length;
     const moldCount = areaInfos.filter(
       (i) =>
         i.config?.live?.mold_risk_level === "warning" ||
         i.config?.live?.mold_risk_level === "critical",
     ).length;
-    const hasConditionalStats =
-      this._vacationActive || (this._presenceEnabled && !this._anyoneHome) || moldCount > 0;
-    const l = this.hass.language;
-
+    const overviewTitle =
+      moldCount > 0 || windowOpenCount > 0
+        ? localize("panel.overview.attention", l, { count: moldCount + windowOpenCount })
+        : activeCount > 0
+          ? localize("panel.overview.active", l, { count: activeCount })
+          : localize("panel.overview.stable", l);
+    const overviewIconClass =
+      moldCount > 0 || windowOpenCount > 0 ? "warning" : activeCount > 0 ? "active" : "";
+    const overviewIcon =
+      moldCount > 0 || windowOpenCount > 0
+        ? "mdi:alert-circle-outline"
+        : activeCount > 0
+          ? "mdi:thermostat"
+          : "mdi:check-circle-outline";
     return html`
       ${configuredCount > 0 || hiddenAreaInfos.length > 0
         ? html`
-            <ha-card class="stats-bar">
-              ${configuredCount > 0
-                ? html`
-                    <div class="stat">
-                      <span class="stat-value">${configuredCount}</span>
-                      <span class="stat-label">${localize("panel.stat.rooms", l)}</span>
-                    </div>
-                    <div class="stat">
-                      <span class="stat-value" style="color: var(--warning-color, #ff9800)"
-                        >${heatingCount}</span
-                      >
-                      <span class="stat-label">${localize("panel.stat.heating", l)}</span>
-                    </div>
-                    <div class="stat">
-                      <span class="stat-value" style="color: var(--info-color, #2196f3)"
-                        >${coolingCount}</span
-                      >
-                      <span class="stat-label">${localize("panel.stat.cooling", l)}</span>
-                    </div>
-                  `
-                : nothing}
-              ${hasConditionalStats ? html`<div class="stats-separator"></div>` : nothing}
-              ${this._vacationActive
-                ? html`
-                    <div class="stat">
-                      <span class="stat-value" style="color: var(--success-color, #4caf50)">
-                        <ha-icon icon="mdi:airplane"></ha-icon>
-                      </span>
-                      <span class="stat-label">${localize("panel.stat.vacation", l)}</span>
-                    </div>
-                  `
-                : nothing}
-              ${this._presenceEnabled && !this._anyoneHome
-                ? html`
-                    <div class="stat">
-                      <span class="stat-value" style="color: var(--secondary-text-color)">
-                        <ha-icon icon="mdi:power"></ha-icon>
-                      </span>
-                      <span class="stat-label">${localize("panel.stat.away", l)}</span>
-                    </div>
-                  `
-                : nothing}
-              ${moldCount > 0
-                ? html`
-                    <div class="stat">
-                      <span class="stat-value" style="color: var(--error-color, #f44336)"
-                        >${moldCount}</span
-                      >
-                      <span class="stat-label">${localize("panel.stat.mold", l)}</span>
-                    </div>
-                  `
-                : nothing}
-              <span class="stats-actions">
-                ${hiddenAreaInfos.length > 0
-                  ? html`<ha-icon-button
-                      class="hidden-rooms-toggle"
-                      .path=${mdiEyeOff}
-                      @click=${() => {
-                        this._showHiddenRooms = !this._showHiddenRooms;
-                      }}
-                    ></ha-icon-button>`
-                  : nothing}
-                ${this._reorderMode
-                  ? html`<ha-button class="reorder-done" @click=${this._onReorderDone}>
-                      ${localize("panel.reorder_done", l)}
-                    </ha-button>`
-                  : html`<ha-icon-button
-                      class="reorder-btn"
-                      .path=${"M9,3L5,7H8V14H10V7H13M16,17V10H14V17H11L15,21L19,17H16Z"}
-                      @click=${() => {
-                        this._reorderMode = true;
-                      }}
-                      title=${localize("panel.reorder", l)}
-                    ></ha-icon-button>`}
-              </span>
+            <ha-card class="overview-panel">
+              <div class="overview-top">
+                <span class="overview-icon ${overviewIconClass}">
+                  <ha-icon .icon=${overviewIcon}></ha-icon>
+                </span>
+                <div class="overview-copy">
+                  <h2 class="overview-title">${overviewTitle}</h2>
+                  <div class="overview-subtitle">
+                    ${localize("panel.overview.summary", l, {
+                      configured: configuredCount,
+                      total: areaInfos.length,
+                    })}
+                  </div>
+                  <div class="overview-flags">
+                    ${this._vacationActive
+                      ? html`<span class="overview-flag">
+                          <ha-icon icon="mdi:airplane"></ha-icon>
+                          ${localize("panel.stat.vacation", l)}
+                        </span>`
+                      : nothing}
+                    ${this._presenceEnabled && !this._anyoneHome
+                      ? html`<span class="overview-flag">
+                          <ha-icon icon="mdi:home-off-outline"></ha-icon>
+                          ${localize("panel.stat.away", l)}
+                        </span>`
+                      : nothing}
+                    ${windowOpenCount > 0
+                      ? html`<span class="overview-flag active">
+                          <ha-icon icon="mdi:window-open-variant"></ha-icon>
+                          ${localize("panel.stat.windows", l, { count: windowOpenCount })}
+                        </span>`
+                      : nothing}
+                    ${awayCount > 0
+                      ? html`<span class="overview-flag">
+                          <ha-icon icon="mdi:home-off-outline"></ha-icon>
+                          ${localize("panel.stat.rooms_away", l, { count: awayCount })}
+                        </span>`
+                      : nothing}
+                    ${overrideCount > 0
+                      ? html`<span class="overview-flag">
+                          <ha-icon icon="mdi:timer-outline"></ha-icon>
+                          ${localize("panel.stat.overrides", l, { count: overrideCount })}
+                        </span>`
+                      : nothing}
+                  </div>
+                </div>
+                <span class="stats-actions">
+                  ${hiddenAreaInfos.length > 0
+                    ? html`<ha-icon-button
+                        class="hidden-rooms-toggle"
+                        .path=${mdiEyeOff}
+                        @click=${() => {
+                          this._showHiddenRooms = !this._showHiddenRooms;
+                        }}
+                      ></ha-icon-button>`
+                    : nothing}
+                  ${this._reorderMode
+                    ? html`<ha-button class="reorder-done" @click=${this._onReorderDone}>
+                        ${localize("panel.reorder_done", l)}
+                      </ha-button>`
+                    : html`<ha-icon-button
+                        class="reorder-btn"
+                        .path=${"M9,3L5,7H8V14H10V7H13M16,17V10H14V17H11L15,21L19,17H16Z"}
+                        @click=${() => {
+                          this._reorderMode = true;
+                        }}
+                        title=${localize("panel.reorder", l)}
+                      ></ha-icon-button>`}
+                </span>
+              </div>
+              <div class="overview-metrics">
+                <div class="stat">
+                  <span class="stat-value">${configuredCount}</span>
+                  <span class="stat-label">${localize("panel.stat.rooms", l)}</span>
+                </div>
+                <div class="stat">
+                  <span class="stat-value">${activeCount}</span>
+                  <span class="stat-label">${localize("panel.stat.active", l)}</span>
+                </div>
+                <div class="stat">
+                  <span class="stat-value heating">${heatingCount}</span>
+                  <span class="stat-label">${localize("panel.stat.heating", l)}</span>
+                </div>
+                <div class="stat">
+                  <span class="stat-value cooling">${coolingCount}</span>
+                  <span class="stat-label">${localize("panel.stat.cooling", l)}</span>
+                </div>
+                <div class="stat">
+                  <span class="stat-value warning">${moldCount}</span>
+                  <span class="stat-label">${localize("panel.stat.mold", l)}</span>
+                </div>
+              </div>
             </ha-card>
           `
         : nothing}
@@ -626,34 +845,116 @@ export class RoomMindPanel extends LitElement {
             </ha-card>
           `
         : nothing}
-      ${this._getFloorGroups(areaInfos).map(
-        (group) => html`
-          ${group.name ? html`<h4 class="floor-heading">${group.name}</h4>` : nothing}
-          <div class="area-grid">
-            ${group.items.map(
-              (info, idx) => html`
-                <rs-area-card
-                  .area=${info.area}
-                  .config=${info.config}
-                  .climateEntityCount=${info.climateEntityCount}
-                  .tempSensorCount=${info.tempSensorCount}
-                  .hass=${this.hass}
-                  .controlMode=${this._controlMode}
-                  .climateControlActive=${this._climateControlActive}
-                  .reordering=${this._reorderMode}
-                  .canMoveUp=${idx > 0}
-                  .canMoveDown=${idx < group.items.length - 1}
-                  @area-selected=${this._onAreaSelected}
-                  @hide-room=${this._onHideRoom}
-                  @move-room-up=${this._onMoveRoomUp}
-                  @move-room-down=${this._onMoveRoomDown}
-                ></rs-area-card>
-              `,
-            )}
-          </div>
-        `,
-      )}
+      ${this._renderAreaGroups(areaInfos)}
     `;
+  }
+
+  private _renderAreaGroups(areaInfos: AreaInfo[]) {
+    const groups =
+      this._groupByFloor || this._reorderMode
+        ? this._getFloorGroups(areaInfos).map((group) => ({
+            id: group.name || "all",
+            name: group.name,
+            tone: "normal" as AreaGroupTone,
+            items: group.items,
+          }))
+        : this._getPriorityGroups(areaInfos);
+
+    return groups.map(
+      (group) => html`
+        <section class="room-section ${group.tone}">
+          ${group.name
+            ? html`
+                <div class="room-section-heading">
+                  <h4 class="floor-heading room-section-title">${group.name}</h4>
+                  <span class="room-section-count">${group.items.length}</span>
+                </div>
+              `
+            : nothing}
+          <div class="area-grid">
+            ${group.items.map((info, idx) => this._renderAreaCard(info, idx, group.items.length))}
+          </div>
+        </section>
+      `,
+    );
+  }
+
+  private _renderAreaCard(info: AreaInfo, idx: number, groupLength: number) {
+    return html`
+      <rs-area-card
+        .area=${info.area}
+        .config=${info.config}
+        .climateEntityCount=${info.climateEntityCount}
+        .tempSensorCount=${info.tempSensorCount}
+        .hass=${this.hass}
+        .controlMode=${this._controlMode}
+        .climateControlActive=${this._climateControlActive}
+        .reordering=${this._reorderMode}
+        .canMoveUp=${idx > 0}
+        .canMoveDown=${idx < groupLength - 1}
+        @area-selected=${this._onAreaSelected}
+        @hide-room=${this._onHideRoom}
+        @move-room-up=${this._onMoveRoomUp}
+        @move-room-down=${this._onMoveRoomDown}
+      ></rs-area-card>
+    `;
+  }
+
+  private _getPriorityGroups(areaInfos: AreaInfo[]): AreaGroup[] {
+    const groups: AreaGroup[] = [
+      {
+        id: "attention",
+        name: localize("panel.group.attention", this.hass.language),
+        tone: "attention",
+        items: [],
+      },
+      {
+        id: "active",
+        name: localize("panel.group.active", this.hass.language),
+        tone: "active",
+        items: [],
+      },
+      {
+        id: "monitoring",
+        name: localize("panel.group.monitoring", this.hass.language),
+        tone: "normal",
+        items: [],
+      },
+      {
+        id: "setup",
+        name: localize("panel.group.setup", this.hass.language),
+        tone: "setup",
+        items: [],
+      },
+    ];
+    const byId = new Map(groups.map((group) => [group.id, group]));
+
+    for (const info of areaInfos) {
+      byId.get(this._areaPriorityGroupId(info))!.items.push(info);
+    }
+
+    return groups.filter((group) => group.items.length > 0);
+  }
+
+  private _areaPriorityGroupId(info: AreaInfo): AreaGroup["id"] {
+    const live = info.config?.live;
+    const hasClimateSelected =
+      (info.config?.devices?.length ?? 0) > 0 ||
+      (info.config?.thermostats?.length ?? 0) > 0 ||
+      (info.config?.acs?.length ?? 0) > 0;
+    if (!info.config || (!hasClimateSelected && !info.config.is_outdoor)) return "setup";
+    if (
+      live?.window_open ||
+      live?.mold_risk_level === "warning" ||
+      live?.mold_risk_level === "critical" ||
+      live?.learning_paused_reason
+    ) {
+      return "attention";
+    }
+    if (live?.mode === "heating" || live?.mode === "cooling" || live?.override_active) {
+      return "active";
+    }
+    return "monitoring";
   }
 
   private _renderSettings() {

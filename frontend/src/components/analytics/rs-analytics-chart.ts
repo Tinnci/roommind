@@ -193,7 +193,7 @@ export class RsAnalyticsChart extends LitElement {
         margin: 8px 16px 4px;
         padding: 12px 14px;
         border-radius: 8px;
-        background: var(--secondary-background-color, rgba(128, 128, 128, 0.06));
+        background: var(--roommind-surface-muted);
         font-size: 13px;
         line-height: 1.6;
         color: var(--secondary-text-color);
@@ -235,7 +235,7 @@ export class RsAnalyticsChart extends LitElement {
       }
 
       .legend-item:hover {
-        background: var(--secondary-background-color, rgba(128, 128, 128, 0.1));
+        background: var(--roommind-surface-hover);
       }
 
       .legend-item.legend-hidden {

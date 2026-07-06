@@ -297,12 +297,12 @@ export class RsAnalyticsModel extends LitElement {
       }
 
       .control-mode-badge.mpc {
-        background: rgba(76, 175, 80, 0.12);
+        background: var(--roommind-success-tint);
         color: var(--success-color, #4caf50);
       }
 
       .control-mode-badge.bangbang {
-        background: rgba(158, 158, 158, 0.12);
+        background: var(--roommind-surface-muted);
         color: var(--secondary-text-color);
       }
 

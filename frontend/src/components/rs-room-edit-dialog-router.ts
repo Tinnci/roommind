@@ -44,6 +44,8 @@ export class RsRoomEditDialogRouter extends LitElement {
         .icon=${this._icon(this.editing)}
         .heading=${this._heading(this.editing, lang)}
         ?hasInfo=${roomEditDialogHasInfo(this.editing)}
+        .doneLabel=${localize("common.done", lang)}
+        .supportingText=${localize("dialog.auto_save", lang)}
         @rs-dialog-closed=${this._closeEdit}
       >
         ${this._renderInfo(this.editing, lang)} ${this._renderEditor(this.editing)}

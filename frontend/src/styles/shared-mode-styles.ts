@@ -23,23 +23,23 @@ export const modeStyles = css`
 
   .mode-heating {
     color: var(--warning-color, #ff9800);
-    background: rgba(255, 152, 0, 0.12);
+    background: var(--roommind-warning-tint);
   }
   .mode-heating .mode-dot {
     background: var(--warning-color, #ff9800);
   }
 
   .mode-cooling {
-    color: #2196f3;
-    background: rgba(33, 150, 243, 0.12);
+    color: var(--roommind-info-color);
+    background: var(--roommind-info-tint);
   }
   .mode-cooling .mode-dot {
-    background: #2196f3;
+    background: var(--roommind-info-color);
   }
 
   .mode-idle {
     color: var(--secondary-text-color, #757575);
-    background: rgba(0, 0, 0, 0.05);
+    background: var(--roommind-surface-muted);
   }
   .mode-idle .mode-dot {
     background: var(--disabled-text-color, #bdbdbd);
@@ -47,7 +47,7 @@ export const modeStyles = css`
 
   .mode-other {
     color: var(--secondary-text-color);
-    background: rgba(0, 0, 0, 0.05);
+    background: var(--roommind-surface-muted);
   }
   .mode-other .mode-dot {
     background: var(--secondary-text-color);

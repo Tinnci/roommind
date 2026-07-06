@@ -84,22 +84,22 @@ export class RsAnalyticsSummary extends LitElement {
       border: var(--roommind-border-faint, 1px solid var(--divider-color, rgba(0, 0, 0, 0.06)));
       border-radius: var(--roommind-radius-control, 8px);
       padding: 9px 10px;
-      background: rgba(var(--rgb-primary-text-color, 0, 0, 0), 0.025);
+      background: var(--roommind-surface-subtle);
     }
 
     .summary-item.heating {
-      border-color: rgba(255, 152, 0, 0.32);
-      background: rgba(255, 152, 0, 0.08);
+      border-color: var(--roommind-warning-border);
+      background: var(--roommind-warning-tint);
     }
 
     .summary-item.cooling {
-      border-color: rgba(33, 150, 243, 0.3);
-      background: rgba(33, 150, 243, 0.08);
+      border-color: var(--roommind-info-border);
+      background: var(--roommind-info-tint);
     }
 
     .summary-item.warning {
-      border-color: rgba(244, 67, 54, 0.28);
-      background: rgba(244, 67, 54, 0.06);
+      border-color: var(--roommind-error-border);
+      background: var(--roommind-error-tint);
     }
 
     .summary-label {

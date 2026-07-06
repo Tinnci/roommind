@@ -78,7 +78,7 @@ export class RsDeviceSection extends LitElement {
       .device-group + .device-group {
         margin-top: 8px;
         padding-top: 12px;
-        border-top: 1px solid var(--divider-color, #eee);
+        border-top: var(--roommind-border-faint);
       }
 
       .device-list-scroll {
@@ -106,11 +106,11 @@ export class RsDeviceSection extends LitElement {
       }
 
       .device-row:hover {
-        background: rgba(0, 0, 0, 0.02);
+        background: var(--roommind-surface-hover);
       }
 
       .device-row.selected {
-        background: rgba(3, 169, 244, 0.035);
+        background: var(--roommind-primary-subtle);
       }
 
       .device-row ha-checkbox,
@@ -158,7 +158,7 @@ export class RsDeviceSection extends LitElement {
         font-size: 10px;
         font-weight: 500;
         color: var(--warning-color, #ff9800);
-        background: rgba(255, 152, 0, 0.1);
+        background: var(--roommind-warning-tint);
         padding: 2px 8px;
         border-radius: 8px;
         letter-spacing: 0;
@@ -181,7 +181,7 @@ export class RsDeviceSection extends LitElement {
       .entity-picker-wrap {
         margin-top: 12px;
         padding-top: 12px;
-        border-top: 1px solid var(--divider-color, #eee);
+        border-top: var(--roommind-border-faint);
       }
 
       .subtitle-row {
@@ -215,7 +215,7 @@ export class RsDeviceSection extends LitElement {
         gap: 8px;
         margin-top: 8px;
         padding: 8px 12px;
-        background: rgba(var(--rgb-primary-color, 3, 169, 244), 0.08);
+        background: var(--roommind-primary-muted);
         border-radius: 8px;
         font-size: 13px;
         color: var(--primary-text-color);
@@ -282,7 +282,7 @@ export class RsDeviceSection extends LitElement {
         font-size: 10px;
         font-weight: 500;
         color: var(--secondary-text-color);
-        background: var(--secondary-background-color);
+        background: var(--roommind-surface-muted);
         padding: 2px 6px;
         border-radius: 8px;
         --mdc-icon-size: 12px;

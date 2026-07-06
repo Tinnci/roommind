@@ -215,7 +215,7 @@ export class RsSettingsNotifications extends RsSettingsBase {
         gap: 4px;
         padding: 8px 8px 8px 12px;
         border-radius: 8px;
-        background: rgba(0, 0, 0, 0.04);
+        background: var(--roommind-surface-muted);
       }
       .target-header {
         display: flex;

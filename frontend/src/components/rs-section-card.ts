@@ -1,6 +1,7 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import "./shared/rs-badge";
+import { roommindThemeStyles } from "../styles/theme-styles";
 
 const PENCIL_PATH =
   "M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z";
@@ -13,72 +14,79 @@ export class RsSectionCard extends LitElement {
   @property({ type: String }) public badgeHint = "";
   @property({ type: Boolean }) public editable = false;
 
-  static override styles = css`
-    :host {
-      display: block;
-    }
-
-    ha-card {
-      overflow: hidden;
-      min-width: 0;
-      border-radius: var(--roommind-radius-card, 8px);
-      border: var(--roommind-border-subtle, 1px solid var(--divider-color, rgba(0, 0, 0, 0.08)));
-      box-shadow: none;
-    }
-
-    .section-header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      min-height: var(--roommind-header-min-height, 44px);
-      padding: 12px 16px 10px;
-      border-bottom: var(
-        --roommind-border-faint,
-        1px solid var(--divider-color, rgba(0, 0, 0, 0.06))
-      );
-    }
-
-    .section-icon {
-      --mdc-icon-size: 18px;
-      opacity: 0.7;
-    }
-
-    .section-title {
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--primary-text-color);
-      margin: 0;
-      flex: 1;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .edit-btn {
-      --mdc-icon-button-size: 32px;
-      --mdc-icon-size: 18px;
-      color: var(--secondary-text-color);
-      margin: -4px -8px -4px 0;
-      opacity: 0.58;
-      transition:
-        opacity 0.15s ease,
-        color 0.15s ease,
-        background 0.15s ease;
-    }
-
-    @media (hover: hover) {
-      ha-card:hover .edit-btn,
-      ha-card:focus-within .edit-btn {
-        opacity: 1;
-        color: var(--primary-color);
+  static override styles = [
+    roommindThemeStyles,
+    css`
+      :host {
+        display: block;
       }
-    }
 
-    .section-body {
-      padding: 14px 16px 16px;
-    }
-  `;
+      ha-card {
+        overflow: hidden;
+        min-width: 0;
+        border-radius: var(--roommind-radius-card, 8px);
+        border: var(--roommind-border-subtle, 1px solid var(--divider-color, rgba(0, 0, 0, 0.08)));
+        background: var(--roommind-panel-surface);
+        color: var(--primary-text-color);
+        box-shadow: none;
+      }
+
+      .section-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: var(--roommind-header-min-height, 44px);
+        padding: 12px 16px 10px;
+        background: var(--roommind-panel-surface);
+        border-bottom: var(
+          --roommind-border-faint,
+          1px solid var(--divider-color, rgba(0, 0, 0, 0.06))
+        );
+      }
+
+      .section-icon {
+        --mdc-icon-size: 18px;
+        opacity: 0.7;
+      }
+
+      .section-title {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--primary-text-color);
+        margin: 0;
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .edit-btn {
+        --mdc-icon-button-size: 32px;
+        --mdc-icon-size: 18px;
+        color: var(--secondary-text-color);
+        margin: -4px -8px -4px 0;
+        opacity: 0.58;
+        transition:
+          opacity 0.15s ease,
+          color 0.15s ease,
+          background 0.15s ease;
+      }
+
+      @media (hover: hover) {
+        ha-card:hover .edit-btn,
+        ha-card:focus-within .edit-btn {
+          opacity: 1;
+          color: var(--primary-color);
+        }
+      }
+
+      .section-body {
+        padding: 14px 16px 16px;
+        background: var(--roommind-panel-surface);
+      }
+    `,
+  ];
 
   override render() {
     return html`

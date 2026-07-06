@@ -135,7 +135,7 @@ export class RsSettingsPresence extends RsSettingsBase {
         gap: 10px;
         padding: 4px 8px 4px 12px;
         border-radius: 8px;
-        background: rgba(0, 0, 0, 0.04);
+        background: var(--roommind-surface-muted);
       }
       .person-name {
         flex: 1;

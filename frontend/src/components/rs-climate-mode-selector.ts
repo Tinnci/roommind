@@ -40,13 +40,14 @@ export class RsClimateModeSelector extends LitElement {
 
     .mode-card:hover {
       border-color: var(--primary-color, #03a9f4);
-      box-shadow: 0 2px 8px rgba(3, 169, 244, 0.1);
+      background: var(--roommind-surface-hover);
+      box-shadow: 0 2px 8px rgba(var(--rgb-primary-color, 3, 169, 244), 0.1);
     }
 
     .mode-card[active] {
       border-color: var(--primary-color, #03a9f4);
-      background: rgba(3, 169, 244, 0.06);
-      box-shadow: 0 2px 8px rgba(3, 169, 244, 0.12);
+      background: var(--roommind-primary-muted);
+      box-shadow: 0 2px 8px rgba(var(--rgb-primary-color, 3, 169, 244), 0.12);
     }
 
     .mode-card-icon {

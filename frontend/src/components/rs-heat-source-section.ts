@@ -43,15 +43,15 @@ export class RsHeatSourceSection extends LitElement {
         padding: 14px 16px;
         border: 1px solid var(--divider-color);
         border-radius: 8px;
-        background: var(--card-background-color);
+        background: var(--roommind-surface);
         transition:
           border-color 0.2s ease,
           background 0.2s ease;
       }
 
       .feature-card.enabled {
-        border-color: rgba(3, 169, 244, 0.4);
-        background: rgba(3, 169, 244, 0.06);
+        border-color: var(--roommind-primary-border);
+        background: var(--roommind-primary-muted);
       }
 
       .feature-text {
@@ -96,7 +96,7 @@ export class RsHeatSourceSection extends LitElement {
         padding: 12px 14px;
         border: 1px solid var(--divider-color);
         border-radius: 8px;
-        background: var(--card-background-color);
+        background: var(--roommind-surface);
       }
 
       .threshold-label {

@@ -60,8 +60,8 @@ export class RsComfortSection extends LitElement {
       .config-card,
       .list-item {
         border-radius: 8px;
-        background: rgba(255, 255, 255, 0.04);
-        border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
+        background: var(--roommind-surface-subtle);
+        border: var(--roommind-border-subtle);
       }
 
       .summary-item {
@@ -161,10 +161,10 @@ export class RsComfortSection extends LitElement {
         width: 100%;
         min-height: 46px;
         box-sizing: border-box;
-        border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.12));
+        border: var(--roommind-border-subtle);
         border-radius: 8px;
         padding: 0 12px;
-        background: rgba(255, 255, 255, 0.08);
+        background: var(--roommind-surface-muted);
         color: var(--primary-text-color);
         font: inherit;
       }
@@ -215,12 +215,12 @@ export class RsComfortSection extends LitElement {
         text-transform: uppercase;
         letter-spacing: 0;
         color: var(--secondary-text-color);
-        background: rgba(255, 255, 255, 0.06);
+        background: var(--roommind-surface-muted);
       }
 
       .pill.active {
         color: var(--primary-color);
-        background: rgba(3, 169, 244, 0.12);
+        background: var(--roommind-primary-strong);
       }
 
       .remove-btn,
@@ -243,7 +243,7 @@ export class RsComfortSection extends LitElement {
 
       .settings-group {
         margin-top: 16px;
-        border-top: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
+        border-top: var(--roommind-border-faint);
         padding-top: 12px;
       }
 

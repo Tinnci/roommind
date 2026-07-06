@@ -38,7 +38,7 @@ export class RsSensorSection extends LitElement {
       }
 
       :host([editing]) {
-        background: #11161d;
+        background: transparent;
       }
 
       .sensor-block {
@@ -46,8 +46,8 @@ export class RsSensorSection extends LitElement {
         flex-direction: column;
         gap: 6px;
         padding: 12px 14px;
-        background: #151a21;
-        border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.08));
+        background: var(--roommind-surface-subtle);
+        border: var(--roommind-border-subtle);
         border-radius: 8px;
       }
 
@@ -106,12 +106,12 @@ export class RsSensorSection extends LitElement {
         font-weight: 500;
         padding: 1px 7px;
         border-radius: 8px;
-        background: rgba(255, 255, 255, 0.06);
+        background: var(--roommind-surface-muted);
         color: var(--secondary-text-color);
       }
 
       .count-chip.has-selection {
-        background: rgba(3, 169, 244, 0.15);
+        background: var(--roommind-primary-strong);
         color: var(--primary-color);
       }
 
@@ -170,17 +170,17 @@ export class RsSensorSection extends LitElement {
         padding: 7px 8px;
         border: 1px solid transparent;
         border-radius: 8px;
-        background: #111720;
+        background: var(--roommind-surface-subtle);
         cursor: pointer;
       }
 
       .sensor-table-row:hover {
-        background: #151d27;
+        background: var(--roommind-surface-hover);
       }
 
       .sensor-table-row.selected {
-        border-color: rgba(3, 169, 244, 0.38);
-        background: #102636;
+        border-color: var(--roommind-primary-border);
+        background: var(--roommind-primary-muted);
       }
 
       .sensor-table-row ha-checkbox,
@@ -204,17 +204,17 @@ export class RsSensorSection extends LitElement {
 
       .role-chip {
         color: var(--primary-color);
-        background: rgba(3, 169, 244, 0.12);
+        background: var(--roommind-primary-strong);
       }
 
       .role-chip.aux {
         color: var(--secondary-text-color);
-        background: rgba(255, 255, 255, 0.06);
+        background: var(--roommind-surface-muted);
       }
 
       .role-chip.disabled {
         color: var(--secondary-text-color);
-        background: rgba(255, 255, 255, 0.04);
+        background: var(--roommind-surface-subtle);
       }
 
       .priority-actions {
@@ -230,9 +230,9 @@ export class RsSensorSection extends LitElement {
         width: 24px;
         height: 24px;
         padding: 0;
-        border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.08));
+        border: var(--roommind-border-faint);
         border-radius: 6px;
-        background: rgba(255, 255, 255, 0.04);
+        background: var(--roommind-surface-subtle);
         color: var(--secondary-text-color);
         cursor: pointer;
       }
@@ -240,7 +240,7 @@ export class RsSensorSection extends LitElement {
       .priority-button:hover:not(:disabled),
       .priority-button:focus-visible:not(:disabled) {
         color: var(--primary-color);
-        border-color: rgba(3, 169, 244, 0.4);
+        border-color: var(--roommind-primary-border);
         outline: none;
       }
 
@@ -255,23 +255,23 @@ export class RsSensorSection extends LitElement {
 
       .health-chip {
         color: var(--secondary-text-color);
-        background: rgba(255, 255, 255, 0.06);
+        background: var(--roommind-surface-muted);
       }
 
       .health-chip.fresh {
         color: var(--success-color, #4caf50);
-        background: rgba(76, 175, 80, 0.12);
+        background: var(--roommind-success-tint);
       }
 
       .health-chip.aging {
         color: var(--warning-color, #ff9800);
-        background: rgba(255, 152, 0, 0.12);
+        background: var(--roommind-warning-tint);
       }
 
       .health-chip.stale,
       .health-chip.unavailable {
         color: var(--error-color, #f44336);
-        background: rgba(244, 67, 54, 0.12);
+        background: var(--roommind-error-tint);
       }
 
       .row {
@@ -289,11 +289,11 @@ export class RsSensorSection extends LitElement {
       }
 
       .row:hover {
-        background: rgba(255, 255, 255, 0.03);
+        background: var(--roommind-surface-hover);
       }
 
       .row.selected {
-        background: rgba(3, 169, 244, 0.08);
+        background: var(--roommind-primary-muted);
         border-left-color: var(--primary-color);
       }
 
@@ -372,13 +372,13 @@ export class RsSensorSection extends LitElement {
         font-weight: 500;
         padding: 3px 9px;
         border-radius: 8px;
-        background: rgba(255, 255, 255, 0.05);
+        background: var(--roommind-surface-muted);
         color: var(--primary-text-color);
         font-variant-numeric: tabular-nums;
       }
 
       .row.selected .value-chip {
-        background: rgba(3, 169, 244, 0.15);
+        background: var(--roommind-primary-strong);
         color: var(--primary-color);
       }
 
@@ -396,7 +396,7 @@ export class RsSensorSection extends LitElement {
       }
 
       .occupancy-dot.off {
-        background: rgba(255, 255, 255, 0.2);
+        background: var(--roommind-surface-strong);
       }
 
       .window-dot.on {
@@ -405,7 +405,7 @@ export class RsSensorSection extends LitElement {
       }
 
       .window-dot.off {
-        background: rgba(255, 255, 255, 0.2);
+        background: var(--roommind-surface-strong);
       }
 
       .delay-fields {
@@ -485,7 +485,7 @@ export class RsSensorSection extends LitElement {
       .add-button:hover,
       .add-button:focus-visible {
         color: var(--primary-color);
-        background: rgba(3, 169, 244, 0.08);
+        background: var(--roommind-primary-muted);
         outline: none;
       }
 
@@ -550,9 +550,9 @@ export class RsSensorSection extends LitElement {
         gap: 8px;
         padding: 10px 12px;
         margin: 0 0 12px 0;
-        border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.08));
+        border: var(--roommind-border-subtle);
         border-radius: 8px;
-        background: #151a21;
+        background: var(--roommind-surface-subtle);
       }
 
       .fusion-header {
@@ -622,23 +622,23 @@ export class RsSensorSection extends LitElement {
         font-size: 10.5px;
         line-height: 1.4;
         color: var(--secondary-text-color);
-        background: rgba(255, 255, 255, 0.05);
+        background: var(--roommind-surface-muted);
         font-variant-numeric: tabular-nums;
       }
 
       .fusion-chip.primary {
         color: var(--primary-color);
-        background: rgba(3, 169, 244, 0.12);
+        background: var(--roommind-primary-strong);
       }
 
       .fusion-chip.aging {
         color: var(--warning-color, #ff9800);
-        background: rgba(255, 152, 0, 0.12);
+        background: var(--roommind-warning-tint);
       }
 
       .fusion-chip.stale {
         color: var(--error-color, #f44336);
-        background: rgba(244, 67, 54, 0.12);
+        background: var(--roommind-error-tint);
       }
 
       @media (max-width: 520px) {
