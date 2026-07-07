@@ -17,23 +17,31 @@ export class RsToggleRow extends LitElement {
     .toggle-row {
       display: flex;
       justify-content: space-between;
-      align-items: center;
+      align-items: flex-start;
       gap: 16px;
+      min-width: 0;
     }
 
     .toggle-text {
       display: flex;
       align-items: center;
+      flex-wrap: wrap;
       gap: 4px;
+      flex: 1;
       min-width: 0;
     }
 
     .toggle-label {
+      min-width: 0;
       font-weight: 500;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+      white-space: normal;
     }
 
     ha-switch {
       flex-shrink: 0;
+      margin-top: -4px;
     }
   `;
 

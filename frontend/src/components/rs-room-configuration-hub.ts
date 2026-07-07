@@ -123,7 +123,9 @@ export class RsRoomConfigurationHub extends LitElement {
       align-items: center;
       gap: 12px;
       width: 100%;
+      min-width: 0;
       min-height: 74px;
+      box-sizing: border-box;
       border: var(--roommind-border-subtle);
       border-radius: var(--roommind-radius-control, 8px);
       padding: 10px;
@@ -153,6 +155,8 @@ export class RsRoomConfigurationHub extends LitElement {
     }
 
     .config-row-static {
+      grid-template-columns: 30px minmax(0, 1fr) auto;
+      align-items: start;
       cursor: default;
     }
 
@@ -186,6 +190,7 @@ export class RsRoomConfigurationHub extends LitElement {
     .config-title-line {
       display: flex;
       align-items: center;
+      flex-wrap: wrap;
       gap: 8px;
       min-width: 0;
     }
@@ -195,13 +200,14 @@ export class RsRoomConfigurationHub extends LitElement {
       min-width: 0;
       font-size: 14px;
       font-weight: 600;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      line-height: 1.3;
+      overflow-wrap: anywhere;
+      white-space: normal;
     }
 
     .config-status {
       flex-shrink: 0;
+      max-width: 100%;
       min-height: 18px;
       padding: 1px 7px;
       border-radius: 6px;
@@ -210,6 +216,8 @@ export class RsRoomConfigurationHub extends LitElement {
       font-size: 10.5px;
       font-weight: 600;
       line-height: 1.5;
+      overflow-wrap: anywhere;
+      white-space: normal;
     }
 
     .complete .config-status {
@@ -231,18 +239,29 @@ export class RsRoomConfigurationHub extends LitElement {
       color: var(--secondary-text-color);
       font-size: 12px;
       line-height: 1.35;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      overflow-wrap: anywhere;
+      white-space: normal;
     }
 
     .config-chevron {
       opacity: 0.54;
     }
 
+    ha-switch {
+      justify-self: end;
+      align-self: start;
+      flex: 0 0 auto;
+      margin-top: -2px;
+    }
+
     @media (max-width: 520px) {
       .config-grid {
         grid-template-columns: 1fr;
+      }
+
+      .config-row-static {
+        grid-template-columns: 30px minmax(0, 1fr) auto;
+        gap: 10px;
       }
     }
   `;

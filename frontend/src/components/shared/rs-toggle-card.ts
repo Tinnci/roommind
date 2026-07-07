@@ -30,8 +30,9 @@ export class RsToggleCard extends LitElement {
 
       .row {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         gap: 10px;
+        min-width: 0;
       }
 
       .icon {

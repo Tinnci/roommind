@@ -116,9 +116,9 @@ export class RsAreaCard extends LitElement {
         color: var(--primary-text-color);
         margin: 0;
         min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        line-height: 1.3;
+        overflow-wrap: anywhere;
+        white-space: normal;
       }
 
       /* Card-specific mode-pill overrides (smaller than default) */
@@ -127,6 +127,8 @@ export class RsAreaCard extends LitElement {
         font-size: 12px;
         padding: 3px 10px;
         border-radius: 8px;
+        max-width: 100%;
+        white-space: normal;
       }
 
       .mode-dot {
@@ -204,19 +206,23 @@ export class RsAreaCard extends LitElement {
         display: flex;
         align-items: center;
         gap: 6px;
+        min-width: 0;
         min-height: 26px;
         margin-top: 10px;
         padding: 4px 9px;
         border-radius: 8px;
         font-size: 12px;
         font-weight: 500;
+        line-height: 1.3;
         background: var(--roommind-tile-surface);
         color: var(--secondary-text-color);
         box-sizing: border-box;
+        overflow-wrap: anywhere;
       }
 
       .delta-line ha-icon {
         --mdc-icon-size: 15px;
+        flex: 0 0 auto;
       }
 
       .delta-line.below {
@@ -322,6 +328,25 @@ export class RsAreaCard extends LitElement {
         gap: 6px;
         flex-wrap: wrap;
         justify-content: flex-end;
+        min-width: 0;
+        max-width: 100%;
+      }
+
+      .status-badge,
+      .mpc-badge,
+      .mold-badge,
+      .outdoor-badge {
+        max-width: 100%;
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+        white-space: normal;
+      }
+
+      .status-badge ha-icon,
+      .mpc-badge ha-icon,
+      .mold-badge ha-icon,
+      .outdoor-badge ha-icon {
+        flex: 0 0 auto;
       }
 
       .sensor-only .metrics-row {

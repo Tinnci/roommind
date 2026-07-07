@@ -33,7 +33,7 @@ export class RsSectionCard extends LitElement {
 
       .section-header {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         gap: 10px;
         min-height: var(--roommind-header-min-height, 44px);
         padding: 12px 16px 10px;
@@ -47,6 +47,8 @@ export class RsSectionCard extends LitElement {
       .section-icon {
         --mdc-icon-size: 18px;
         opacity: 0.7;
+        flex: 0 0 auto;
+        margin-top: 1px;
       }
 
       .section-title {
@@ -56,9 +58,9 @@ export class RsSectionCard extends LitElement {
         margin: 0;
         flex: 1;
         min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        line-height: 1.3;
+        overflow-wrap: anywhere;
+        white-space: normal;
       }
 
       .edit-btn {

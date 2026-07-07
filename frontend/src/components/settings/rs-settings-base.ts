@@ -58,22 +58,29 @@ export class RsSettingsBase extends LitElement {
       justify-content: space-between;
       align-items: flex-start;
       gap: 16px;
+      min-width: 0;
     }
     .toggle-text {
       display: flex;
       flex-direction: column;
       gap: 4px;
       flex: 1;
+      min-width: 0;
     }
     .toggle-label {
       font-size: 14px;
       font-weight: 500;
       color: var(--primary-text-color);
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+      white-space: normal;
     }
     .toggle-hint {
       font-size: 13px;
       color: var(--secondary-text-color);
       line-height: 1.4;
+      overflow-wrap: anywhere;
+      white-space: normal;
     }
 
     .threshold-grid {
