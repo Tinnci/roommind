@@ -429,6 +429,34 @@ export interface AnalyticsDataPoint {
   blind_position?: number | null;
   cover_reason?: string;
   device_setpoint?: number | null;
+  occupancy?: boolean;
+  room_humidity?: number | null;
+  outdoor_humidity?: number | null;
+  perceived_temp?: number | null;
+  q_fan_mix?: number | null;
+  q_vent?: number | null;
+  airflow_ach?: number | null;
+  airflow_plan_level?: number | null;
+  airflow_mix_plan_level?: number | null;
+  airflow_vent_plan_level?: number | null;
+  night_mode_active?: boolean;
+  rapid_recovery_active?: boolean;
+  hvac_stage?: string;
+  sensor_conflict?: number | null;
+  mold_surface_rh?: number | null;
+  mold_risk_level?: string;
+  effective_control_target?: "air_temperature" | "perceived_temperature" | string;
+  heat_target?: number | null;
+  cool_target?: number | null;
+  override_active?: boolean;
+  override_type?: OverrideType | "";
+  active_heat_sources?: string;
+  temperature_source?: string;
+  temperature_source_count?: number | null;
+  temperature_primary_available?: boolean;
+  humidity_sources?: string;
+  humidity_source_count?: number | null;
+  humidity_primary_available?: boolean;
 }
 
 export interface AnalyticsData {

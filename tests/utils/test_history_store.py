@@ -26,11 +26,15 @@ def test_write_and_read(history_dir):
             "target_temp": 21.0,
             "mode": "idle",
             "predicted_temp": 21.1,
+            "room_humidity": 52.0,
+            "q_fan_mix": 0.4,
         },
     )
     rows = store.read_detail("living_room")
     assert len(rows) == 1
     assert rows[0]["room_temp"] == "21.0"
+    assert rows[0]["room_humidity"] == "52.0"
+    assert rows[0]["q_fan_mix"] == "0.4"
 
 
 def test_multiple_rooms(history_dir):
@@ -127,7 +131,7 @@ def test_window_open_in_csv(history_dir):
 
 
 def test_downsample_preserves_window_open(history_dir):
-    """_downsample takes first window_open value from each bucket."""
+    """_downsample marks a bucket open if any sampled row is open."""
     store = HistoryStore(history_dir)
     rows = [
         {
@@ -146,7 +150,7 @@ def test_downsample_preserves_window_open(history_dir):
             "target_temp": "21.0",
             "mode": "idle",
             "predicted_temp": "20.0",
-            "window_open": "True",
+            "window_open": "False",
         },
         {
             "timestamp": "1500",
@@ -161,8 +165,8 @@ def test_downsample_preserves_window_open(history_dir):
     result = store._downsample(rows, bucket_seconds=300)
     # Two buckets: 0-300s (ts 1000, 1060) and 300-600s (ts 1500)
     assert len(result) == 2
-    assert result[0]["window_open"] == "True"
-    assert result[1]["window_open"] == "False"
+    assert result[0]["window_open"] is True
+    assert result[1]["window_open"] is False
 
 
 def test_rotate_moves_old_to_history(history_dir):
@@ -460,6 +464,67 @@ def test_device_setpoint_missing_defaults_empty(history_dir):
     assert rows[0]["device_setpoint"] == ""
 
 
+def test_environmental_observation_fields_in_csv(history_dir):
+    """Humidity, airflow, comfort, and control-state fields are written."""
+    store = HistoryStore(history_dir)
+    store.record(
+        "room_a",
+        {
+            "room_temp": 25.0,
+            "outdoor_temp": 31.0,
+            "target_temp": 24.0,
+            "mode": "cooling",
+            "room_humidity": 63.0,
+            "outdoor_humidity": 78.0,
+            "perceived_temp": 26.4,
+            "q_fan_mix": 0.55,
+            "q_vent": 0.2,
+            "airflow_ach": 1.6,
+            "airflow_plan_level": 0.7,
+            "airflow_mix_plan_level": 0.8,
+            "airflow_vent_plan_level": 0.3,
+            "night_mode_active": True,
+            "rapid_recovery_active": True,
+            "hvac_stage": "compressor",
+            "sensor_conflict": 0.25,
+            "mold_surface_rh": 82.0,
+            "mold_risk_level": "warning",
+            "effective_control_target": "perceived_temperature",
+            "heat_target": 21.0,
+            "cool_target": 24.0,
+            "override_active": True,
+            "override_type": "custom",
+            "active_heat_sources": "secondary",
+            "temperature_source": "sensor.primary_temp",
+            "temperature_source_count": 2,
+            "temperature_primary_available": True,
+            "humidity_sources": "sensor.primary_humidity|sensor.aux_humidity",
+            "humidity_source_count": 2,
+            "humidity_primary_available": True,
+        },
+        timestamp=1000.0,
+    )
+
+    rows = store.read_detail("room_a")
+    assert rows[0]["room_humidity"] == "63.0"
+    assert rows[0]["outdoor_humidity"] == "78.0"
+    assert rows[0]["perceived_temp"] == "26.4"
+    assert rows[0]["q_fan_mix"] == "0.55"
+    assert rows[0]["airflow_ach"] == "1.6"
+    assert rows[0]["night_mode_active"] == "True"
+    assert rows[0]["hvac_stage"] == "compressor"
+    assert rows[0]["mold_risk_level"] == "warning"
+    assert rows[0]["effective_control_target"] == "perceived_temperature"
+    assert rows[0]["override_type"] == "custom"
+    assert rows[0]["active_heat_sources"] == "secondary"
+    assert rows[0]["temperature_source"] == "sensor.primary_temp"
+    assert rows[0]["temperature_source_count"] == "2"
+    assert rows[0]["temperature_primary_available"] == "True"
+    assert rows[0]["humidity_sources"] == "sensor.primary_humidity|sensor.aux_humidity"
+    assert rows[0]["humidity_source_count"] == "2"
+    assert rows[0]["humidity_primary_available"] == "True"
+
+
 def test_migrate_header_rewrites_old_format(history_dir):
     """CSV with outdated header is rewritten with current DETAIL_FIELDS."""
     from custom_components.roommind.utils.history_store import DETAIL_FIELDS
@@ -556,8 +621,8 @@ def test_read_detail_with_max_age(history_dir):
     assert rows[1]["room_temp"] == "22.0"
 
 
-def test_downsample_takes_first_device_setpoint(history_dir):
-    """_downsample takes first device_setpoint value from each bucket (not averaged)."""
+def test_downsample_averages_device_setpoint(history_dir):
+    """_downsample averages device_setpoint like other numeric control outputs."""
     store = HistoryStore(history_dir)
     rows = [
         {
@@ -589,4 +654,93 @@ def test_downsample_takes_first_device_setpoint(history_dir):
     ]
     result = store._downsample(rows, bucket_seconds=300)
     assert len(result) == 1
-    assert result[0]["device_setpoint"] == "24.0"
+    assert result[0]["device_setpoint"] == 25.0
+
+
+def test_downsample_preserves_environmental_observations(history_dir):
+    """_downsample handles environmental fields by type."""
+    store = HistoryStore(history_dir)
+    rows = [
+        {
+            "timestamp": "1000",
+            "room_temp": "25.0",
+            "outdoor_temp": "30.0",
+            "target_temp": "24.0",
+            "mode": "cooling",
+            "room_humidity": "60",
+            "outdoor_humidity": "80",
+            "perceived_temp": "26",
+            "q_fan_mix": "0.4",
+            "q_vent": "0.2",
+            "airflow_ach": "1.2",
+            "airflow_plan_level": "0.5",
+            "night_mode_active": "False",
+            "rapid_recovery_active": "False",
+            "hvac_stage": "fan",
+            "sensor_conflict": "0.1",
+            "mold_surface_rh": "70",
+            "mold_risk_level": "ok",
+            "override_active": "False",
+            "override_type": "",
+            "active_heat_sources": "primary",
+            "temperature_source": "sensor.primary_temp",
+            "temperature_source_count": "1",
+            "temperature_primary_available": "True",
+            "humidity_sources": "sensor.primary_humidity",
+            "humidity_source_count": "1",
+            "humidity_primary_available": "True",
+        },
+        {
+            "timestamp": "1060",
+            "room_temp": "24.0",
+            "outdoor_temp": "30.0",
+            "target_temp": "24.0",
+            "mode": "cooling",
+            "room_humidity": "64",
+            "outdoor_humidity": "82",
+            "perceived_temp": "25",
+            "q_fan_mix": "0.8",
+            "q_vent": "0.4",
+            "airflow_ach": "1.8",
+            "airflow_plan_level": "0.7",
+            "night_mode_active": "True",
+            "rapid_recovery_active": "True",
+            "hvac_stage": "compressor",
+            "sensor_conflict": "0.3",
+            "mold_surface_rh": "74",
+            "mold_risk_level": "warning",
+            "override_active": "True",
+            "override_type": "custom",
+            "active_heat_sources": "secondary",
+            "temperature_source": "sensor.aux_temp",
+            "temperature_source_count": "2",
+            "temperature_primary_available": "False",
+            "humidity_sources": "sensor.aux_humidity",
+            "humidity_source_count": "2",
+            "humidity_primary_available": "False",
+        },
+    ]
+
+    result = store._downsample(rows, bucket_seconds=300)
+    assert len(result) == 1
+    assert result[0]["room_humidity"] == 62.0
+    assert result[0]["outdoor_humidity"] == 81.0
+    assert result[0]["perceived_temp"] == 25.5
+    assert result[0]["q_fan_mix"] == 0.6
+    assert result[0]["q_vent"] == 0.3
+    assert result[0]["airflow_ach"] == 1.5
+    assert result[0]["night_mode_active"] is True
+    assert result[0]["rapid_recovery_active"] is True
+    assert result[0]["hvac_stage"] == "fan"
+    assert result[0]["sensor_conflict"] == 0.2
+    assert result[0]["mold_surface_rh"] == 72.0
+    assert result[0]["mold_risk_level"] == "ok"
+    assert result[0]["override_active"] is True
+    assert result[0]["override_type"] == "custom"
+    assert result[0]["active_heat_sources"] == "primary"
+    assert result[0]["temperature_source"] == "sensor.primary_temp"
+    assert result[0]["temperature_source_count"] == 1.5
+    assert result[0]["temperature_primary_available"] is True
+    assert result[0]["humidity_sources"] == "sensor.primary_humidity"
+    assert result[0]["humidity_source_count"] == 1.5
+    assert result[0]["humidity_primary_available"] is True

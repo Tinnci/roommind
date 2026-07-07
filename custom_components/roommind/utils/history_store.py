@@ -6,6 +6,7 @@ import csv
 import logging
 import os
 import time
+from typing import Any
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,9 +24,84 @@ DETAIL_FIELDS = [
     "cover_reason",
     "device_setpoint",
     "occupancy",
+    "room_humidity",
+    "outdoor_humidity",
+    "perceived_temp",
+    "q_fan_mix",
+    "q_vent",
+    "airflow_ach",
+    "airflow_plan_level",
+    "airflow_mix_plan_level",
+    "airflow_vent_plan_level",
+    "night_mode_active",
+    "rapid_recovery_active",
+    "hvac_stage",
+    "sensor_conflict",
+    "mold_surface_rh",
+    "mold_risk_level",
+    "effective_control_target",
+    "heat_target",
+    "cool_target",
+    "override_active",
+    "override_type",
+    "active_heat_sources",
+    "temperature_source",
+    "temperature_source_count",
+    "temperature_primary_available",
+    "humidity_sources",
+    "humidity_source_count",
+    "humidity_primary_available",
 ]
 DETAIL_MAX_AGE = 48 * 3600  # 48 hours
 HISTORY_MAX_AGE = 90 * 24 * 3600  # 90 days
+
+NUMERIC_AVERAGE_FIELDS = (
+    "room_temp",
+    "outdoor_temp",
+    "target_temp",
+    "predicted_temp",
+    "heating_power",
+    "solar_irradiance",
+    "blind_position",
+    "device_setpoint",
+    "room_humidity",
+    "outdoor_humidity",
+    "perceived_temp",
+    "q_fan_mix",
+    "q_vent",
+    "airflow_ach",
+    "airflow_plan_level",
+    "airflow_mix_plan_level",
+    "airflow_vent_plan_level",
+    "sensor_conflict",
+    "mold_surface_rh",
+    "heat_target",
+    "cool_target",
+    "temperature_source_count",
+    "humidity_source_count",
+)
+
+FIRST_NON_EMPTY_FIELDS = (
+    "mode",
+    "cover_reason",
+    "hvac_stage",
+    "mold_risk_level",
+    "effective_control_target",
+    "override_type",
+    "active_heat_sources",
+    "temperature_source",
+    "humidity_sources",
+)
+
+BOOLEAN_ANY_FIELDS = (
+    "window_open",
+    "occupancy",
+    "night_mode_active",
+    "rapid_recovery_active",
+    "override_active",
+    "temperature_primary_available",
+    "humidity_primary_available",
+)
 
 
 class HistoryStore:
@@ -73,23 +149,9 @@ class HistoryStore:
             writer = csv.DictWriter(f, fieldnames=DETAIL_FIELDS)
             if os.path.getsize(path) == 0:
                 writer.writeheader()
-            writer.writerow(
-                {
-                    "timestamp": ts,
-                    "room_temp": data.get("room_temp", ""),
-                    "outdoor_temp": data.get("outdoor_temp", ""),
-                    "target_temp": data.get("target_temp", ""),
-                    "mode": data.get("mode", ""),
-                    "predicted_temp": data.get("predicted_temp", ""),
-                    "window_open": data.get("window_open", ""),
-                    "heating_power": data.get("heating_power", ""),
-                    "solar_irradiance": data.get("solar_irradiance", ""),
-                    "blind_position": data.get("blind_position", ""),
-                    "cover_reason": data.get("cover_reason", ""),
-                    "device_setpoint": data.get("device_setpoint", ""),
-                    "occupancy": data.get("occupancy", ""),
-                }
-            )
+            row = {field: data.get(field, "") for field in DETAIL_FIELDS}
+            row["timestamp"] = ts
+            writer.writerow(row)
 
     def read_detail(
         self,
@@ -196,32 +258,51 @@ class HistoryStore:
         result = []
         for bucket_key in sorted(buckets):
             bucket = buckets[bucket_key]
-            avg_row = {
-                "timestamp": bucket_key * bucket_seconds,
-                "mode": bucket[0]["mode"],
-                "window_open": bucket[0].get("window_open", ""),
-                "device_setpoint": bucket[0].get("device_setpoint", ""),
-            }
-            for field in (
-                "room_temp",
-                "outdoor_temp",
-                "target_temp",
-                "predicted_temp",
-                "heating_power",
-                "solar_irradiance",
-                "blind_position",
-            ):
-                vals = []
-                for r in bucket:
-                    v = r.get(field, "")
-                    if v != "":
-                        try:
-                            vals.append(float(v))
-                        except (ValueError, TypeError):
-                            pass
-                avg_row[field] = round(sum(vals) / len(vals), 2) if vals else ""
+            avg_row: dict[str, Any] = {field: "" for field in DETAIL_FIELDS}
+            avg_row["timestamp"] = bucket_key * bucket_seconds
+            for field in FIRST_NON_EMPTY_FIELDS:
+                avg_row[field] = self._first_non_empty(bucket, field)
+            for field in BOOLEAN_ANY_FIELDS:
+                avg_row[field] = self._any_truthy(bucket, field)
+            for field in NUMERIC_AVERAGE_FIELDS:
+                avg_row[field] = self._average_numeric(bucket, field)
             result.append(avg_row)
         return result
+
+    @staticmethod
+    def _average_numeric(rows: list[dict], field: str) -> float | str:
+        """Average a numeric field, returning empty string when no numeric values exist."""
+        vals = []
+        for row in rows:
+            value = row.get(field, "")
+            if value != "":
+                try:
+                    vals.append(float(value))
+                except (ValueError, TypeError):
+                    pass
+        return round(sum(vals) / len(vals), 2) if vals else ""
+
+    @staticmethod
+    def _first_non_empty(rows: list[dict], field: str) -> str:
+        """Return the first non-empty field value in a bucket."""
+        for row in rows:
+            value = row.get(field, "")
+            if value not in ("", None):
+                return str(value)
+        return ""
+
+    @staticmethod
+    def _any_truthy(rows: list[dict], field: str) -> bool | str:
+        """Return True if any row has a truthy boolean-like field."""
+        seen = False
+        for row in rows:
+            value = row.get(field, "")
+            if value in ("", None):
+                continue
+            seen = True
+            if value is True or str(value).lower() in ("1", "true", "yes", "on"):
+                return True
+        return False if seen else ""
 
     @staticmethod
     def _safe_ts(row: dict) -> float:
@@ -234,9 +315,10 @@ class HistoryStore:
     def _append_history(self, area_id: str, rows: list[dict]) -> None:
         self._ensure_dir()
         path = self._history_path(area_id)
+        self._migrate_header(path)
         file_exists = os.path.isfile(path)
         with open(path, "a", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=DETAIL_FIELDS)
+            writer = csv.DictWriter(f, fieldnames=DETAIL_FIELDS, extrasaction="ignore")
             if not file_exists:
                 writer.writeheader()
             writer.writerows(rows)
@@ -244,6 +326,6 @@ class HistoryStore:
     def _rewrite_csv(self, path: str, rows: list[dict]) -> None:
         self._ensure_dir()
         with open(path, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=DETAIL_FIELDS)
+            writer = csv.DictWriter(f, fieldnames=DETAIL_FIELDS, extrasaction="ignore")
             writer.writeheader()
             writer.writerows(rows)

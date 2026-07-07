@@ -58,6 +58,15 @@ def _safe_int(value: str) -> int | None:
         return None
 
 
+def _safe_bool(value: Any) -> bool:
+    """Convert CSV string/bool values to bool."""
+    if value is True:
+        return True
+    if value is False or value in ("", None):
+        return False
+    return str(value).lower() in ("1", "true", "yes", "on")
+
+
 def _csv_to_points(rows: list[dict]) -> list[dict]:
     """Convert CSV rows (string values, 'timestamp' key) to typed points ('ts' key)."""
     result = []
@@ -73,12 +82,40 @@ def _csv_to_points(rows: list[dict]) -> list[dict]:
                 "target_temp": _safe_float(row.get("target_temp", "")),
                 "mode": row.get("mode", ""),
                 "predicted_temp": _safe_float(row.get("predicted_temp", "")),
-                "window_open": row.get("window_open", "") in ("True", "true", "1"),
+                "window_open": _safe_bool(row.get("window_open", "")),
                 "heating_power": _safe_float(row.get("heating_power", "")),
                 "solar_irradiance": _safe_float(row.get("solar_irradiance", "")),
                 "blind_position": _safe_int(row.get("blind_position", "")),
                 "cover_reason": row.get("cover_reason", ""),
                 "device_setpoint": _safe_float(row.get("device_setpoint", "")),
+                "occupancy": _safe_bool(row.get("occupancy", "")),
+                "room_humidity": _safe_float(row.get("room_humidity", "")),
+                "outdoor_humidity": _safe_float(row.get("outdoor_humidity", "")),
+                "perceived_temp": _safe_float(row.get("perceived_temp", "")),
+                "q_fan_mix": _safe_float(row.get("q_fan_mix", "")),
+                "q_vent": _safe_float(row.get("q_vent", "")),
+                "airflow_ach": _safe_float(row.get("airflow_ach", "")),
+                "airflow_plan_level": _safe_float(row.get("airflow_plan_level", "")),
+                "airflow_mix_plan_level": _safe_float(row.get("airflow_mix_plan_level", "")),
+                "airflow_vent_plan_level": _safe_float(row.get("airflow_vent_plan_level", "")),
+                "night_mode_active": _safe_bool(row.get("night_mode_active", "")),
+                "rapid_recovery_active": _safe_bool(row.get("rapid_recovery_active", "")),
+                "hvac_stage": row.get("hvac_stage", ""),
+                "sensor_conflict": _safe_float(row.get("sensor_conflict", "")),
+                "mold_surface_rh": _safe_float(row.get("mold_surface_rh", "")),
+                "mold_risk_level": row.get("mold_risk_level", ""),
+                "effective_control_target": row.get("effective_control_target", ""),
+                "heat_target": _safe_float(row.get("heat_target", "")),
+                "cool_target": _safe_float(row.get("cool_target", "")),
+                "override_active": _safe_bool(row.get("override_active", "")),
+                "override_type": row.get("override_type", ""),
+                "active_heat_sources": row.get("active_heat_sources", ""),
+                "temperature_source": row.get("temperature_source", ""),
+                "temperature_source_count": _safe_int(row.get("temperature_source_count", "")),
+                "temperature_primary_available": _safe_bool(row.get("temperature_primary_available", "")),
+                "humidity_sources": row.get("humidity_sources", ""),
+                "humidity_source_count": _safe_int(row.get("humidity_source_count", "")),
+                "humidity_primary_available": _safe_bool(row.get("humidity_primary_available", "")),
             }
         )
     return result
@@ -383,7 +420,39 @@ async def build_analytics_data(
                 "mode": "forecast",
                 "predicted_temp": pred_temps[i] if i < len(pred_temps) else None,
                 "window_open": False,
+                "heating_power": None,
+                "solar_irradiance": None,
+                "blind_position": None,
+                "cover_reason": "",
                 "device_setpoint": None,
+                "occupancy": False,
+                "room_humidity": None,
+                "outdoor_humidity": None,
+                "perceived_temp": None,
+                "q_fan_mix": None,
+                "q_vent": None,
+                "airflow_ach": None,
+                "airflow_plan_level": None,
+                "airflow_mix_plan_level": None,
+                "airflow_vent_plan_level": None,
+                "night_mode_active": False,
+                "rapid_recovery_active": False,
+                "hvac_stage": "",
+                "sensor_conflict": None,
+                "mold_surface_rh": None,
+                "mold_risk_level": "",
+                "effective_control_target": "",
+                "heat_target": tf.get("heat_target"),
+                "cool_target": tf.get("cool_target"),
+                "override_active": False,
+                "override_type": "",
+                "active_heat_sources": "",
+                "temperature_source": "",
+                "temperature_source_count": None,
+                "temperature_primary_available": False,
+                "humidity_sources": "",
+                "humidity_source_count": None,
+                "humidity_primary_available": False,
             }
         )
 

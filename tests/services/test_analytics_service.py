@@ -9,9 +9,89 @@ import pytest
 
 from custom_components.roommind.services.analytics_service import (
     _compute_target_forecast,
+    _csv_to_points,
     _safe_int,
     build_analytics_data,
 )
+
+# ---------------------------------------------------------------------------
+# _csv_to_points -- extended environmental observations
+# ---------------------------------------------------------------------------
+
+
+def test_csv_to_points_includes_environmental_observations():
+    """CSV analytics rows expose humidity, airflow, and control diagnostics."""
+    points = _csv_to_points(
+        [
+            {
+                "timestamp": "1000",
+                "room_temp": "25.0",
+                "outdoor_temp": "31.0",
+                "target_temp": "24.0",
+                "mode": "cooling",
+                "predicted_temp": "24.8",
+                "window_open": "False",
+                "heating_power": "60",
+                "solar_irradiance": "0.3",
+                "blind_position": "40",
+                "cover_reason": "solar_gain",
+                "device_setpoint": "23.5",
+                "occupancy": "True",
+                "room_humidity": "63",
+                "outdoor_humidity": "78",
+                "perceived_temp": "26.1",
+                "q_fan_mix": "0.5",
+                "q_vent": "0.2",
+                "airflow_ach": "1.4",
+                "airflow_plan_level": "0.7",
+                "airflow_mix_plan_level": "0.8",
+                "airflow_vent_plan_level": "0.3",
+                "night_mode_active": "True",
+                "rapid_recovery_active": "False",
+                "hvac_stage": "compressor",
+                "sensor_conflict": "0.2",
+                "mold_surface_rh": "82",
+                "mold_risk_level": "warning",
+                "effective_control_target": "perceived_temperature",
+                "heat_target": "21",
+                "cool_target": "24",
+                "override_active": "True",
+                "override_type": "custom",
+                "active_heat_sources": "secondary",
+                "temperature_source": "sensor.primary_temp",
+                "temperature_source_count": "2",
+                "temperature_primary_available": "True",
+                "humidity_sources": "sensor.primary_humidity|sensor.aux_humidity",
+                "humidity_source_count": "2",
+                "humidity_primary_available": "False",
+            }
+        ]
+    )
+
+    point = points[0]
+    assert point["room_humidity"] == 63.0
+    assert point["outdoor_humidity"] == 78.0
+    assert point["perceived_temp"] == 26.1
+    assert point["q_fan_mix"] == 0.5
+    assert point["airflow_ach"] == 1.4
+    assert point["night_mode_active"] is True
+    assert point["rapid_recovery_active"] is False
+    assert point["hvac_stage"] == "compressor"
+    assert point["mold_surface_rh"] == 82.0
+    assert point["mold_risk_level"] == "warning"
+    assert point["effective_control_target"] == "perceived_temperature"
+    assert point["heat_target"] == 21.0
+    assert point["cool_target"] == 24.0
+    assert point["override_active"] is True
+    assert point["override_type"] == "custom"
+    assert point["active_heat_sources"] == "secondary"
+    assert point["temperature_source"] == "sensor.primary_temp"
+    assert point["temperature_source_count"] == 2
+    assert point["temperature_primary_available"] is True
+    assert point["humidity_sources"] == "sensor.primary_humidity|sensor.aux_humidity"
+    assert point["humidity_source_count"] == 2
+    assert point["humidity_primary_available"] is False
+
 
 # ---------------------------------------------------------------------------
 # _compute_target_forecast -- mold delta with heat_target=None

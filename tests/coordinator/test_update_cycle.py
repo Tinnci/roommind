@@ -460,7 +460,7 @@ class TestCoverageGaps:
     @pytest.mark.asyncio
     async def test_history_rotation_periodically(self, hass, mock_config_entry):
         """History is rotated when rotation cycle reaches threshold."""
-        from custom_components.roommind.const import HISTORY_ROTATE_CYCLES
+        from custom_components.roommind.const import HISTORY_ROTATE_CYCLES, OBSERVED_SUMMARY_BUCKET_SECONDS
 
         store = _make_store_mock({"living_room_abc12345": SAMPLE_ROOM})
         hass.data = {"roommind": {"store": store}}
@@ -472,7 +472,21 @@ class TestCoverageGaps:
         # Set up a mock history store so rotate is actually called
         mock_history = MagicMock()
         mock_history.rotate = MagicMock()
+        mock_history.read_detail.return_value = [
+            {
+                "timestamp": "1000",
+                "room_temp": "21.0",
+                "mode": "idle",
+                "window_open": "False",
+                "temperature_source": "sensor.living_room_temp",
+            }
+        ]
+        mock_history.read_history.return_value = []
+        mock_observation = MagicMock()
+        mock_observation.store_window_summaries.return_value = 0
+        mock_observation.store_thermal_episodes.return_value = 0
         coordinator._history_store = mock_history
+        coordinator._observation_store = mock_observation
 
         coordinator._history_rotate_count = HISTORY_ROTATE_CYCLES - 1
         await coordinator._async_update_data()
@@ -484,6 +498,40 @@ class TestCoverageGaps:
             c for c in hass.async_add_executor_job.call_args_list if len(c[0]) >= 1 and c[0][0] is mock_history.rotate
         ]
         assert len(rotate_calls) >= 1
+        mock_observation.store_window_summaries.assert_any_call(
+            room_id="living_room_abc12345",
+            kind="temperature",
+            bucket_seconds=OBSERVED_SUMMARY_BUCKET_SECONDS,
+            start_ts=ANY,
+            end_ts=ANY,
+        )
+        mock_observation.store_window_summaries.assert_any_call(
+            room_id="living_room_abc12345",
+            kind="humidity",
+            bucket_seconds=OBSERVED_SUMMARY_BUCKET_SECONDS,
+            start_ts=ANY,
+            end_ts=ANY,
+        )
+        mock_observation.store_window_summaries.assert_any_call(
+            room_id="global",
+            kind="outdoor_temperature",
+            bucket_seconds=OBSERVED_SUMMARY_BUCKET_SECONDS,
+            start_ts=ANY,
+            end_ts=ANY,
+        )
+        mock_observation.store_window_summaries.assert_any_call(
+            room_id="global",
+            kind="outdoor_humidity",
+            bucket_seconds=OBSERVED_SUMMARY_BUCKET_SECONDS,
+            start_ts=ANY,
+            end_ts=ANY,
+        )
+        mock_observation.store_thermal_episodes.assert_called_once_with(
+            room_id="living_room_abc12345",
+            rows=mock_history.read_detail.return_value,
+            min_duration_s=1200,
+            max_gap_s=600,
+        )
 
     @pytest.mark.asyncio
     async def test_valve_actuation_persistence(self, hass, mock_config_entry):

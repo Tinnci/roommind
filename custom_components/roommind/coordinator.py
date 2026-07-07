@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from typing import Any
 
 from homeassistant.components.persistent_notification import async_create as async_create_notification
@@ -33,8 +34,16 @@ from .const import (
     MODE_FAN_ONLY,
     MODE_HEATING,
     MODE_IDLE,
+    OBSERVATION_INTERVAL_RETENTION_DAYS,
+    OBSERVED_SUMMARY_BUCKET_SECONDS,
+    OBSERVED_SUMMARY_RETENTION_DAYS,
     OUTDOOR_UNAVAILABLE_NOTIFICATION_ID,
     OUTDOOR_UNAVAILABLE_NOTIFY_CYCLES,
+    RAW_OBSERVATION_PRUNE_CYCLES,
+    RAW_OBSERVATION_RETENTION_DAYS,
+    THERMAL_EPISODE_MAX_GAP_SECONDS,
+    THERMAL_EPISODE_MIN_DURATION_SECONDS,
+    THERMAL_EPISODE_RETENTION_DAYS,
     THERMAL_SAVE_CYCLES,
     UPDATE_INTERVAL,
     TargetTemps,
@@ -95,6 +104,7 @@ from .utils.night_utils import (
     wrap_target_resolver_for_sleep_ramp,
 )
 from .utils.notification_payloads import build_outdoor_unavailable_payload
+from .utils.observation_store import ObservationStore
 from .utils.schedule_utils import (
     resolve_schedule_index,
 )
@@ -156,6 +166,9 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         # EKF training accumulation
         self._ekf_training = EkfTrainingManager(self._model_manager)
         self._sensor_fusion = SensorFusionManager()
+        self._observation_store: ObservationStore | None = None
+        self._raw_observation_buffer: list[dict] = []
+        self._raw_observation_prune_count: int = 0
         self._environmental_factors = EnvironmentalFactorManager(hass)
         self._airflow_control = AirflowControlManager(hass)
         self._hvac_output_observer = HVACOutputObserver(hass)
@@ -177,6 +190,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         self._mode_on_since: dict[str, float] = {}
         # Sensor dropout fallback: last valid temperature per room
         self._last_valid_temps: dict[str, tuple[float, float]] = {}  # {area_id: (celsius, monotonic_ts)}
+        self._last_humidity_status: dict[str, dict] = {}
         self._switch_entity_areas: set[str] = set()
         self._climate_control_switch_areas: set[str] = set()
         self._binary_sensor_entity_areas: set[str] = set()
@@ -239,6 +253,30 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         # Initialize history store (once)
         if self._history_store is None:
             self._history_store = HistoryStore(self.hass.config.path(".storage/roommind_history"))
+        if self._observation_store is None:
+            self._observation_store = ObservationStore(
+                self.hass.config.path(".storage/roommind_observations.sqlite"),
+                raw_retention_days=RAW_OBSERVATION_RETENTION_DAYS,
+                interval_retention_days=OBSERVATION_INTERVAL_RETENTION_DAYS,
+                summary_retention_days=OBSERVED_SUMMARY_RETENTION_DAYS,
+                episode_retention_days=THERMAL_EPISODE_RETENTION_DAYS,
+            )
+        self._raw_observation_buffer = []
+        self._record_raw_state_observation(
+            "global",
+            outdoor_sensor_id,
+            "outdoor_temperature",
+            self.hass.states.get(outdoor_sensor_id) if outdoor_sensor_id else None,
+            is_primary=True,
+        )
+        outdoor_humidity_sensor_id = settings.get("outdoor_humidity_sensor")
+        self._record_raw_state_observation(
+            "global",
+            outdoor_humidity_sensor_id,
+            "outdoor_humidity",
+            self.hass.states.get(outdoor_humidity_sensor_id) if outdoor_humidity_sensor_id else None,
+            is_primary=True,
+        )
 
         room_states: dict[str, dict] = {}
 
@@ -274,6 +312,15 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         # Control master devices based on aggregate room demand
         await self._async_control_master_devices(room_states, rooms, settings)
 
+        if self._observation_store and self._raw_observation_buffer:
+            try:
+                await self.hass.async_add_executor_job(
+                    self._observation_store.record_many,
+                    list(self._raw_observation_buffer),
+                )
+            except Exception:  # noqa: BLE001
+                _LOGGER.warning("Raw observation record failed")
+
         # Record to history store (throttled)
         learning_disabled = set(settings.get("learning_disabled_rooms", []))
         self._history_write_count += 1
@@ -306,13 +353,33 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                             "cover_reason": rs.get("cover_reason", ""),
                             "device_setpoint": rs.get("device_setpoint"),
                             "occupancy": rs.get("q_occupancy", 0.0) > 0,
+                            "room_humidity": rs.get("current_humidity"),
+                            "outdoor_humidity": self.outdoor_humidity,
                             "perceived_temp": rs.get("perceived_temp"),
                             "q_fan_mix": rs.get("q_fan_mix", 0.0),
                             "q_vent": rs.get("q_vent", 0.0),
                             "airflow_ach": rs.get("airflow_ach", 0.0),
+                            "airflow_plan_level": rs.get("airflow_plan_level", 0.0),
+                            "airflow_mix_plan_level": rs.get("airflow_mix_plan_level", 0.0),
+                            "airflow_vent_plan_level": rs.get("airflow_vent_plan_level", 0.0),
                             "night_mode_active": rs.get("night_mode", {}).get("active", False),
                             "rapid_recovery_active": rs.get("rapid_recovery_active", False),
                             "hvac_stage": (rs.get("hvac_output_status") or {}).get("stage"),
+                            "sensor_conflict": rs.get("sensor_conflict", 0.0),
+                            "mold_surface_rh": rs.get("mold_surface_rh"),
+                            "mold_risk_level": rs.get("mold_risk_level", ""),
+                            "effective_control_target": rs.get("effective_control_target"),
+                            "heat_target": rs.get("heat_target"),
+                            "cool_target": rs.get("cool_target"),
+                            "override_active": rs.get("override_active", False),
+                            "override_type": rs.get("override_type", ""),
+                            "active_heat_sources": rs.get("active_heat_sources", ""),
+                            "temperature_source": rs.get("temperature_source", ""),
+                            "temperature_source_count": rs.get("temperature_source_count", 0),
+                            "temperature_primary_available": rs.get("temperature_primary_available", False),
+                            "humidity_sources": rs.get("humidity_sources", ""),
+                            "humidity_source_count": rs.get("humidity_source_count", 0),
+                            "humidity_primary_available": rs.get("humidity_primary_available", False),
                         },
                     )
                 except Exception:  # noqa: BLE001
@@ -374,11 +441,26 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         self._history_rotate_count += 1
         if self._history_rotate_count >= HISTORY_ROTATE_CYCLES and self._history_store:
             self._history_rotate_count = 0
+            now_ts = time.time()
             for area_id in rooms:
                 try:
                     await self.hass.async_add_executor_job(self._history_store.rotate, area_id)
                 except Exception:  # noqa: BLE001
                     _LOGGER.warning("History rotation failed for '%s'", area_id)
+                await self._async_store_observed_derivatives(area_id, now_ts=now_ts)
+            await self._async_store_observation_summaries(
+                "global",
+                ("outdoor_temperature", "outdoor_humidity"),
+                now_ts=now_ts,
+            )
+        self._raw_observation_prune_count += 1
+        if self._raw_observation_prune_count >= RAW_OBSERVATION_PRUNE_CYCLES and self._observation_store:
+            self._raw_observation_prune_count = 0
+            try:
+                await self.hass.async_add_executor_job(self._observation_store.prune_raw)
+                await self.hass.async_add_executor_job(self._observation_store.prune_derived)
+            except Exception:  # noqa: BLE001
+                _LOGGER.warning("Raw observation pruning failed")
 
         # Valve protection: finish active cycles (runs every tick, cheap).
         # Pass a {eid: devices[]} map so idle_action is respected when the
@@ -397,6 +479,72 @@ class RoomMindCoordinator(DataUpdateCoordinator):
 
         self.rooms = room_states
         return {"rooms": room_states}
+
+    async def _async_store_observed_derivatives(self, area_id: str, *, now_ts: float) -> None:
+        """Persist low-frequency observed summaries and thermal episodes."""
+        await self._async_store_observation_summaries(
+            area_id,
+            ("temperature", "humidity"),
+            now_ts=now_ts,
+        )
+        if not self._observation_store or not self._history_store:
+            return
+
+        start_ts = now_ts - RAW_OBSERVATION_RETENTION_DAYS * 24 * 3600
+        try:
+            detail_rows = await self.hass.async_add_executor_job(
+                self._history_store.read_detail,
+                area_id,
+                None,
+                start_ts,
+                now_ts,
+            )
+            history_rows = await self.hass.async_add_executor_job(
+                self._history_store.read_history,
+                area_id,
+                None,
+                start_ts,
+                now_ts,
+            )
+            rows = sorted([*history_rows, *detail_rows], key=HistoryStore._safe_ts)
+            await self.hass.async_add_executor_job(
+                partial(
+                    self._observation_store.store_thermal_episodes,
+                    room_id=area_id,
+                    rows=rows,
+                    min_duration_s=THERMAL_EPISODE_MIN_DURATION_SECONDS,
+                    max_gap_s=THERMAL_EPISODE_MAX_GAP_SECONDS,
+                )
+            )
+        except Exception:  # noqa: BLE001
+            _LOGGER.warning("Thermal episode derivation failed for '%s'", area_id)
+
+    async def _async_store_observation_summaries(
+        self,
+        room_id: str,
+        kinds: tuple[str, ...],
+        *,
+        now_ts: float,
+    ) -> None:
+        """Persist observed-only summaries for raw observation kinds."""
+        if not self._observation_store:
+            return
+
+        start_ts = now_ts - RAW_OBSERVATION_RETENTION_DAYS * 24 * 3600
+        for kind in kinds:
+            try:
+                await self.hass.async_add_executor_job(
+                    partial(
+                        self._observation_store.store_window_summaries,
+                        room_id=room_id,
+                        kind=kind,
+                        bucket_seconds=OBSERVED_SUMMARY_BUCKET_SECONDS,
+                        start_ts=start_ts,
+                        end_ts=now_ts,
+                    )
+                )
+            except Exception:  # noqa: BLE001
+                _LOGGER.warning("Observed summary derivation failed for '%s' %s", room_id, kind)
 
     def _read_room_sensors(
         self,
@@ -420,6 +568,13 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             if current_temp is None and temp_c is not None:
                 current_temp = temp_c
             state = self.hass.states.get(temp_sensor_id) if temp_sensor_id else None
+            self._record_raw_state_observation(
+                area_id,
+                temp_sensor_id,
+                "temperature",
+                state,
+                is_primary=(temp_sensor_id == primary_sensor_id),
+            )
             observation = self._sensor_fusion.observation_from_state(
                 temp_sensor_id,
                 state,
@@ -457,6 +612,57 @@ class RoomMindCoordinator(DataUpdateCoordinator):
 
         return current_temp, current_temp_raw, current_humidity, has_external_sensor, observations
 
+    def _record_raw_state_observation(
+        self,
+        area_id: str,
+        entity_id: str | None,
+        kind: str,
+        state: Any | None,
+        *,
+        is_primary: bool,
+        quality: float | None = None,
+    ) -> None:
+        """Append a raw HA state observation to the in-memory write buffer."""
+        if not entity_id or state is None:
+            return
+        state_value = str(getattr(state, "state", ""))
+        attrs = getattr(state, "attributes", {}) or {}
+        raw_state = "ok" if state_value not in ("unknown", "unavailable") else state_value
+        self._raw_observation_buffer.append(
+            {
+                "room_id": area_id,
+                "entity_id": entity_id,
+                "kind": kind,
+                "observed_at": self._state_observed_at(state),
+                "ingested_at": time.time(),
+                "state": raw_state,
+                "value": state_value,
+                "unit": attrs.get("unit_of_measurement"),
+                "source": "home_assistant_state",
+                "is_primary": is_primary,
+                "quality": quality if quality is not None else (0.0 if raw_state != "ok" else 1.0),
+                "attributes": self._essential_raw_attributes(attrs),
+            }
+        )
+
+    @staticmethod
+    def _state_observed_at(state: Any) -> float:
+        """Return the source observation timestamp for a HA state."""
+        for attr in ("last_reported", "last_updated", "last_changed"):
+            value = getattr(state, attr, None)
+            if isinstance(value, datetime):
+                return value.timestamp()
+        return time.time()
+
+    @staticmethod
+    def _essential_raw_attributes(attrs: dict) -> dict:
+        """Return compact attributes worth preserving in raw observation storage."""
+        return {
+            key: attrs[key]
+            for key in ("device_class", "state_class", "unit_of_measurement", "friendly_name")
+            if key in attrs
+        }
+
     def _temperature_sensor_ids(self, room: dict) -> list[str]:
         """Return configured temperature sensors with the primary sensor first."""
         sensor_ids: list[str] = []
@@ -477,16 +683,28 @@ class RoomMindCoordinator(DataUpdateCoordinator):
     def _read_room_humidity(self, room: dict, area_id: str, now: datetime) -> float | None:
         """Read configured humidity sources and return a freshness-weighted value."""
         sensor_ids = self._humidity_sensor_ids(room)
-        weighted_values: list[tuple[float, float]] = []
-        fallback_values: list[float] = []
+        weighted_values: list[tuple[float, float, str]] = []
+        fallback_values: list[tuple[float, str]] = []
         primary = room.get("humidity_sensor") or ""
+        self._last_humidity_status[area_id] = {
+            "humidity_sources": "",
+            "humidity_source_count": 0,
+            "humidity_primary_available": False,
+        }
 
         for sensor_id in sensor_ids:
+            state = self.hass.states.get(sensor_id)
+            self._record_raw_state_observation(
+                area_id,
+                sensor_id,
+                "humidity",
+                state,
+                is_primary=(sensor_id == primary),
+            )
             value = read_sensor_value(self.hass, sensor_id, area_id, "humidity")
             if value is None:
                 continue
-            fallback_values.append(value)
-            state = self.hass.states.get(sensor_id)
+            fallback_values.append((value, sensor_id))
             freshness_ts = getattr(state, "last_reported", None) or getattr(state, "last_updated", None)
             weight = 1.0
             if isinstance(freshness_ts, datetime):
@@ -496,14 +714,26 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 weight = 1.0 / (1.0 + age_s / 900.0)
             if sensor_id == primary:
                 weight *= 1.25
-            weighted_values.append((value, weight))
+            weighted_values.append((value, weight, sensor_id))
 
         if weighted_values:
-            total_weight = sum(weight for _, weight in weighted_values)
+            sources = [sensor_id for _, _, sensor_id in weighted_values]
+            self._last_humidity_status[area_id] = {
+                "humidity_sources": "|".join(sources),
+                "humidity_source_count": len(sources),
+                "humidity_primary_available": primary in sources,
+            }
+            total_weight = sum(weight for _, weight, _ in weighted_values)
             if total_weight > 0:
-                return round(sum(value * weight for value, weight in weighted_values) / total_weight, 2)
+                return round(sum(value * weight for value, weight, _ in weighted_values) / total_weight, 2)
         if fallback_values:
-            return round(fallback_values[0], 2)
+            sources = [sensor_id for _, sensor_id in fallback_values]
+            self._last_humidity_status[area_id] = {
+                "humidity_sources": "|".join(sources),
+                "humidity_source_count": len(sources),
+                "humidity_primary_available": primary in sources,
+            }
+            return round(fallback_values[0][0], 2)
         return None
 
     def _humidity_sensor_ids(self, room: dict) -> list[str]:
@@ -772,6 +1002,22 @@ class RoomMindCoordinator(DataUpdateCoordinator):
 
         # --- Outdoor room: skip all control logic ---
         if room.get("is_outdoor", False):
+            sensor_fusion_status = self._sensor_fusion.diagnostics(
+                temperature_observations,
+                power_fraction=0.0,
+                q_fan_mix=0.0,
+            )
+            temperature_sources = [
+                status.get("entity_id", "") for status in sensor_fusion_status if status.get("entity_id")
+            ]
+            humidity_status = self._last_humidity_status.get(
+                area_id,
+                {
+                    "humidity_sources": "",
+                    "humidity_source_count": 0,
+                    "humidity_primary_available": False,
+                },
+            )
             return {
                 "area_id": area_id,
                 "current_temp": current_temp,
@@ -809,11 +1055,11 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 "airflow_devices_status": [],
                 "airflow_command_status": [],
                 "sensor_conflict": sensor_conflict,
-                "sensor_fusion_status": self._sensor_fusion.diagnostics(
-                    temperature_observations,
-                    power_fraction=0.0,
-                    q_fan_mix=0.0,
-                ),
+                "sensor_fusion_status": sensor_fusion_status,
+                "temperature_source": temperature_sources[0] if temperature_sources else "",
+                "temperature_source_count": len(temperature_sources),
+                "temperature_primary_available": any(status.get("is_primary") for status in sensor_fusion_status),
+                **humidity_status,
                 "hvac_output_status": None,
                 "night_mode": {"active": False},
                 "night_control_status": [],
@@ -1594,6 +1840,17 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         _direct_eids = get_direct_setpoint_eids(_room_devices)
         _devs_with_eid = [d for d in _room_devices if d.get("entity_id")]
         _all_direct = bool(_devs_with_eid) and len(_direct_eids) == len(_devs_with_eid)
+        temperature_sources = [
+            status.get("entity_id", "") for status in sensor_fusion_status if status.get("entity_id")
+        ]
+        humidity_status = self._last_humidity_status.get(
+            area_id,
+            {
+                "humidity_sources": "",
+                "humidity_source_count": 0,
+                "humidity_primary_available": False,
+            },
+        )
 
         return {
             "area_id": area_id,
@@ -1664,6 +1921,10 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             "airflow_command_status": airflow_command_status,
             "sensor_conflict": sensor_conflict,
             "sensor_fusion_status": sensor_fusion_status,
+            "temperature_source": temperature_sources[0] if temperature_sources else "",
+            "temperature_source_count": len(temperature_sources),
+            "temperature_primary_available": any(status.get("is_primary") for status in sensor_fusion_status),
+            **humidity_status,
             "hvac_output_status": hvac_output_status,
             "night_mode": {
                 "active": night_mode_active,
