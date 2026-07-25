@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { airflowDeviceFromUiSchema, toAirflowDeviceUiSchema } from "./airflow-device-profile";
-import type { AirflowDeviceConfig } from "../types";
+import type { AirflowDeviceConfig, CurvePoint } from "../types";
+
+const validCapacityPoint: CurvePoint = { level: 0.5, capacity_factor: 1.2 };
+const validPowerPoint: CurvePoint = { level: 1, power_w: 38 };
+// @ts-expect-error Curve points must carry the value required by their curve kind.
+const missingCurveValue: CurvePoint = { level: 0.5 };
+// @ts-expect-error A point cannot mix capacity and power curve contracts.
+const mixedCurveValues: CurvePoint = { level: 0.5, capacity_factor: 1.2, power_w: 38 };
+void [validCapacityPoint, validPowerPoint, missingCurveValue, mixedCurveValues];
 
 describe("airflow device UI schema", () => {
   test("separates behavior preferences and modeling profile from daily controls", () => {

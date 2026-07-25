@@ -1213,11 +1213,12 @@ export class RsAirflowSection extends LitElement {
         const level = Number(rawLevel);
         const value = Number(rawValue);
         if (!Number.isFinite(level) || !Number.isFinite(value)) return null;
-        return { level: Math.max(0, Math.min(1, level)), [key]: value };
+        const normalizedLevel = Math.max(0, Math.min(1, level));
+        return key === "capacity_factor"
+          ? { level: normalizedLevel, capacity_factor: value }
+          : { level: normalizedLevel, power_w: value };
       })
-      .filter((point): point is { level: number; capacity_factor?: number; power_w?: number } =>
-        Boolean(point),
-      )
+      .filter((point): point is CurvePoint => point !== null)
       .sort((a, b) => a.level - b.level);
   }
 

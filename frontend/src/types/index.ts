@@ -104,19 +104,19 @@ export interface DeviceConfig {
 
 export type AirflowRole = "circulation" | "ventilation" | "hvac_fan";
 
-export interface CurvePoint {
+export interface CapacityCurvePoint {
   level: number;
-  capacity_factor?: number;
-  power_w?: number;
-}
-
-export interface CapacityCurvePoint extends CurvePoint {
   capacity_factor: number;
+  power_w?: never;
 }
 
-export interface PowerCurvePoint extends CurvePoint {
+export interface PowerCurvePoint {
+  level: number;
   power_w: number;
+  capacity_factor?: never;
 }
+
+export type CurvePoint = CapacityCurvePoint | PowerCurvePoint;
 
 export interface AirflowDeviceConfig {
   entity_id: string;
