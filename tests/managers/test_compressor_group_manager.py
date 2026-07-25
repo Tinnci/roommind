@@ -4,6 +4,7 @@ import time
 from unittest.mock import patch
 
 from custom_components.roommind.managers.compressor_group_manager import (
+    CompressorCommandOutcome,
     CompressorGroupManager,
     resolve_master_action,
 )
@@ -212,6 +213,89 @@ class TestCompressorGroupManager:
         assert snapshot["g1"]["on_for_s"] == 60
         snapshot["g1"]["active_members"].append("climate.injected")
         assert "climate.injected" not in mgr.get_state("g1").active_members
+
+    def test_reconcile_command_outcome_owns_activity_precedence(self):
+        """Command facts are reconciled in safety-first precedence order."""
+        members = [
+            "climate.forced_off",
+            "climate.forced_on_running",
+            "climate.forced_on_stopped",
+            "climate.applied_off",
+            "climate.applied_on",
+            "climate.routed_off",
+            "climate.routed_on",
+            "climate.fallback",
+            "climate.excluded",
+        ]
+        mgr = CompressorGroupManager()
+        mgr.load_groups([_make_group(members=members)])
+        mgr.update_member("climate.excluded", True)
+
+        decisions = mgr.reconcile_command_outcome(
+            CompressorCommandOutcome(
+                member_entity_ids=tuple([*members, "climate.not_grouped"]),
+                excluded=frozenset({"climate.excluded"}),
+                forced_off=frozenset({"climate.forced_off"}),
+                forced_on=frozenset(
+                    {
+                        "climate.forced_on_running",
+                        "climate.forced_on_stopped",
+                    }
+                ),
+                applied_inactive=frozenset({"climate.applied_off"}),
+                applied_active=frozenset({"climate.applied_on"}),
+                routed_commanded=frozenset(
+                    {
+                        "climate.routed_off",
+                        "climate.routed_on",
+                    }
+                ),
+                routed_active=frozenset({"climate.routed_on"}),
+                default_active=True,
+            ),
+            is_entity_running=lambda entity_id: entity_id
+            == "climate.forced_on_running",
+        )
+
+        assert decisions == {
+            "climate.forced_off": False,
+            "climate.forced_on_running": True,
+            "climate.forced_on_stopped": False,
+            "climate.applied_off": False,
+            "climate.applied_on": True,
+            "climate.routed_off": False,
+            "climate.routed_on": True,
+            "climate.fallback": True,
+        }
+        assert mgr.get_state("g1").active_members == {
+            "climate.excluded",
+            "climate.forced_on_running",
+            "climate.applied_on",
+            "climate.routed_on",
+            "climate.fallback",
+        }
+
+    def test_reconcile_forced_off_wins_conflicting_facts(self):
+        """A forced-off safety decision overrides every positive signal."""
+        mgr = CompressorGroupManager()
+        mgr.load_groups([_make_group(members=["climate.ac1"])])
+        mgr.update_member("climate.ac1", True)
+
+        decisions = mgr.reconcile_command_outcome(
+            CompressorCommandOutcome(
+                member_entity_ids=("climate.ac1",),
+                forced_off=frozenset({"climate.ac1"}),
+                forced_on=frozenset({"climate.ac1"}),
+                applied_active=frozenset({"climate.ac1"}),
+                routed_commanded=frozenset({"climate.ac1"}),
+                routed_active=frozenset({"climate.ac1"}),
+                default_active=True,
+            ),
+            is_entity_running=lambda _entity_id: True,
+        )
+
+        assert decisions == {"climate.ac1": False}
+        assert mgr.get_state("g1").active_members == set()
 
 
 class TestResolveMasterAction:

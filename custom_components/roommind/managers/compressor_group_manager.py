@@ -7,6 +7,7 @@ minimum run and off times across all indoor units sharing a compressor.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from time import monotonic
 
@@ -44,6 +45,21 @@ class CompressorGroupState:
     master_action: str | None = None
     master_on_since: float | None = None
     master_off_since: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CompressorCommandOutcome:
+    """Facts used to reconcile commanded compressor-member activity."""
+
+    member_entity_ids: tuple[str, ...]
+    excluded: frozenset[str] = frozenset()
+    forced_on: frozenset[str] = frozenset()
+    forced_off: frozenset[str] = frozenset()
+    applied_active: frozenset[str] = frozenset()
+    applied_inactive: frozenset[str] = frozenset()
+    routed_commanded: frozenset[str] = frozenset()
+    routed_active: frozenset[str] = frozenset()
+    default_active: bool = False
 
 
 class CompressorGroupManager:
@@ -141,6 +157,33 @@ class CompressorGroupManager:
         elif was_running and not is_running:
             state.compressor_off_since = monotonic()
             state.compressor_on_since = None
+
+    def reconcile_command_outcome(
+        self,
+        outcome: CompressorCommandOutcome,
+        *,
+        is_entity_running: Callable[[str], bool],
+    ) -> dict[str, bool]:
+        """Reconcile command facts into tracked compressor-member activity."""
+        decisions: dict[str, bool] = {}
+        for entity_id in outcome.member_entity_ids:
+            if entity_id not in self._entity_to_group or entity_id in outcome.excluded:
+                continue
+            if entity_id in outcome.forced_off:
+                active = False
+            elif entity_id in outcome.forced_on:
+                active = is_entity_running(entity_id)
+            elif entity_id in outcome.applied_inactive:
+                active = False
+            elif entity_id in outcome.applied_active:
+                active = True
+            elif entity_id in outcome.routed_commanded:
+                active = entity_id in outcome.routed_active
+            else:
+                active = outcome.default_active
+            self.update_member(entity_id, active)
+            decisions[entity_id] = active
+        return decisions
 
     def get_group_for_entity(self, entity_id: str) -> str | None:
         """Return group ID for an entity, or None."""

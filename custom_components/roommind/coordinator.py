@@ -67,6 +67,7 @@ from .control.solar import SolarExposure, compute_q_solar_norm
 from .control.thermal_model import RoomModelManager, TemperatureObservation
 from .managers.airflow_control_manager import AirflowControlManager
 from .managers.compressor_group_manager import (
+    CompressorCommandOutcome,
     CompressorGroupConfig,
     CompressorGroupManager,
     CompressorGroupState,
@@ -1456,42 +1457,26 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                     area_id,
                     exc_info=True,
                 )
-            # Update compressor group member states (always, even after failed apply)
-            heat_source_active_eids = (
-                {command.entity_id for command in heat_source_plan.commands if command.active}
-                if heat_source_plan is not None
-                else set()
+            # Update compressor group member states (always, even after failed apply).
+            routed_commands = heat_source_plan.commands if heat_source_plan is not None else ()
+            self._compressor_manager.reconcile_command_outcome(
+                CompressorCommandOutcome(
+                    member_entity_ids=tuple(all_device_eids),
+                    excluded=frozenset(cycling_eids),
+                    forced_on=frozenset(compressor_forced_on),
+                    forced_off=frozenset(compressor_forced_off),
+                    applied_active=frozenset(applied_report.active_eids) if applied_report is not None else frozenset(),
+                    applied_inactive=(
+                        frozenset(applied_report.inactive_eids) if applied_report is not None else frozenset()
+                    ),
+                    routed_commanded=frozenset(command.entity_id for command in routed_commands),
+                    routed_active=frozenset(
+                        command.entity_id for command in routed_commands if command.active
+                    ),
+                    default_active=mode != MODE_IDLE,
+                ),
+                is_entity_running=self._is_entity_running,
             )
-            heat_source_commanded_eids = (
-                {command.entity_id for command in heat_source_plan.commands} if heat_source_plan is not None else set()
-            )
-            for eid in all_device_eids:
-                if self._compressor_manager.get_group_for_entity(eid) is None:
-                    continue
-                if eid in cycling_eids:
-                    continue
-                if eid in compressor_forced_off:
-                    self._compressor_manager.update_member(eid, False)
-                elif eid in compressor_forced_on:
-                    # Verify device is actually running before tracking as active.
-                    # If user manually turned it off, respect that.
-                    dev_state = self.hass.states.get(eid)
-                    actually_on = dev_state is not None and dev_state.state not in (
-                        "off",
-                        "unavailable",
-                        "unknown",
-                    )
-                    self._compressor_manager.update_member(eid, actually_on)
-                elif applied_report is not None and eid in applied_report.inactive_eids:
-                    self._compressor_manager.update_member(eid, False)
-                elif applied_report is not None and eid in applied_report.active_eids:
-                    self._compressor_manager.update_member(eid, True)
-                elif eid in heat_source_commanded_eids:
-                    self._compressor_manager.update_member(eid, eid in heat_source_active_eids)
-                elif mode != MODE_IDLE:
-                    self._compressor_manager.update_member(eid, True)
-                else:
-                    self._compressor_manager.update_member(eid, False)
         else:
             # Climate control disabled — stop RoomMind airflow outputs and any
             # RoomMind-owned climate fan_only state.
@@ -2088,6 +2073,15 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 except ValueError, TypeError:
                     continue
         return None
+
+    def _is_entity_running(self, entity_id: str) -> bool:
+        """Return whether an entity currently reports an active state."""
+        state = self.hass.states.get(entity_id)
+        return state is not None and state.state not in (
+            "off",
+            "unavailable",
+            "unknown",
+        )
 
     def _observe_device_action(self, room: dict) -> tuple[str | None, float]:
         """Observe actual hvac_action from climate devices for model training.
