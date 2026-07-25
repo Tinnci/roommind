@@ -123,15 +123,18 @@ def test_repository_release_metadata_is_aligned():
     homeassistant_requirement = next(
         dependency for dependency in pyproject["dependency-groups"]["dev"] if dependency.startswith("homeassistant==")
     )
-    homeassistant_version = homeassistant_requirement.removeprefix("homeassistant==")
+    tested_homeassistant_version = homeassistant_requirement.removeprefix("homeassistant==")
+    minimum_homeassistant_version = hacs["homeassistant"]
 
     assert const_match is not None
     assert manifest["version"] == const_match.group(1)
-    assert hacs["homeassistant"] == homeassistant_version
+    assert tuple(map(int, minimum_homeassistant_version.split("."))) <= tuple(
+        map(int, tested_homeassistant_version.split("."))
+    )
     assert hacs["zip_release"] is True
     assert hacs["filename"] == "roommind.zip"
     assert f'placeholder: "{manifest["version"]}"' in issue_template
-    assert f'placeholder: "{homeassistant_version}"' in issue_template
+    assert f'placeholder: "{tested_homeassistant_version}"' in issue_template
 
 
 def test_dev_requirements_match_pyproject_dev_group():

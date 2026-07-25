@@ -16,7 +16,7 @@ body:
     attributes:
       label: Home Assistant version
       description: Found in Settings → About
-      placeholder: "2026.6.3"
+      placeholder: "2026.7.4"
     validations:
       required: true
 
