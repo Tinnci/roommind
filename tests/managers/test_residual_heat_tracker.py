@@ -142,9 +142,7 @@ def test_simulation_snapshot_owns_residual_state_translation(mock_time):
 
     assert snapshot.heating_duration_minutes == 5.0
     assert snapshot.last_power_fraction == 0.7
-    assert snapshot.q_residual == pytest.approx(
-        tracker.get_q_residual("room1", "radiator", MODE_IDLE)
-    )
+    assert snapshot.q_residual == pytest.approx(tracker.get_q_residual("room1", "radiator", MODE_IDLE))
 
 
 def test_simulation_snapshot_defaults_without_residual_state():

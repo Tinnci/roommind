@@ -1271,10 +1271,7 @@ class RoomModelManager:
             "n_heating": estimator._n_heating,
             "n_cooling": estimator._n_cooling,
             "applicable_modes": sorted(estimator._applicable_modes),
-            "P_diagonal": [
-                round(estimator._P[index][index], 6)
-                for index in range(len(estimator._x))
-            ],
+            "P_diagonal": [round(estimator._P[index][index], 6) for index in range(len(estimator._x))],
             "prediction_std_idle": round(estimator.prediction_std(0.0, 20.0, 15.0, 5.0), 4),
             "prediction_std_heating": round(
                 estimator.prediction_std(model.Q_heat, 20.0, 10.0, 5.0),

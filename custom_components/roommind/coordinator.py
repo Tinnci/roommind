@@ -204,10 +204,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         self._compressor_manager = CompressorGroupManager()
         # Heat source orchestration state (per room)
         self._heat_source_states: dict[str, str] = {}
-        self._entity_platforms = {
-            platform: _EntityPlatformRegistration()
-            for platform in EntityPlatform
-        }
+        self._entity_platforms = {platform: _EntityPlatformRegistration() for platform in EntityPlatform}
         # Min-run enforcement: timestamp when current non-idle mode started
         self._mode_on_since: dict[str, float] = {}
         # Sensor dropout fallback: last valid temperature per room
@@ -1470,9 +1467,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                         frozenset(applied_report.inactive_eids) if applied_report is not None else frozenset()
                     ),
                     routed_commanded=frozenset(command.entity_id for command in routed_commands),
-                    routed_active=frozenset(
-                        command.entity_id for command in routed_commands if command.active
-                    ),
+                    routed_active=frozenset(command.entity_id for command in routed_commands if command.active),
                     default_active=mode != MODE_IDLE,
                 ),
                 is_entity_running=self._is_entity_running,

@@ -12,7 +12,7 @@ def test_deploy_recreates_remote_component_directory_before_extracting():
 
     rm_index = script.index('run_as_root rm -rf "$dest"')
     mkdir_index = script.index('run_as_root mkdir -p "$dest"', rm_index)
-    extract_index = script.index("tar xzof - -C \"$dest\"")
+    extract_index = script.index('tar xzof - -C "$dest"')
 
     assert rm_index < mkdir_index < extract_index
 

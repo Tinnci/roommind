@@ -32,6 +32,7 @@ def _model_manager_with(area_id, estimator):
     manager._estimators[area_id] = estimator
     return manager
 
+
 # ---------------------------------------------------------------------------
 # _csv_to_points -- extended environmental observations
 # ---------------------------------------------------------------------------
@@ -498,9 +499,7 @@ class TestBuildAnalyticsData:
         coordinator.rooms = {"room1": {}}
         _attach_runtime_managers(coordinator, hass)
         now = time.time()
-        with patch(
-            "custom_components.roommind.managers.residual_heat_tracker.time"
-        ) as mock_time:
+        with patch("custom_components.roommind.managers.residual_heat_tracker.time") as mock_time:
             mock_time.time.return_value = now - 900
             coordinator._residual_tracker.update("room1", "heating", 0.8, "idle")
             mock_time.time.return_value = now - 300

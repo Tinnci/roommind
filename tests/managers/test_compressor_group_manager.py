@@ -253,8 +253,7 @@ class TestCompressorGroupManager:
                 routed_active=frozenset({"climate.routed_on"}),
                 default_active=True,
             ),
-            is_entity_running=lambda entity_id: entity_id
-            == "climate.forced_on_running",
+            is_entity_running=lambda entity_id: entity_id == "climate.forced_on_running",
         )
 
         assert decisions == {

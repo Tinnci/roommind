@@ -136,6 +136,7 @@ async def _compute_target_forecast(
         make_target_resolver,
         read_schedule_blocks,
     )
+
     climate_mode = room.get("climate_mode", "auto")
 
     presence_away = not room.get("ignore_presence", False) and is_presence_away(hass, room, settings)
