@@ -291,6 +291,7 @@ def make_target_resolver(
     hass: HomeAssistant | None = None,
     presence_away: bool = False,
     mold_prevention_delta: float = 0.0,
+    block_temp_converter: Callable[[float], float] | None = None,
 ) -> Callable[[float], TargetTemps]:
     """Create a sync target resolver function (schedule blocks pre-fetched).
 
@@ -309,8 +310,8 @@ def make_target_resolver(
     schedule_off_action = settings.get("schedule_off_action", "eco")
     presence_clears_override = bool(settings.get("presence_clears_override", False))
 
-    converter: Callable[[float], float] | None = None
-    if hass is not None:
+    converter = block_temp_converter
+    if converter is None and hass is not None:
         from .temp_utils import ha_temp_to_celsius
 
         _hass = hass

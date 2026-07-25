@@ -6,9 +6,12 @@ Assistant side effects outside the resolution logic.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
+
+from homeassistant.core import HomeAssistant
 
 from ..const import (
     DEFAULT_COMFORT_COOL,
@@ -18,7 +21,21 @@ from ..const import (
     SCHEDULE_STATE_ON,
     TargetTemps,
 )
-from .schedule_utils import resolve_targets_at_time, resolve_targets_from_schedule_data
+from .night_utils import (
+    apply_sleep_ramp_to_targets,
+    is_night_mode_active,
+    wrap_target_resolver_for_sleep_ramp,
+)
+from .presence_utils import is_presence_away
+from .schedule_utils import (
+    apply_mold_prevention_to_targets,
+    get_active_schedule_entity,
+    make_target_resolver,
+    read_schedule_blocks,
+    resolve_targets_at_time,
+    resolve_targets_from_schedule_data,
+)
+from .temp_utils import ha_temp_to_celsius
 
 
 @dataclass(frozen=True)
@@ -28,6 +45,90 @@ class TargetResolutionResult:
     targets: TargetTemps
     clear_expired_override: bool = False
     clear_expired_vacation: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class ControlTargetPlan:
+    """Effective current and future targets produced by one policy chain."""
+
+    targets: TargetTemps
+    resolver: Callable[[float], TargetTemps]
+    force_off: bool
+    presence_away: bool
+    night_active: bool
+    resolved_at: float
+    clear_expired_override: bool = False
+    clear_expired_vacation: bool = False
+
+
+async def prepare_control_target_plan(
+    hass: HomeAssistant,
+    room: dict[str, Any],
+    settings: dict[str, Any],
+    *,
+    schedule_blocks_cache: dict[str, dict] | None = None,
+    mold_prevention_active: bool = False,
+    mold_prevention_delta: float = 0.0,
+    now: float | None = None,
+) -> ControlTargetPlan:
+    """Resolve effective current and future targets through one policy chain.
+
+    Home Assistant state and schedule data are captured before target policy is
+    composed, so immediate control and the MPC horizon share mold, presence,
+    unit-conversion, and night-ramp semantics.
+    """
+    schedule_entity_id = get_active_schedule_entity(hass, room)
+    schedule_blocks = (
+        await read_schedule_blocks(hass, schedule_entity_id, cache=schedule_blocks_cache)
+        if schedule_entity_id
+        else None
+    )
+    resolved_at = time.time() if now is None else now
+    presence_away = not room.get("ignore_presence", False) and is_presence_away(hass, room, settings)
+    state = hass.states.get(schedule_entity_id) if schedule_entity_id else None
+
+    def converter(value: float) -> float:
+        return ha_temp_to_celsius(hass, value)
+
+    base = resolve_room_targets(
+        now=resolved_at,
+        room=room,
+        settings=settings,
+        presence_away=presence_away,
+        schedule_entity_id=schedule_entity_id,
+        schedule_state=state.state if state is not None else None,
+        schedule_attributes=dict(state.attributes) if state is not None else None,
+        schedule_blocks=schedule_blocks,
+        block_temp_converter=converter,
+    )
+
+    effective_mold_delta = mold_prevention_delta if mold_prevention_active else 0.0
+    targets = apply_mold_prevention_to_targets(base.targets, room, effective_mold_delta)
+    resolver = make_target_resolver(
+        schedule_blocks,
+        room,
+        settings,
+        presence_away=presence_away,
+        mold_prevention_delta=effective_mold_delta,
+        block_temp_converter=converter,
+    )
+
+    night_active = is_night_mode_active(room)
+    sleep_ramp_c = max(0.0, float(room.get("sleep_temp_ramp_c") or 0.0))
+    if night_active and sleep_ramp_c > 0:
+        targets = apply_sleep_ramp_to_targets(targets, sleep_ramp_c)
+        resolver = wrap_target_resolver_for_sleep_ramp(resolver, sleep_ramp_c)
+
+    return ControlTargetPlan(
+        targets=targets,
+        resolver=resolver,
+        force_off=targets.heat is None and targets.cool is None,
+        presence_away=presence_away,
+        night_active=night_active,
+        resolved_at=resolved_at,
+        clear_expired_override=base.clear_expired_override,
+        clear_expired_vacation=base.clear_expired_vacation,
+    )
 
 
 def resolve_room_targets(

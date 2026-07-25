@@ -100,18 +100,13 @@ from .utils.device_utils import (
 )
 from .utils.history_store import HistoryStore
 from .utils.i18n import get_translation
-from .utils.night_utils import (
-    apply_sleep_ramp_to_targets,
-    is_night_mode_active,
-    wrap_target_resolver_for_sleep_ramp,
-)
 from .utils.notification_payloads import build_outdoor_unavailable_payload
 from .utils.observation_store import ObservationStore
 from .utils.schedule_utils import (
     resolve_schedule_index,
 )
 from .utils.sensor_utils import read_sensor_value
-from .utils.target_resolution import resolve_room_targets
+from .utils.target_resolution import ControlTargetPlan, prepare_control_target_plan
 from .utils.temp_utils import celsius_delta_to_ha, ha_temp_to_celsius, ha_temp_unit_str
 
 _LOGGER = logging.getLogger(__name__)
@@ -872,10 +867,6 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         )
         self._outdoor_warning_sent = True
 
-    def _is_night_active(self, room: dict) -> bool:
-        """Return whether room-level night mode should currently apply."""
-        return is_night_mode_active(room)
-
     def _select_airflow_curve(self, room: dict, key: str) -> list[dict[str, float]]:
         """Merge airflow curves from configured climate/HVAC fan devices."""
         curves: list[dict[str, float]] = []
@@ -1125,48 +1116,20 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             mold_prevention_temp_delta,
         ) = await self._evaluate_mold_risk(area_id, current_temp, current_humidity, settings)
 
-        # Load schedule blocks once — used for both target temp resolution and MPC lookahead.
-        from .utils.schedule_utils import (
-            apply_mold_prevention_to_targets,
-            get_active_schedule_entity,
-            make_target_resolver,
-            read_schedule_blocks,
-        )
-
-        schedule_entity_id = get_active_schedule_entity(self.hass, room)
-        schedule_blocks = (
-            await read_schedule_blocks(self.hass, schedule_entity_id, cache=self._schedule_blocks_cache)
-            if schedule_entity_id
-            else None
-        )
-
-        # Determine dual heat/cool target temperatures
-        # Returns TargetTemps(heat, cool). None values mean "force off".
-        targets = self._resolve_target_temps(room, settings, schedule_blocks, schedule_entity_id)
-
-        # Apply mold prevention temperature delta (heating target only).
-        # Safety: mold prevention overrides "off" to prevent structural damage.
-        targets = apply_mold_prevention_to_targets(
-            targets,
-            room,
-            mold_prevention_temp_delta if mold_prevention_active_room else 0.0,
-        )
-        force_off = targets.heat is None and targets.cool is None
-        presence_away = not room.get("ignore_presence", False) and self._is_presence_away(room, settings)
-        target_resolver = make_target_resolver(
-            schedule_blocks,
+        target_plan = await prepare_control_target_plan(
+            self.hass,
             room,
             settings,
-            hass=self.hass,
-            presence_away=presence_away,
+            schedule_blocks_cache=self._schedule_blocks_cache,
+            mold_prevention_active=mold_prevention_active_room,
             mold_prevention_delta=mold_prevention_temp_delta,
         )
-
-        night_mode_active = self._is_night_active(room)
-        sleep_ramp_c = max(0.0, float(room.get("sleep_temp_ramp_c") or 0.0))
-        if night_mode_active and sleep_ramp_c > 0:
-            targets = apply_sleep_ramp_to_targets(targets, sleep_ramp_c)
-            target_resolver = wrap_target_resolver_for_sleep_ramp(target_resolver, sleep_ramp_c)
+        self._schedule_expired_target_state_cleanup(area_id, target_plan)
+        targets = target_plan.targets
+        force_off = target_plan.force_off
+        presence_away = target_plan.presence_away
+        target_resolver = target_plan.resolver
+        night_mode_active = target_plan.night_active
 
         # --- Compute residual heat from previous cycle state ---
         system_type = room.get("heating_system_type", "")
@@ -2175,12 +2138,6 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 return True
         return False
 
-    def _is_presence_away(self, room: dict, settings: dict) -> bool:
-        """Return True if presence detection says all relevant persons are away."""
-        from .utils.presence_utils import is_presence_away
-
-        return is_presence_away(self.hass, room, settings)  # all tracked persons are away
-
     def _get_active_schedule_index(self, room: dict) -> int:
         """Return the index of the active schedule in room['schedules'].
 
@@ -2189,41 +2146,9 @@ class RoomMindCoordinator(DataUpdateCoordinator):
 
         return resolve_schedule_index(self.hass, room)
 
-    def _resolve_target_temps(
-        self,
-        room: dict,
-        settings: dict,
-        schedule_blocks: dict | None = None,
-        schedule_entity_id: str | None = None,
-    ) -> TargetTemps:
-        """Resolve dual heat/cool target temperatures.
-
-        Priority: override > vacation > presence away > schedule block temp > comfort/eco.
-        Returns TargetTemps(heat, cool). None values mean "force off".
-
-        When ``presence_clears_override`` is enabled in settings and the room is
-        currently presence-away (and not ``ignore_presence``), the override is
-        held in the store but skipped here so the room follows the presence-away
-        branch instead.
-        """
-        now = time.time()
-        presence_away_now = not room.get("ignore_presence", False) and self._is_presence_away(room, settings)
-
-        state = self.hass.states.get(schedule_entity_id) if schedule_entity_id else None
-        result = resolve_room_targets(
-            now=now,
-            room=room,
-            settings=settings,
-            presence_away=presence_away_now,
-            schedule_entity_id=schedule_entity_id,
-            schedule_state=state.state if state is not None else None,
-            schedule_attributes=dict(state.attributes) if state is not None else None,
-            schedule_blocks=schedule_blocks,
-            block_temp_converter=lambda value: ha_temp_to_celsius(self.hass, value),
-        )
-
-        if result.clear_expired_override:
-            area_id = room.get("area_id", "unknown")
+    def _schedule_expired_target_state_cleanup(self, area_id: str, plan: ControlTargetPlan) -> None:
+        """Apply storage cleanup intents emitted by target resolution."""
+        if plan.clear_expired_override:
             store = self.hass.data[DOMAIN]["store"]
             self.hass.async_create_task(
                 store.async_update_room(
@@ -2236,7 +2161,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 )
             )
 
-        if result.clear_expired_vacation:
+        if plan.clear_expired_vacation:
             self.hass.async_create_task(
                 self.hass.data[DOMAIN]["store"].async_save_settings(
                     {
@@ -2244,8 +2169,6 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                     }
                 )
             )
-
-        return result.targets
 
     async def async_room_added(self, room: dict) -> None:
         """Create entity platform entities for a newly added/updated room and refresh data."""

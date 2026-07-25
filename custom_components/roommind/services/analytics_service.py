@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 from typing import Any, cast
 
 from homeassistant.core import HomeAssistant
@@ -19,6 +18,7 @@ from ..control.mpc_controller import (
     get_can_heat_cool,
     is_mpc_active,
 )
+from ..utils.target_resolution import prepare_control_target_plan
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -130,31 +130,19 @@ async def _compute_target_forecast(
     Each point contains ``target_temp`` (chart display, mode-aware),
     ``heat_target`` and ``cool_target`` (for MPC simulator).
     """
-    from ..utils.presence_utils import is_presence_away
-    from ..utils.schedule_utils import (
-        get_active_schedule_entity,
-        make_target_resolver,
-        read_schedule_blocks,
-    )
-
     climate_mode = room.get("climate_mode", "auto")
-
-    presence_away = not room.get("ignore_presence", False) and is_presence_away(hass, room, settings)
-
-    entity_id = get_active_schedule_entity(hass, room)
-    schedule_blocks = await read_schedule_blocks(hass, entity_id, cache=schedule_blocks_cache) if entity_id else None
-
-    target_resolver = make_target_resolver(
-        schedule_blocks,
+    target_plan = await prepare_control_target_plan(
+        hass,
         room,
         settings,
-        hass=hass,
-        presence_away=presence_away,
+        schedule_blocks_cache=schedule_blocks_cache,
+        mold_prevention_active=mold_prevention_delta > 0,
         mold_prevention_delta=mold_prevention_delta,
     )
+    target_resolver = target_plan.resolver
 
     # Generate forecast points
-    now = time.time()
+    now = target_plan.resolved_at
     end_ts = now + hours * 3600
     result: list[dict] = []
     ts = now
@@ -253,7 +241,8 @@ async def build_analytics_data(
     mold_delta = 0.0
     if coordinator:
         live = coordinator.rooms.get(area_id, {})
-        mold_delta = live.get("mold_prevention_delta", 0.0)
+        if live.get("mold_prevention_active", False):
+            mold_delta = live.get("mold_prevention_delta", 0.0)
     try:
         target_forecast = await _compute_target_forecast(
             hass,

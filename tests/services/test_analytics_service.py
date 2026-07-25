@@ -6,6 +6,7 @@ import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from homeassistant.core import State
 
 from custom_components.roommind.control.thermal_model import RoomModelManager
 from custom_components.roommind.managers.residual_heat_tracker import ResidualHeatTracker
@@ -132,34 +133,24 @@ class TestComputeTargetForecast:
             "eco_cool": 27.0,
             "climate_mode": "auto",
         }
-        settings = {}
+        settings = {
+            "presence_enabled": True,
+            "presence_persons": ["person.test"],
+            "presence_away_action": "off",
+        }
+        hass.states.get = MagicMock(return_value=State("person.test", "not_home"))
 
-        from custom_components.roommind.const import TargetTemps
+        result = await _compute_target_forecast(
+            hass,
+            room,
+            settings,
+            mold_prevention_delta=2.0,
+            hours=0.0,
+            interval_minutes=5,
+        )
 
-        with (
-            patch(
-                "custom_components.roommind.utils.presence_utils.is_presence_away",
-                return_value=False,
-            ),
-            patch(
-                "custom_components.roommind.utils.schedule_utils.get_active_schedule_entity",
-                return_value=None,
-            ),
-            patch(
-                "custom_components.roommind.utils.schedule_utils.resolve_targets_at_time",
-                return_value=TargetTemps(heat=None, cool=24.0),
-            ),
-        ):
-            result = await _compute_target_forecast(
-                hass,
-                room,
-                settings,
-                mold_prevention_delta=2.0,
-                hours=0.0,
-                interval_minutes=5,
-            )
-            assert len(result) == 1
-            assert result[0]["heat_target"] == round(17.0 + 2.0, 1)
+        assert len(result) == 1
+        assert result[0]["heat_target"] == round(17.0 + 2.0, 1)
 
     @pytest.mark.asyncio
     async def test_cool_only_mode_returns_cool_target(self):
@@ -175,31 +166,16 @@ class TestComputeTargetForecast:
         }
         settings = {}
 
-        from custom_components.roommind.const import TargetTemps
+        result = await _compute_target_forecast(
+            hass,
+            room,
+            settings,
+            hours=0.0,
+            interval_minutes=5,
+        )
 
-        with (
-            patch(
-                "custom_components.roommind.utils.presence_utils.is_presence_away",
-                return_value=False,
-            ),
-            patch(
-                "custom_components.roommind.utils.schedule_utils.get_active_schedule_entity",
-                return_value=None,
-            ),
-            patch(
-                "custom_components.roommind.utils.schedule_utils.resolve_targets_at_time",
-                return_value=TargetTemps(heat=21.0, cool=24.0),
-            ),
-        ):
-            result = await _compute_target_forecast(
-                hass,
-                room,
-                settings,
-                hours=0.0,
-                interval_minutes=5,
-            )
-            assert len(result) == 1
-            assert result[0]["target_temp"] == 24.0
+        assert len(result) == 1
+        assert result[0]["target_temp"] == 24.0
 
     @pytest.mark.asyncio
     async def test_heat_only_mode_returns_heat_target(self):
@@ -215,31 +191,45 @@ class TestComputeTargetForecast:
         }
         settings = {}
 
-        from custom_components.roommind.const import TargetTemps
+        result = await _compute_target_forecast(
+            hass,
+            room,
+            settings,
+            hours=0.0,
+            interval_minutes=5,
+        )
 
-        with (
-            patch(
-                "custom_components.roommind.utils.presence_utils.is_presence_away",
-                return_value=False,
-            ),
-            patch(
-                "custom_components.roommind.utils.schedule_utils.get_active_schedule_entity",
-                return_value=None,
-            ),
-            patch(
-                "custom_components.roommind.utils.schedule_utils.resolve_targets_at_time",
-                return_value=TargetTemps(heat=21.0, cool=24.0),
-            ),
-        ):
-            result = await _compute_target_forecast(
-                hass,
-                room,
-                settings,
-                hours=0.0,
-                interval_minutes=5,
-            )
-            assert len(result) == 1
-            assert result[0]["target_temp"] == 21.0
+        assert len(result) == 1
+        assert result[0]["target_temp"] == 21.0
+
+    @pytest.mark.asyncio
+    async def test_forecast_uses_same_active_night_ramp_as_control(self):
+        hass = MagicMock()
+        hass.config.units.temperature_unit = "°C"
+        room = {
+            "comfort_heat": 21.0,
+            "comfort_cool": 24.0,
+            "climate_mode": "auto",
+            "sleep_temp_ramp_c": 1.0,
+            "_night_mode_active": True,
+        }
+
+        result = await _compute_target_forecast(
+            hass,
+            room,
+            {},
+            hours=0.0,
+            interval_minutes=5,
+        )
+
+        assert result == [
+            {
+                "ts": result[0]["ts"],
+                "target_temp": 20.0,
+                "heat_target": 20.0,
+                "cool_target": 25.0,
+            }
+        ]
 
     @pytest.mark.asyncio
     async def test_cache_keeps_forecast_when_service_fails(self):
@@ -270,18 +260,14 @@ class TestComputeTargetForecast:
         }
         cache = {"schedule.heating": schedule_data}
 
-        with patch(
-            "custom_components.roommind.utils.presence_utils.is_presence_away",
-            return_value=False,
-        ):
-            result = await _compute_target_forecast(
-                hass,
-                room,
-                settings,
-                hours=0.1,
-                interval_minutes=5,
-                schedule_blocks_cache=cache,
-            )
+        result = await _compute_target_forecast(
+            hass,
+            room,
+            settings,
+            hours=0.1,
+            interval_minutes=5,
+            schedule_blocks_cache=cache,
+        )
 
         assert result, "forecast should not be empty"
         heat_targets = {point["heat_target"] for point in result if point.get("heat_target") is not None}

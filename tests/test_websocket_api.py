@@ -1663,7 +1663,12 @@ async def test_analytics_mold_delta_from_live(ws_hass, store, connection):
 
     coordinator = _make_analytics_coordinator(
         history_rows=[],
-        rooms_live={"room_a": {"mold_prevention_delta": 2.0}},
+        rooms_live={
+            "room_a": {
+                "mold_prevention_active": True,
+                "mold_prevention_delta": 2.0,
+            }
+        },
     )
     ws_hass.data[DOMAIN]["coordinator"] = coordinator
 
