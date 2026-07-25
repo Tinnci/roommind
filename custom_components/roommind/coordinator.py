@@ -329,8 +329,8 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 model_data = thermal_data.get("models", thermal_data) if isinstance(thermal_data, dict) else {}
                 if isinstance(model_data, dict):
                     self._model_manager = RoomModelManager.from_dict(model_data)
-                self._ekf_training._model_manager = self._model_manager
-                self._cover_orchestrator._model_manager = self._model_manager
+                self._ekf_training.set_model_manager(self._model_manager)
+                self._cover_orchestrator.set_model_manager(self._model_manager)
                 if isinstance(thermal_data, dict):
                     self._sensor_fusion = SensorFusionManager.from_dict(thermal_data.get("sensor_biases", {}))
             self._valve_manager.load_actuation_data(settings.get("valve_last_actuation", {}))
@@ -592,7 +592,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 start_ts,
                 now_ts,
             )
-            rows = sorted([*history_rows, *detail_rows], key=HistoryStore._safe_ts)
+            rows = sorted([*history_rows, *detail_rows], key=HistoryStore.safe_timestamp)
             await self.hass.async_add_executor_job(
                 partial(
                     self._observation_store.store_thermal_episodes,

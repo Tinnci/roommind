@@ -235,7 +235,7 @@ class HistoryStore:
         # Trim history older than 90 days
         history_rows = self.read_history(area_id)
         history_cutoff = now - HISTORY_MAX_AGE
-        trimmed = [r for r in history_rows if self._safe_ts(r) >= history_cutoff]
+        trimmed = [r for r in history_rows if self.safe_timestamp(r) >= history_cutoff]
         if len(trimmed) < len(history_rows):
             self._rewrite_csv(self._history_path(area_id), trimmed)
 
@@ -305,7 +305,7 @@ class HistoryStore:
         return False if seen else ""
 
     @staticmethod
-    def _safe_ts(row: dict) -> float:
+    def safe_timestamp(row: dict) -> float:
         """Return timestamp as float, or 0.0 on failure."""
         try:
             return float(row["timestamp"])

@@ -383,28 +383,28 @@ def test_downsample_non_numeric_values(history_dir):
 
 
 # ---------------------------------------------------------------------------
-# _safe_ts edge cases
+# safe_timestamp edge cases
 # ---------------------------------------------------------------------------
 
 
 def test_safe_ts_valid():
     """Valid timestamp returns float."""
-    assert HistoryStore._safe_ts({"timestamp": "1234.5"}) == 1234.5
+    assert HistoryStore.safe_timestamp({"timestamp": "1234.5"}) == 1234.5
 
 
 def test_safe_ts_missing_key():
     """Missing timestamp key returns 0.0."""
-    assert HistoryStore._safe_ts({}) == 0.0
+    assert HistoryStore.safe_timestamp({}) == 0.0
 
 
 def test_safe_ts_non_numeric():
     """Non-numeric timestamp returns 0.0."""
-    assert HistoryStore._safe_ts({"timestamp": "abc"}) == 0.0
+    assert HistoryStore.safe_timestamp({"timestamp": "abc"}) == 0.0
 
 
 def test_safe_ts_none_value():
     """None timestamp returns 0.0."""
-    assert HistoryStore._safe_ts({"timestamp": None}) == 0.0
+    assert HistoryStore.safe_timestamp({"timestamp": None}) == 0.0
 
 
 def test_rotate_trims_old_history(history_dir):
