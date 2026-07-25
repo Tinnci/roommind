@@ -29,6 +29,7 @@ from ..const import (
     is_override_active,
     make_roommind_context,
 )
+from ..settings_config import mpc_control_enabled
 from ..utils.device_utils import (
     DEFAULT_IDLE_SETBACK_OFFSET,
     IDLE_ACTION_FAN_ONLY,
@@ -816,6 +817,7 @@ class MPCController:
         self._w_comfort = max(1.0, cw / 10.0)
         self._w_energy = max(1.0, (100 - cw) / 10.0)
         self._optimizer_strategy = str(s.get("optimizer_strategy", "greedy"))
+        self._mpc_enabled = mpc_control_enabled(s)
 
     async def async_evaluate(
         self,
@@ -846,6 +848,9 @@ class MPCController:
             mode = self._evaluate_managed_mode(targets)
             return mode, 1.0  # managed mode: device self-regulates
 
+        if not self._mpc_enabled:
+            return self._bangbang_result(current_temp, targets)
+
         # Use the model's prediction uncertainty to decide MPC vs bang-bang.
         # Compute std for the actual operating conditions (heating power as proxy).
         model = self._model_manager.get_model(self._area_id)
@@ -866,6 +871,14 @@ class MPCController:
         if pred_std < MPC_MAX_PREDICTION_STD and self._has_enough_data(can_heat, can_cool):
             return self._evaluate_mpc(current_temp, targets)
         # Bang-bang fallback: binary control (1.0 power) for fast EKF learning
+        return self._bangbang_result(current_temp, targets)
+
+    def _bangbang_result(
+        self,
+        current_temp: float | None,
+        targets: TargetTemps,
+    ) -> tuple[str, float]:
+        """Evaluate deterministic hysteresis control and clear MPC airflow."""
         self.last_airflow_level = 0.0
         self.last_airflow_mix_level = 0.0
         self.last_airflow_vent_level = 0.0

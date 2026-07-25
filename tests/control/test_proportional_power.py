@@ -32,7 +32,7 @@ async def test_proportional_power_far_from_target():
         room,
         model_manager=model_mgr,
         outdoor_temp=5.0,
-        settings={},
+        settings={"control_mode": "mpc"},
         has_external_sensor=True,
     )
     mode, pf = await ctrl.async_evaluate(current_temp=15.0, target_temp=21.0)
@@ -56,7 +56,7 @@ async def test_proportional_power_near_target():
         room,
         model_manager=model_mgr,
         outdoor_temp=5.0,
-        settings={},
+        settings={"control_mode": "mpc"},
         has_external_sensor=True,
     )
     mode, pf = await ctrl.async_evaluate(current_temp=20.7, target_temp=21.0)

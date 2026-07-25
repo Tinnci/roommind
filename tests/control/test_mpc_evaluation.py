@@ -42,7 +42,7 @@ async def test_confidence_transition_threshold():
         room,
         model_manager=model_mgr,
         outdoor_temp=5.0,
-        settings={},
+        settings={"control_mode": "mpc"},
         has_external_sensor=True,
     )
     mode, pf = await ctrl.async_evaluate(current_temp=17.0, target_temp=21.0)
@@ -56,12 +56,36 @@ async def test_confidence_transition_threshold():
         room,
         model_manager=model_mgr,
         outdoor_temp=5.0,
-        settings={},
+        settings={"control_mode": "mpc"},
         has_external_sensor=True,
     )
     mode2, pf2 = await ctrl2.async_evaluate(current_temp=17.0, target_temp=21.0)
     assert mode2 == "heating"  # MPC also heats when cold
     assert 0.0 < pf2 <= 1.0
+
+
+@pytest.mark.asyncio
+async def test_explicit_bangbang_mode_bypasses_model_evaluation():
+    """A user-selected bang-bang mode must not consult or run MPC."""
+    hass = build_hass()
+    room = make_room()
+    model_mgr = RoomModelManager()
+    model_mgr.get_model = MagicMock(side_effect=AssertionError("MPC model must not be consulted"))
+
+    ctrl = MPCController(
+        hass,
+        room,
+        model_manager=model_mgr,
+        outdoor_temp=5.0,
+        settings={"control_mode": "bangbang"},
+        has_external_sensor=True,
+    )
+
+    mode, power_fraction = await ctrl.async_evaluate(current_temp=17.0, target_temp=21.0)
+
+    assert mode == MODE_HEATING
+    assert power_fraction == 1.0
+    model_mgr.get_model.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

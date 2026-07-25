@@ -28,7 +28,7 @@ def _attach_runtime_managers(coordinator, hass):
     coordinator._residual_tracker = ResidualHeatTracker()
     coordinator._window_manager = WindowManager()
 
-    def runtime_snapshot(area_id, room_config):
+    def runtime_snapshot(area_id, room_config, settings):
         manager = coordinator._model_manager
         model_info = manager.analytics_snapshot(area_id) or {}
         if model_info:

@@ -17,6 +17,8 @@ _NOTIFICATION_TARGET_SCHEMA = {
     vol.Optional("notify_when", default="always"): vol.In(["always", "home_only"]),
 }
 
+DEFAULT_CONTROL_MODE = "bangbang"
+
 SETTINGS_SCHEMA: dict[vol.Marker, object] = {
     vol.Optional("outdoor_temp_sensor"): str,
     vol.Optional("outdoor_humidity_sensor"): str,
@@ -73,6 +75,15 @@ SETTINGS_SCHEMA: dict[vol.Marker, object] = {
     ],
 }
 SETTINGS_FIELDS = tuple(marker.schema for marker in SETTINGS_SCHEMA)
+
+
+def mpc_control_enabled(settings: dict) -> bool:
+    """Return whether model-predictive control is allowed by user policy.
+
+    Bang-bang is the public API's backward-compatible default; MPC must be an
+    explicit opt-in.
+    """
+    return str(settings.get("control_mode", DEFAULT_CONTROL_MODE)) == "mpc"
 
 
 class SettingsValidationError(ValueError):

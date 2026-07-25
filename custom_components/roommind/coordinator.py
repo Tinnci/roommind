@@ -93,6 +93,7 @@ from .managers.sensor_fusion_manager import SensorFusionManager
 from .managers.valve_manager import ValveManager
 from .managers.weather_manager import WeatherManager
 from .managers.window_manager import WindowManager
+from .settings_config import mpc_control_enabled
 from .utils.device_utils import (
     build_rooms_devices_map,
     get_ac_eids,
@@ -1505,7 +1506,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             self._valve_manager.record_heating(heating_eids)
 
         mpc_active = False
-        if has_external_sensor:
+        if has_external_sensor and mpc_control_enabled(settings):
             try:
                 _ch, _cc = get_can_heat_cool(
                     room,
@@ -2349,12 +2350,13 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         self,
         area_id: str,
         room_config: dict[str, Any],
+        settings: dict[str, Any] | None = None,
     ) -> AnalyticsRuntimeSnapshot:
         """Return immutable-owner analytics inputs without exposing managers."""
         model_info = self._model_manager.analytics_snapshot(area_id) or {}
         acs_can_heat: bool | None = None
         mpc_active = False
-        if model_info and room_config.get("temperature_sensor"):
+        if model_info and room_config.get("temperature_sensor") and mpc_control_enabled(settings or {}):
             acs_can_heat = check_acs_can_heat(self.hass, room_config)
             can_heat, can_cool = get_can_heat_cool(
                 room_config,

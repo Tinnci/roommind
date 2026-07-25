@@ -28,6 +28,7 @@ from .services.analytics_service import (
     build_analytics_data,
 )
 from .settings_config import (
+    DEFAULT_CONTROL_MODE,
     SETTINGS_FIELDS,
     SETTINGS_SCHEMA,
     SettingsValidationError,
@@ -223,7 +224,7 @@ async def websocket_list_rooms(
             "hidden_rooms": settings.get("hidden_rooms", []),
             "room_order": settings.get("room_order", []),
             "group_by_floor": settings.get("group_by_floor", False),
-            "control_mode": settings.get("control_mode", "bangbang"),
+            "control_mode": settings.get("control_mode", DEFAULT_CONTROL_MODE),
             "optimizer_strategy": settings.get("optimizer_strategy", "greedy"),
             "climate_control_active": settings.get("climate_control_active", True),
             "presence_enabled": settings.get("presence_enabled", False),

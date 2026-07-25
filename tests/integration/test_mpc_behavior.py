@@ -77,12 +77,17 @@ ACTIVE_SCHEDULE = _make_schedule_blocks_at(6, 0, 16, "monday")
 # Within the 6-block (30 min) MPC lookahead so the optimizer sees it coming
 UPCOMING_SCHEDULE = _make_schedule_blocks_at(10, 10, 8, "monday")
 
+MPC_SETTINGS = {
+    "outdoor_temp_sensor": "sensor.outdoor_temp",
+    "control_mode": "mpc",
+}
+
 
 class TestMPCActivation:
     @pytest.mark.asyncio
     async def test_mpc_activates_after_training(self, coordinator, real_store):
         """After enough EKF observations, coordinator should use MPC (not bang-bang)."""
-        await setup_room(real_store)
+        await setup_room(real_store, settings=MPC_SETTINGS)
         _train_model_manager(coordinator._model_manager, "living_room")
 
         coordinator.hass.states.get = MagicMock(side_effect=make_hass_states(temp="18.0"))
@@ -99,7 +104,7 @@ class TestMPCActivation:
     @pytest.mark.asyncio
     async def test_mpc_proportional_power_varies_with_distance(self, coordinator, real_store):
         """MPC power fraction should be higher when further from target."""
-        await setup_room(real_store)
+        await setup_room(real_store, settings=MPC_SETTINGS)
         _train_model_manager(coordinator._model_manager, "living_room")
 
         # Far from target (15C vs 21C target)
@@ -124,7 +129,7 @@ class TestMPCActivation:
     @pytest.mark.asyncio
     async def test_mpc_idles_at_target(self, coordinator, real_store):
         """When current temp is at or above target, MPC should idle."""
-        await setup_room(real_store)
+        await setup_room(real_store, settings=MPC_SETTINGS)
         _train_model_manager(coordinator._model_manager, "living_room")
 
         coordinator.hass.states.get = MagicMock(side_effect=make_hass_states(temp="21.5"))
@@ -144,7 +149,7 @@ class TestMPCPreheating:
         Scenario: it's 10:00 (schedule off -> eco 17C), schedule starts at 10:10
         (comfort 21C). Room is at 17C. MPC should pre-heat.
         """
-        await setup_room(real_store)
+        await setup_room(real_store, settings=MPC_SETTINGS)
         _train_model_manager(coordinator._model_manager, "living_room")
 
         # Schedule state "off" -> current target is eco (17C)
@@ -162,7 +167,7 @@ class TestMPCPreheating:
     @pytest.mark.asyncio
     async def test_no_preheating_at_target(self, coordinator, real_store):
         """When already at comfort temp, no preheating needed before schedule."""
-        await setup_room(real_store)
+        await setup_room(real_store, settings=MPC_SETTINGS)
         _train_model_manager(coordinator._model_manager, "living_room")
 
         # Already at comfort temp, schedule off
@@ -177,7 +182,7 @@ class TestMPCPreheating:
     @pytest.mark.asyncio
     async def test_no_preheating_without_upcoming_blocks(self, coordinator, real_store):
         """Without upcoming schedule blocks, MPC sees constant eco target - no preheating."""
-        await setup_room(real_store)
+        await setup_room(real_store, settings=MPC_SETTINGS)
         _train_model_manager(coordinator._model_manager, "living_room")
 
         # At eco temp, schedule off. Schedule data has no blocks for today.
@@ -197,7 +202,7 @@ class TestMPCFallback:
     @pytest.mark.asyncio
     async def test_bangbang_before_training(self, coordinator, real_store):
         """Before enough training data, coordinator should use bang-bang fallback."""
-        await setup_room(real_store)
+        await setup_room(real_store, settings=MPC_SETTINGS)
 
         # No training - model has no data
         coordinator.hass.states.get = MagicMock(side_effect=make_hass_states(temp="18.0"))
@@ -212,7 +217,7 @@ class TestMPCFallback:
     @pytest.mark.asyncio
     async def test_bangbang_hysteresis_prevents_cycling(self, coordinator, real_store):
         """Bang-bang should not oscillate near target due to hysteresis."""
-        await setup_room(real_store)
+        await setup_room(real_store, settings=MPC_SETTINGS)
 
         # Just barely below target - within hysteresis band
         coordinator.hass.states.get = MagicMock(side_effect=make_hass_states(temp="20.8"))

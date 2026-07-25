@@ -14,7 +14,7 @@ import type {
 } from "../types";
 import { localize } from "../utils/localize";
 import { fireSaveStatus } from "../utils/events";
-import { VACATION_SENTINEL } from "../utils/constants";
+import { DEFAULT_CONTROL_MODE, VACATION_SENTINEL } from "../utils/constants";
 import { roommindThemeStyles } from "../styles/theme-styles";
 import { tempUnit, toDisplay } from "../utils/temperature";
 import "./settings/rs-settings-panel";
@@ -42,7 +42,7 @@ export class RsSettings extends LitElement {
   @state() private _outdoorHumiditySensor = "";
   @state() private _outdoorCoolingMin = 16;
   @state() private _outdoorHeatingMax = 22;
-  @state() private _controlMode: "mpc" | "bangbang" = "mpc";
+  @state() private _controlMode: "mpc" | "bangbang" = DEFAULT_CONTROL_MODE;
   @state() private _optimizerStrategy: "greedy" | "horizon_search" = "greedy";
   @state() private _comfortWeight = 70;
   @state() private _weatherEntity = "";
@@ -96,7 +96,7 @@ export class RsSettings extends LitElement {
       this._outdoorHumiditySensor = s.outdoor_humidity_sensor ?? "";
       this._outdoorCoolingMin = s.outdoor_cooling_min ?? 16;
       this._outdoorHeatingMax = s.outdoor_heating_max ?? 22;
-      this._controlMode = s.control_mode ?? "mpc";
+      this._controlMode = s.control_mode ?? DEFAULT_CONTROL_MODE;
       this._optimizerStrategy = s.optimizer_strategy ?? "greedy";
       this._comfortWeight = s.comfort_weight ?? 70;
       this._weatherEntity = s.weather_entity ?? "";

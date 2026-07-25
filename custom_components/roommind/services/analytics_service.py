@@ -213,7 +213,7 @@ async def build_analytics_data(
             detail = _csv_to_points(detail_rows)
             history = _csv_to_points(history_rows)
 
-    runtime = coordinator.analytics_runtime_snapshot(area_id, room_config) if coordinator else None
+    runtime = coordinator.analytics_runtime_snapshot(area_id, room_config, settings) if coordinator else None
     model_info = dict(runtime.model_info) if runtime else {}
     mpc_active = runtime.mpc_active if runtime else False
     acs_can_heat = runtime.acs_can_heat if runtime else None

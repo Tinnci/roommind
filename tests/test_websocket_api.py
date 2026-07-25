@@ -1466,7 +1466,7 @@ def _make_analytics_coordinator(hass, history_rows=None, estimator=None, rooms_l
         mgr._estimators["room_a"] = estimator
     coordinator._model_manager = mgr
 
-    def runtime_snapshot(area_id, room_config):
+    def runtime_snapshot(area_id, room_config, settings):
         model_info = mgr.analytics_snapshot(area_id) or {}
         if model_info:
             model_info["mpc_active"] = False

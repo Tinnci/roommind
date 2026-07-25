@@ -25,7 +25,7 @@ class TestCoordinatorMPCIntegration:
             **SAMPLE_ROOM,
             "area_id": "mpc_room",
         }
-        store = _make_store_mock({"mpc_room": room})
+        store = _make_store_mock({"mpc_room": room}, settings={"control_mode": "mpc"})
         hass.data = {"roommind": {"store": store}}
 
         hass.states.get = MagicMock(side_effect=make_mock_states_get(temp="17.0", humidity="50.0"))

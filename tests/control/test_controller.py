@@ -26,7 +26,7 @@ async def test_mpc_evaluate_heats_when_cold():
         room,
         model_manager=model_mgr,
         outdoor_temp=5.0,
-        settings={},
+        settings={"control_mode": "mpc"},
         has_external_sensor=True,
     )
     mode, pf = await ctrl.async_evaluate(current_temp=17.0, target_temp=21.0)
@@ -45,7 +45,7 @@ async def test_mpc_evaluate_idle_at_target():
         room,
         model_manager=model_mgr,
         outdoor_temp=5.0,
-        settings={},
+        settings={"control_mode": "mpc"},
         has_external_sensor=True,
     )
     mode, pf = await ctrl.async_evaluate(current_temp=21.0, target_temp=21.0)
@@ -64,7 +64,7 @@ async def test_mpc_managed_mode():
         room,
         model_manager=model_mgr,
         outdoor_temp=5.0,
-        settings={},
+        settings={"control_mode": "mpc"},
         has_external_sensor=False,
     )
     mode, pf = await ctrl.async_evaluate(current_temp=None, target_temp=21.0)
@@ -129,7 +129,7 @@ async def test_mpc_path_when_confident():
         room,
         model_manager=model_mgr,
         outdoor_temp=5.0,
-        settings={},
+        settings={"control_mode": "mpc"},
         has_external_sensor=True,
     )
     mode, pf = await ctrl.async_evaluate(current_temp=17.0, target_temp=21.0)
@@ -184,7 +184,7 @@ async def test_mpc_requires_min_updates():
         room,
         model_manager=model_mgr,
         outdoor_temp=5.0,
-        settings={},
+        settings={"control_mode": "mpc"},
         has_external_sensor=True,
     )
     mode, pf = await ctrl.async_evaluate(current_temp=20.9, target_temp=21.0)
@@ -198,7 +198,7 @@ async def test_mpc_requires_min_updates():
         room,
         model_manager=model_mgr,
         outdoor_temp=5.0,
-        settings={},
+        settings={"control_mode": "mpc"},
         has_external_sensor=True,
     )
     mode2, pf2 = await ctrl2.async_evaluate(current_temp=20.9, target_temp=21.0)
@@ -212,7 +212,7 @@ async def test_mpc_requires_min_updates():
         room,
         model_manager=model_mgr,
         outdoor_temp=5.0,
-        settings={},
+        settings={"control_mode": "mpc"},
         has_external_sensor=True,
     )
     mode3, pf3 = await ctrl3.async_evaluate(current_temp=20.9, target_temp=21.0)

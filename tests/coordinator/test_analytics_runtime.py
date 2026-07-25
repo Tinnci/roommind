@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from .conftest import _create_coordinator
 
 
@@ -34,3 +36,27 @@ def test_analytics_runtime_snapshot_is_non_creating_and_detached(hass, mock_conf
 
     assert coordinator.rooms["living_room"]["blind_position"] == 45
     assert coordinator._weather_manager.forecast[0]["temperature"] == 9.0
+
+
+def test_analytics_runtime_respects_bangbang_policy(hass, mock_config_entry):
+    coordinator = _create_coordinator(hass, mock_config_entry)
+    coordinator._model_manager.update("living_room", 18.0, 5.0, "heating", 5.0)
+    room = {
+        "temperature_sensor": "sensor.living_room",
+        "heating_system_type": "radiator",
+    }
+
+    with patch(
+        "custom_components.roommind.coordinator.is_mpc_active",
+        return_value=True,
+    ) as active_check:
+        snapshot = coordinator.analytics_runtime_snapshot(
+            "living_room",
+            room,
+            {"control_mode": "bangbang"},
+        )
+
+    assert snapshot.model_info
+    assert snapshot.mpc_active is False
+    assert snapshot.model_info["mpc_active"] is False
+    active_check.assert_not_called()
