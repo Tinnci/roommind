@@ -18,9 +18,10 @@ class WindowManager:
         """Return True if climate control is paused due to open window."""
         return self._paused.get(area_id, False)
 
-    def diagnostics_snapshot(self, area_id: str) -> dict[str, bool | int]:
+    def diagnostics_snapshot(self, area_id: str, *, now: float | None = None) -> dict[str, bool | int]:
         """Return a stable diagnostics snapshot for one room."""
-        now = time.time()
+        if now is None:
+            now = time.time()
         result: dict[str, bool | int] = {"paused": self.is_paused(area_id)}
         open_since = self._open_since.get(area_id)
         if open_since is not None:

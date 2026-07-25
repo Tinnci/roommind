@@ -202,9 +202,10 @@ class CompressorGroupManager:
         """Return runtime state for a group."""
         return self._states.get(group_id)
 
-    def diagnostics_snapshot(self) -> dict[str, dict]:
+    def diagnostics_snapshot(self, *, now: float | None = None) -> dict[str, dict]:
         """Return diagnostics using the same monotonic clock as runtime state."""
-        now = monotonic()
+        if now is None:
+            now = monotonic()
         groups: dict[str, dict] = {}
         for group_id, state in self._states.items():
             config = self._groups.get(group_id)

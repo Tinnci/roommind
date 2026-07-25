@@ -110,12 +110,18 @@ class CoverManager:
         """Return True if user manual override is currently active."""
         return self._get_state(area_id).user_override_until > time.time()
 
-    def diagnostics_snapshot(self, area_id: str) -> dict[str, int | bool | None] | None:
+    def diagnostics_snapshot(
+        self,
+        area_id: str,
+        *,
+        now: float | None = None,
+    ) -> dict[str, int | bool | None] | None:
         """Return a stable diagnostics snapshot without creating room state."""
         state = self._states.get(area_id)
         if state is None:
             return None
-        now = time.time()
+        if now is None:
+            now = time.time()
         result: dict[str, int | bool | None] = {
             "current_position": state.current_position,
             "last_commanded_position": state.last_commanded_position,

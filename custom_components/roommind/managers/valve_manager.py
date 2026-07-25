@@ -66,9 +66,10 @@ class ValveManager:
         """Return actuation timestamps for persistence."""
         return dict(self._last_actuation)
 
-    def diagnostics_snapshot(self) -> dict[str, dict[str, int]]:
+    def diagnostics_snapshot(self, *, now: float | None = None) -> dict[str, dict[str, int]]:
         """Return elapsed valve protection state for diagnostics."""
-        now = time.time()
+        if now is None:
+            now = time.time()
         result = {
             "currently_cycling": {entity_id: round(now - started_at) for entity_id, started_at in self._cycling.items()}
         }

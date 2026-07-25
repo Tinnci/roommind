@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -58,12 +57,13 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, config_entry: 
 
     settings = store.get_settings()
     rooms_config = store.get_rooms()
-    live_states = coordinator.rooms if coordinator else {}
+    runtime = coordinator.diagnostics_runtime_snapshot(rooms_config) if coordinator else None
 
     # Build per-room diagnostics
     rooms_diag: dict[str, dict] = {}
     for area_id, config in rooms_config.items():
-        live = live_states.get(area_id, {})
+        room_runtime = runtime.rooms[area_id] if runtime else None
+        live = room_runtime.live if room_runtime else {}
         # Expose all room state fields with sensible defaults
         live_diag: dict[str, Any] = {
             "current_temp": None,
@@ -93,27 +93,14 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, config_entry: 
         else:
             live_diag["sensor_state"] = "no_sensor"
 
-        # Coordinator internal state for this room
-        if coordinator:
-            live_diag["previous_mode"] = coordinator._previous_modes.get(area_id, "idle")
-            on_since = coordinator._mode_on_since.get(area_id)
-            if on_since is not None:
-                live_diag["mode_active_for_s"] = round(time.time() - on_since)
-            cached = coordinator._last_valid_temps.get(area_id)
-            if cached is not None:
-                live_diag["cached_temp"] = cached[0]
-                live_diag["cached_temp_age_s"] = round(time.monotonic() - cached[1])
-
-        # Residual heat state
-        if coordinator:
-            live_diag["q_residual"] = round(
-                coordinator._residual_tracker.get_q_residual(
-                    area_id,
-                    config.get("heating_system_type", ""),
-                    coordinator._previous_modes.get(area_id, "idle"),
-                ),
-                4,
-            )
+        if room_runtime:
+            live_diag["previous_mode"] = room_runtime.previous_mode
+            if room_runtime.mode_active_for_s is not None:
+                live_diag["mode_active_for_s"] = room_runtime.mode_active_for_s
+            if room_runtime.cached_temp is not None:
+                live_diag["cached_temp"] = room_runtime.cached_temp
+                live_diag["cached_temp_age_s"] = room_runtime.cached_temp_age_s
+            live_diag["q_residual"] = room_runtime.q_residual
 
         # Schedule entity state
         schedules = config.get("schedules", [])
@@ -137,37 +124,31 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, config_entry: 
             room_diag["device_states"] = _build_device_states(hass, devices)
 
         # Model info from EKF estimator
-        if coordinator:
-            mgr = coordinator._model_manager
-            model = mgr.diagnostics_snapshot(area_id)
-            if model is not None:
-                room_diag["model"] = model
+        if room_runtime and room_runtime.model is not None:
+            room_diag["model"] = room_runtime.model
 
         # Window manager state
-        if coordinator:
-            room_diag["window"] = coordinator._window_manager.diagnostics_snapshot(area_id)
+        if room_runtime:
+            room_diag["window"] = room_runtime.window
 
         # Cover manager state
-        if coordinator:
-            cover = coordinator._cover_manager.diagnostics_snapshot(area_id)
-            if cover:
-                room_diag["cover"] = cover
+        if room_runtime and room_runtime.cover:
+            room_diag["cover"] = room_runtime.cover
 
         # Heat source orchestration state
-        if coordinator and area_id in coordinator._heat_source_states:
-            room_diag["heat_source_routing"] = coordinator._heat_source_states[area_id]
+        if room_runtime and room_runtime.heat_source_routing is not None:
+            room_diag["heat_source_routing"] = room_runtime.heat_source_routing
 
         rooms_diag[area_id] = room_diag
 
     # Outdoor conditions
     outdoor: dict[str, Any] = {
-        "temp": coordinator.outdoor_temp if coordinator else None,
-        "humidity": coordinator.outdoor_humidity if coordinator else None,
+        "temp": runtime.outdoor_temp if runtime else None,
+        "humidity": runtime.outdoor_humidity if runtime else None,
     }
-    if coordinator:
-        forecast = coordinator._weather_manager.forecast
-        outdoor["forecast_available"] = bool(forecast)
-        outdoor["forecast_points"] = len(forecast) if forecast else 0
+    if runtime:
+        outdoor["forecast_available"] = runtime.forecast_available
+        outdoor["forecast_points"] = runtime.forecast_points
 
     # Recent history (last 2 hours of detail data per room)
     recent_history: dict[str, list] = {}
@@ -190,14 +171,10 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, config_entry: 
                 recent_history[area_id] = []
 
     # Compressor group state
-    compressor: dict[str, Any] = {}
-    if coordinator:
-        compressor = coordinator._compressor_manager.diagnostics_snapshot()
+    compressor: dict[str, Any] = runtime.compressor_groups if runtime else {}
 
     # Valve protection state
-    valve: dict[str, Any] = {}
-    if coordinator:
-        valve = coordinator._valve_manager.diagnostics_snapshot()
+    valve: dict[str, Any] = runtime.valve_protection if runtime else {}
 
     return {
         "integration": {

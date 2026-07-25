@@ -26,17 +26,32 @@ class ResidualHeatTracker:
         self._off_power: dict[str, float] = {}
         self._on_since: dict[str, float] = {}
 
-    def get_q_residual(self, area_id: str, system_type: str, previous_mode: str) -> float:
+    def get_q_residual(
+        self,
+        area_id: str,
+        system_type: str,
+        previous_mode: str,
+        *,
+        now: float | None = None,
+    ) -> float:
         """Compute residual heat from previous cycle state."""
         if previous_mode == MODE_HEATING:
             return 0.0
-        return self.simulation_snapshot(area_id, system_type).q_residual
+        return self.simulation_snapshot(area_id, system_type, now=now).q_residual
 
-    def simulation_snapshot(self, area_id: str, system_type: str) -> ResidualHeatSimulationState:
+    def simulation_snapshot(
+        self,
+        area_id: str,
+        system_type: str,
+        *,
+        now: float | None = None,
+    ) -> ResidualHeatSimulationState:
         """Return immutable residual-heat inputs for a forward simulation."""
         if not system_type or area_id not in self._off_since:
             return ResidualHeatSimulationState()
-        elapsed = (time.time() - self._off_since[area_id]) / 60.0
+        if now is None:
+            now = time.time()
+        elapsed = (now - self._off_since[area_id]) / 60.0
         heat_dur = (self._off_since[area_id] - self._on_since.get(area_id, self._off_since[area_id])) / 60.0
         last_pf = self._off_power.get(area_id, 1.0)
         return ResidualHeatSimulationState(

@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import time
+from types import MethodType
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from custom_components.roommind.const import DOMAIN
 from custom_components.roommind.control.thermal_model import RoomModelManager
+from custom_components.roommind.coordinator import RoomMindCoordinator
 from custom_components.roommind.diagnostics import _build_device_states, async_get_config_entry_diagnostics
 from custom_components.roommind.managers.compressor_group_manager import CompressorGroupManager
 from custom_components.roommind.managers.cover_manager import CoverManager
+from custom_components.roommind.managers.residual_heat_tracker import ResidualHeatTracker
 from custom_components.roommind.managers.valve_manager import ValveManager
 from custom_components.roommind.managers.window_manager import WindowManager
 
@@ -61,6 +64,10 @@ def _make_coordinator(
     coordinator.history_store = history_store
     coordinator._model_manager = RoomModelManager()
     coordinator._model_manager._estimators = estimators or {}
+    coordinator._previous_modes = {}
+    coordinator._mode_on_since = {}
+    coordinator._last_valid_temps = {}
+    coordinator._residual_tracker = ResidualHeatTracker()
 
     # Manager fixtures use real owner Modules; diagnostics only consumes their
     # public snapshot Interface.
@@ -82,6 +89,10 @@ def _make_coordinator(
     coordinator._valve_manager = ValveManager(MagicMock())
     coordinator._valve_manager._cycling = valve_cycling or {}
     coordinator._valve_manager._last_actuation = valve_last_actuation or {}
+    coordinator.diagnostics_runtime_snapshot = MethodType(
+        RoomMindCoordinator.diagnostics_runtime_snapshot,
+        coordinator,
+    )
 
     return coordinator
 

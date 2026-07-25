@@ -149,6 +149,35 @@ class AnalyticsRuntimeSnapshot:
     window_open: bool
 
 
+@dataclass(frozen=True, slots=True)
+class RoomDiagnosticsRuntimeSnapshot:
+    """Coordinator-owned runtime diagnostics for one room."""
+
+    live: dict[str, Any]
+    previous_mode: str
+    mode_active_for_s: int | None
+    cached_temp: float | None
+    cached_temp_age_s: int | None
+    q_residual: float
+    model: dict[str, Any] | None
+    window: dict[str, bool | int]
+    cover: dict[str, int | bool | None] | None
+    heat_source_routing: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class CoordinatorDiagnosticsRuntimeSnapshot:
+    """Point-in-time coordinator diagnostics without exposing managers."""
+
+    rooms: dict[str, RoomDiagnosticsRuntimeSnapshot]
+    outdoor_temp: float | None
+    outdoor_humidity: float | None
+    forecast_available: bool
+    forecast_points: int
+    compressor_groups: dict[str, dict[str, Any]]
+    valve_protection: dict[str, dict[str, int]]
+
+
 def _get_area_name(hass: HomeAssistant, area_id: str) -> str:
     """Get human-readable area name from area registry."""
     try:
@@ -2416,6 +2445,51 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             weather_forecast=[dict(point) for point in self._weather_manager.forecast],
             residual=self._residual_tracker.simulation_snapshot(area_id, system_type),
             window_open=self._window_manager.is_paused(area_id),
+        )
+
+    def diagnostics_runtime_snapshot(
+        self,
+        room_configs: dict[str, dict[str, Any]],
+    ) -> CoordinatorDiagnosticsRuntimeSnapshot:
+        """Capture all runtime diagnostics before asynchronous report work."""
+        wall_now = time.time()
+        monotonic_now = time.monotonic()
+        rooms: dict[str, RoomDiagnosticsRuntimeSnapshot] = {}
+
+        for area_id, config in room_configs.items():
+            previous_mode = self._previous_modes.get(area_id, MODE_IDLE)
+            mode_on_since = self._mode_on_since.get(area_id)
+            cached = self._last_valid_temps.get(area_id)
+            rooms[area_id] = RoomDiagnosticsRuntimeSnapshot(
+                live=dict(self.rooms.get(area_id, {})),
+                previous_mode=previous_mode,
+                mode_active_for_s=round(wall_now - mode_on_since) if mode_on_since is not None else None,
+                cached_temp=cached[0] if cached is not None else None,
+                cached_temp_age_s=round(monotonic_now - cached[1]) if cached is not None else None,
+                q_residual=round(
+                    self._residual_tracker.get_q_residual(
+                        area_id,
+                        config.get("heating_system_type", ""),
+                        previous_mode,
+                        now=wall_now,
+                    ),
+                    4,
+                ),
+                model=self._model_manager.diagnostics_snapshot(area_id),
+                window=self._window_manager.diagnostics_snapshot(area_id, now=wall_now),
+                cover=self._cover_manager.diagnostics_snapshot(area_id, now=wall_now),
+                heat_source_routing=self._heat_source_states.get(area_id),
+            )
+
+        forecast = self._weather_manager.forecast
+        return CoordinatorDiagnosticsRuntimeSnapshot(
+            rooms=rooms,
+            outdoor_temp=self.outdoor_temp,
+            outdoor_humidity=self.outdoor_humidity,
+            forecast_available=bool(forecast),
+            forecast_points=len(forecast),
+            compressor_groups=self._compressor_manager.diagnostics_snapshot(now=monotonic_now),
+            valve_protection=self._valve_manager.diagnostics_snapshot(now=wall_now),
         )
 
     # ------------------------------------------------------------------
