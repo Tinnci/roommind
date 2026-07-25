@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from custom_components.roommind.const import MODE_HEATING, MODE_IDLE, TargetTemps
-from custom_components.roommind.control.climate_command_executor import ClimateCommandExecutor
 from custom_components.roommind.control.mpc_controller import AppliedCommandReport, MPCController
 from custom_components.roommind.control.thermal_model import RoomModelManager
 from custom_components.roommind.managers.heat_source_orchestrator import DeviceCommand, HeatSourcePlan
@@ -31,21 +30,6 @@ async def test_async_apply_returns_active_and_inactive_devices():
     assert isinstance(report, AppliedCommandReport)
     assert "climate.living_trv" in report.active_eids
     assert "climate.living_trv" not in report.inactive_eids
-
-
-def test_controller_uses_climate_command_executor():
-    hass = build_hass()
-    room = make_room()
-    ctrl = MPCController(
-        hass,
-        room,
-        model_manager=RoomModelManager(),
-        outdoor_temp=5.0,
-        settings={},
-        has_external_sensor=True,
-    )
-
-    assert isinstance(ctrl._command_executor, ClimateCommandExecutor)
 
 
 @pytest.mark.asyncio

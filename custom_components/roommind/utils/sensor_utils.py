@@ -27,7 +27,7 @@ def _read_climate_attribute(state: Any, value_name: str) -> float | None:
         return None
     try:
         return float(raw)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return None
 
 
@@ -65,7 +65,7 @@ def read_sensor_value(
 
     try:
         return float(state.state)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         _LOGGER.warning(
             "Room '%s': could not parse %s from '%s'",
             area_id,

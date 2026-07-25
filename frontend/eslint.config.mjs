@@ -4,7 +4,7 @@ import lit from "eslint-plugin-lit";
 
 export default [
   {
-    files: ["src/**/*.ts"],
+    files: ["src/**/*.ts", "scripts/**/*.ts", "vite.config.ts"],
     ignores: ["src/**/*.d.ts"],
     languageOptions: {
       parser: tsparser,
@@ -24,6 +24,12 @@ export default [
       "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/explicit-function-return-type": "off",
       "no-console": "warn",
+    },
+  },
+  {
+    files: ["scripts/**/*.ts"],
+    rules: {
+      "no-console": "off",
     },
   },
 ];

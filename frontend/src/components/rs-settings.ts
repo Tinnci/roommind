@@ -144,6 +144,7 @@ export class RsSettings extends LitElement {
     const l = this.hass.language;
 
     return html`
+      <h2 class="settings-group-heading">${localize("settings.group.basics", l)}</h2>
       <rs-settings-panel
         icon="mdi:power"
         .heading=${localize("settings.general_title", l)}
@@ -174,6 +175,7 @@ export class RsSettings extends LitElement {
         ></rs-settings-sensors>
       </rs-settings-panel>
 
+      <h2 class="settings-group-heading">${localize("settings.group.automation", l)}</h2>
       <rs-settings-panel
         icon="mdi:tune-variant"
         .heading=${localize("settings.control_title", l)}
@@ -268,6 +270,7 @@ export class RsSettings extends LitElement {
         ></rs-settings-mold>
       </rs-settings-panel>
 
+      <h2 class="settings-group-heading">${localize("settings.group.maintenance", l)}</h2>
       <rs-settings-panel
         icon="mdi:bell-outline"
         .heading=${localize("notifications.title", l)}
@@ -547,6 +550,20 @@ export class RsSettings extends LitElement {
         padding: 80px 16px;
         text-align: center;
         color: var(--secondary-text-color);
+      }
+
+      .settings-group-heading {
+        margin: 14px 4px -2px;
+        color: var(--secondary-text-color);
+        font-size: 12px;
+        font-weight: 650;
+        letter-spacing: 0.04em;
+        line-height: 1.3;
+        text-transform: uppercase;
+      }
+
+      .settings-group-heading:first-child {
+        margin-top: 2px;
       }
     `,
   ];

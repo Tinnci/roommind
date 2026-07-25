@@ -81,7 +81,7 @@ async function waitFor(url: string, timeoutMs = 10_000): Promise<void> {
 }
 
 async function openCdp(): Promise<CdpSession> {
-  await waitFor(`http://${HOST}:${DEBUG_PORT}/json/version`);
+  await waitFor(`http://${HOST}:${DEBUG_PORT}/json/version`, 20_000);
   const started = Date.now();
   let wsUrl = "";
   while (!wsUrl && Date.now() - started < 8_000) {
@@ -222,6 +222,7 @@ async function run(): Promise<void> {
         "--headless=new",
         "--disable-gpu",
         "--no-sandbox",
+        `--remote-debugging-address=${HOST}`,
         `--remote-debugging-port=${DEBUG_PORT}`,
         `--user-data-dir=${profileDir}`,
         `${BASE_URL}/dev/room-detail-preview.html`,

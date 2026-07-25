@@ -97,7 +97,7 @@ class HVACOutputObserver:
             return None
         try:
             return max(0.0, float(state.state))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return None
 
 
@@ -136,7 +136,7 @@ def _interpolate_curve(curve: list[dict[str, Any]] | None, level: float, value_k
                 continue
             x = max(0.0, min(1.0, float(raw_level)))
             y = max(0.0, float(raw_value))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             continue
         points.append((x, y))
     if not points:

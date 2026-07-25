@@ -41,7 +41,6 @@ from ..utils.device_utils import (
     has_reliable_hvac_modes,
 )
 from ..utils.temp_utils import celsius_to_ha_temp
-from .climate_command_executor import ClimateCommandExecutor
 from .forecast_series import build_outdoor_temperature_series
 from .mpc_optimizer import MPCOptimizer, MPCPlan
 from .residual_heat import get_min_run_blocks
@@ -136,7 +135,7 @@ def _resolve_idle_setpoint(
         if raw is not None:
             try:
                 val = float(raw)
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 val = -1.0
             if val > 0:
                 min_temp = val
@@ -173,14 +172,14 @@ async def _send_idle_setpoint(
             dev_min_f = float(dev_min)
             if setpoint < dev_min_f:
                 setpoint = dev_min_f
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             pass
     if dev_max is not None:
         try:
             dev_max_f = float(dev_max)
             if setpoint > dev_max_f:
                 setpoint = dev_max_f
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             pass
     if current is not None and round(float(current), 1) == round(setpoint, 1):
         return
@@ -813,7 +812,6 @@ class MPCController:
         self._w_comfort = max(1.0, cw / 10.0)
         self._w_energy = max(1.0, (100 - cw) / 10.0)
         self._optimizer_strategy = str(s.get("optimizer_strategy", "greedy"))
-        self._command_executor = ClimateCommandExecutor(self)
 
     async def async_evaluate(
         self,
@@ -1271,42 +1269,6 @@ class MPCController:
         compressor_forced_off: set[str] | None = None,
     ) -> AppliedCommandReport:
         """Apply a controller intent and return the actual command report."""
-        executor_kwargs: dict[str, Any] = {
-            "power_fraction": power_fraction,
-            "current_temp": current_temp,
-            "exclude_eids": exclude_eids,
-            "heating_boost_target": heating_boost_target,
-            "ac_heating_boost_target": ac_heating_boost_target,
-            "cooling_boost_target": cooling_boost_target,
-            "heat_source_plan": heat_source_plan,
-            "compressor_forced_on": compressor_forced_on,
-            "compressor_forced_off": compressor_forced_off,
-        }
-        if target_temp is not _SENTINEL:
-            executor_kwargs["target_temp"] = target_temp
-        return await self._command_executor.async_apply(
-            mode,
-            targets,
-            **executor_kwargs,
-        )
-
-    async def _async_execute_apply_request(
-        self,
-        mode: str,
-        targets: TargetTemps | float | None = None,
-        power_fraction: float = 1.0,
-        current_temp: float | None = None,
-        exclude_eids: set[str] | None = None,
-        *,
-        target_temp: float | None | object = _SENTINEL,
-        heating_boost_target: float | None = None,
-        ac_heating_boost_target: float | None = None,
-        cooling_boost_target: float | None = None,
-        heat_source_plan: HeatSourcePlan | None = None,
-        compressor_forced_on: set[str] | None = None,
-        compressor_forced_off: set[str] | None = None,
-    ) -> AppliedCommandReport:
-        """Execute HA service calls for a determined mode."""
         report = AppliedCommandReport()
         _forced_on = compressor_forced_on or set()
         _forced_off = compressor_forced_off or set()

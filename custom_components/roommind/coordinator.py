@@ -2048,7 +2048,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             if state and state.attributes.get("current_temperature") is not None:
                 try:
                     return float(state.attributes["current_temperature"])
-                except (ValueError, TypeError):
+                except ValueError, TypeError:
                     continue
         return None
 

@@ -2,9 +2,12 @@
 
 # RoomMind Devcontainer Setup Script
 
-set -e
+set -euo pipefail
 
-WORKSPACE="/workspaces/roommind"
+WORKSPACE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BUN_INSTALL="${HOME}/.bun"
+UV_BIN_DIR="${HOME}/.local/bin"
+export PATH="${BUN_INSTALL}/bin:${UV_BIN_DIR}:${PATH}"
 
 echo "Setting up RoomMind development environment..."
 
@@ -12,10 +15,12 @@ echo "Setting up RoomMind development environment..."
 # System packages
 # ---------------------------------------------------------------------------
 echo "Updating system packages..."
-# Remove Yarn repo if present — its GPG key frequently expires and blocks apt-get update
+# Remove Yarn repo if present; its GPG key frequently expires and blocks apt-get update.
 sudo rm -f /etc/apt/sources.list.d/yarn.list
 sudo apt-get update
 sudo apt-get install -y \
+    ca-certificates \
+    curl \
     build-essential \
     pkg-config \
     libffi-dev \
@@ -49,29 +54,27 @@ sudo apt-get install -y \
     libpcap0.8
 
 # ---------------------------------------------------------------------------
+# Toolchain
+# ---------------------------------------------------------------------------
+echo "Installing uv and Bun..."
+if ! command -v uv >/dev/null 2>&1; then
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+fi
+
+if ! command -v bun >/dev/null 2>&1; then
+    curl -fsSL https://bun.sh/install | bash
+fi
+
+# ---------------------------------------------------------------------------
 # Python dependencies
 # ---------------------------------------------------------------------------
-echo "Installing Python dependencies..."
-pip install --upgrade pip setuptools wheel
-
-echo "Installing Home Assistant..."
-pip install homeassistant
-
-echo "Installing development dependencies..."
-pip install pytest-homeassistant-custom-component
-
-pip install \
-    pytest \
-    pytest-asyncio \
-    pytest-cov \
-    voluptuous \
-    ruff \
-    mypy \
-    pre-commit
+echo "Installing Python dependencies with uv..."
+cd "${WORKSPACE}"
+uv sync --locked --group dev
 
 # Performance libraries to suppress HA warnings
 echo "Installing performance libraries..."
-pip install zlib-ng isal
+uv pip install zlib-ng isal
 
 # ---------------------------------------------------------------------------
 # Home Assistant config directory (set up BEFORE ensure_config)
@@ -87,45 +90,49 @@ sudo chown -R vscode:vscode /config
 
 echo "Setting up configuration..."
 cp "${WORKSPACE}/.devcontainer/configuration.yaml" /config/configuration.yaml
-cp "${WORKSPACE}/.devcontainer/automations.yaml"   /config/automations.yaml
-cp "${WORKSPACE}/.devcontainer/scripts.yaml"       /config/scripts.yaml
-cp "${WORKSPACE}/.devcontainer/scenes.yaml"        /config/scenes.yaml
+cp "${WORKSPACE}/.devcontainer/automations.yaml" /config/automations.yaml
+cp "${WORKSPACE}/.devcontainer/scripts.yaml" /config/scripts.yaml
+cp "${WORKSPACE}/.devcontainer/scenes.yaml" /config/scenes.yaml
 
-# Symlink the custom component into HA
 echo "Linking custom component..."
 ln -sf "${WORKSPACE}/custom_components/roommind" /config/custom_components/roommind
 
 # ---------------------------------------------------------------------------
 # Pre-install HA component dependencies
 # ---------------------------------------------------------------------------
-# pip install homeassistant only installs the base package; built-in
-# components lazily pip-install their deps at runtime, which causes
-# transient ModuleNotFoundErrors on first boot. Pre-install the known
-# packages so HA starts cleanly on every boot.
+# uv sync installs the Home Assistant package; built-in components lazily
+# install their deps at runtime, which causes transient ModuleNotFoundErrors
+# on first boot. Pre-install the known packages so HA starts cleanly.
 echo "Pre-installing HA component dependencies..."
-pip install hassil mutagen home-assistant-intents home-assistant-frontend
+uv pip install hassil mutagen home-assistant-intents home-assistant-frontend
 
 # ---------------------------------------------------------------------------
 # Frontend dependencies
 # ---------------------------------------------------------------------------
 echo "Installing frontend dependencies..."
 cd "${WORKSPACE}/frontend"
-npm ci
+bun install --frozen-lockfile
 cd "${WORKSPACE}"
 
 # ---------------------------------------------------------------------------
 # Helper scripts
 # ---------------------------------------------------------------------------
-cat > /config/start_ha.sh << 'EOF'
+cat > /config/start_ha.sh << EOF
 #!/bin/bash
-pkill -f "hass --config" 2>/dev/null; sleep 1
+set -euo pipefail
+WORKSPACE="${WORKSPACE}"
+export PATH="\${HOME}/.bun/bin:\${HOME}/.local/bin:\${PATH}"
+pkill -f "hass --config" 2>/dev/null || true
+sleep 1
 echo "Starting Home Assistant..."
-hass --config /config --log-file /config/logs/home-assistant.log
+cd "\${WORKSPACE}"
+uv run hass --config /config --log-file /config/logs/home-assistant.log
 EOF
 chmod +x /config/start_ha.sh
 
 cat > /config/restart_ha.sh << 'EOF'
 #!/bin/bash
+set -euo pipefail
 echo "Restarting Home Assistant..."
 pkill -f "hass --config" 2>/dev/null || true
 sleep 2
@@ -136,12 +143,17 @@ chmod +x /config/restart_ha.sh
 
 cat > /config/logs.sh << 'EOF'
 #!/bin/bash
+set -euo pipefail
 tail -f /config/logs/home-assistant.log
 EOF
 chmod +x /config/logs.sh
 
-cat > /config/check_setup.sh << 'EOF'
+cat > /config/check_setup.sh << EOF
 #!/bin/bash
+set -euo pipefail
+WORKSPACE="${WORKSPACE}"
+export PATH="\${HOME}/.bun/bin:\${HOME}/.local/bin:\${PATH}"
+cd "\${WORKSPACE}"
 echo "Checking development environment..."
 
 echo ""
@@ -158,11 +170,11 @@ head -10 /config/configuration.yaml
 
 echo ""
 echo "Python packages:"
-pip list 2>/dev/null | grep -iE "(homeassistant|voluptuous|pytest)"
+uv pip list 2>/dev/null | grep -iE "(homeassistant|voluptuous|pytest)"
 
 echo ""
 echo "Testing Home Assistant imports:"
-python3 -c "
+uv run python -c "
 from homeassistant.const import __version__
 print(f'  homeassistant {__version__}')
 
@@ -174,9 +186,9 @@ print(f'  roommind integration OK (domain={DOMAIN})')
 " || echo "Import check failed"
 
 echo ""
-echo "Node / frontend:"
-node --version 2>/dev/null | xargs -I{} echo "  node {}"
-npx tsc --version 2>/dev/null | xargs -I{} echo "  tsc {}"
+echo "Bun / frontend:"
+bun --version 2>/dev/null | xargs -I{} echo "  bun {}"
+(cd frontend && bun --bun tsgo --version) 2>/dev/null | xargs -I{} echo "  tsgo {}"
 
 echo ""
 echo "Environment check complete!"
@@ -188,14 +200,14 @@ chmod +x /config/check_setup.sh
 # ---------------------------------------------------------------------------
 echo "Installing pre-commit hooks..."
 cd "${WORKSPACE}"
-pre-commit install
+uv run pre-commit install
 
 # ---------------------------------------------------------------------------
 # Build frontend once so HA can load the panel
 # ---------------------------------------------------------------------------
 echo "Building frontend..."
 cd "${WORKSPACE}/frontend"
-npm run build
+bun run build
 cd "${WORKSPACE}"
 
 # ---------------------------------------------------------------------------
@@ -203,11 +215,11 @@ cd "${WORKSPACE}"
 # ---------------------------------------------------------------------------
 echo ""
 echo "Verifying environment..."
-python -c "from homeassistant.const import __version__; print('  homeassistant', __version__)"
-python -c "import voluptuous; print('  voluptuous OK')"
-python -c "import pytest; print('  pytest', pytest.__version__)"
-node --version | xargs -I{} echo "  node {}"
-npx --prefix "${WORKSPACE}/frontend" tsc --version | xargs -I{} echo "  tsc {}"
+uv run python -c "from homeassistant.const import __version__; print('  homeassistant', __version__)"
+uv run python -c "import voluptuous; print('  voluptuous OK')"
+uv run python -c "import pytest; print('  pytest', pytest.__version__)"
+bun --version | xargs -I{} echo "  bun {}"
+(cd "${WORKSPACE}/frontend" && bun --bun tsgo --version) | xargs -I{} echo "  tsgo {}"
 echo ""
 echo "Development environment ready!"
 echo ""
@@ -219,5 +231,5 @@ echo ""
 echo "  /config/restart_ha.sh   - restart HA"
 echo "  /config/logs.sh         - tail HA logs"
 echo "  /config/check_setup.sh  - verify environment"
-echo "  npm run build           - rebuild frontend (in frontend/)"
-echo "  pytest tests/ -x        - run backend tests"
+echo "  bun run build           - rebuild frontend (in frontend/)"
+echo "  uv run pytest tests/ -x - run backend tests"

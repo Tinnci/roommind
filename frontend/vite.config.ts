@@ -11,7 +11,7 @@ export default defineConfig({
       fileName: () => "roommind-panel.js",
     },
     outDir: "../custom_components/roommind/frontend",
-    emptyOutDir: false,
+    emptyOutDir: true,
     rollupOptions: {
       // No external dependencies – everything is bundled
     },

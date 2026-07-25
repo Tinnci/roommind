@@ -201,7 +201,7 @@ class HistoryStore:
                     if end_ts is not None and ts > end_ts:
                         continue
                     filtered.append(r)
-                except (ValueError, TypeError, KeyError):
+                except ValueError, TypeError, KeyError:
                     pass  # skip rows with corrupt timestamps
             rows = filtered
         return rows
@@ -217,7 +217,7 @@ class HistoryStore:
         for r in detail_rows:
             try:
                 ts = float(r["timestamp"])
-            except (ValueError, TypeError, KeyError):
+            except ValueError, TypeError, KeyError:
                 continue
             if ts >= cutoff:
                 keep.append(r)
@@ -278,7 +278,7 @@ class HistoryStore:
             if value != "":
                 try:
                     vals.append(float(value))
-                except (ValueError, TypeError):
+                except ValueError, TypeError:
                     pass
         return round(sum(vals) / len(vals), 2) if vals else ""
 
@@ -309,7 +309,7 @@ class HistoryStore:
         """Return timestamp as float, or 0.0 on failure."""
         try:
             return float(row["timestamp"])
-        except (ValueError, TypeError, KeyError):
+        except ValueError, TypeError, KeyError:
             return 0.0
 
     def _append_history(self, area_id: str, rows: list[dict]) -> None:

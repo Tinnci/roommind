@@ -39,6 +39,7 @@ describe("selectHeroMetricIds", () => {
     const ids = selectHeroMetricIds({
       isOutdoor: false,
       climateControlActive: true,
+      roomControlEnabled: true,
       live: {
         ...baseLive,
         current_humidity: 58,
@@ -59,6 +60,7 @@ describe("selectHeroMetricIds", () => {
     const ids = selectHeroMetricIds({
       isOutdoor: true,
       climateControlActive: true,
+      roomControlEnabled: true,
       live: {
         ...baseLive,
         current_humidity: 58,
@@ -69,5 +71,23 @@ describe("selectHeroMetricIds", () => {
     });
 
     expect(ids).toEqual(["humidity"]);
+  });
+
+  test("hides stale actuation metrics when this room is not controlled", () => {
+    const ids = selectHeroMetricIds({
+      isOutdoor: false,
+      climateControlActive: true,
+      roomControlEnabled: false,
+      live: {
+        ...baseLive,
+        current_humidity: 58,
+        perceived_temp: 22,
+        rapid_recovery_active: true,
+        device_setpoint: 23,
+        active_heat_sources: "both",
+      },
+    });
+
+    expect(ids).toEqual(["notControlled", "perceivedTemp", "humidity"]);
   });
 });

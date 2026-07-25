@@ -132,7 +132,7 @@ class RCModel:
                 k = max(0.0, float(term.get("k", 0.0)))
                 gate = max(0.0, min(1.0, float(term.get("gate", 1.0))))
                 adjacent_temp = float(term["temperature"])
-            except (KeyError, TypeError, ValueError):
+            except KeyError, TypeError, ValueError:
                 continue
             rate = k * gate
             coupling_rate += rate

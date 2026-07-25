@@ -16,10 +16,11 @@ export interface HeroMetricSelectionInput {
   live: RoomLiveData;
   isOutdoor: boolean;
   climateControlActive: boolean;
+  roomControlEnabled: boolean;
 }
 
 export function selectHeroMetricIds(input: HeroMetricSelectionInput): HeroMetricId[] {
-  const { live, isOutdoor, climateControlActive } = input;
+  const { live, isOutdoor, climateControlActive, roomControlEnabled } = input;
 
   if (isOutdoor) {
     return live.current_humidity !== null ? ["humidity"] : [];
@@ -32,23 +33,26 @@ export function selectHeroMetricIds(input: HeroMetricSelectionInput): HeroMetric
   if (live.learning_paused_reason === "outdoor_unavailable") {
     candidates.push("learningPaused");
   }
-  if (!climateControlActive) {
+  const controlEnabled = climateControlActive && roomControlEnabled;
+  if (!controlEnabled) {
     candidates.push("notControlled");
   }
-  if (live.rapid_recovery_active) {
+  if (controlEnabled && live.rapid_recovery_active) {
     candidates.push("rapidRecovery");
   }
   if (live.night_mode?.active) {
     candidates.push("nightMode");
   }
-  if (live.mold_prevention_active) {
-    candidates.push("moldPrevention");
-  }
-  if (live.device_setpoint != null) {
-    candidates.push("deviceSetpoint");
-  }
-  if (live.active_heat_sources && live.active_heat_sources !== "none") {
-    candidates.push("activeHeatSources");
+  if (controlEnabled) {
+    if (live.mold_prevention_active) {
+      candidates.push("moldPrevention");
+    }
+    if (live.device_setpoint != null) {
+      candidates.push("deviceSetpoint");
+    }
+    if (live.active_heat_sources && live.active_heat_sources !== "none") {
+      candidates.push("activeHeatSources");
+    }
   }
   if (live.perceived_temp != null) {
     candidates.push("perceivedTemp");

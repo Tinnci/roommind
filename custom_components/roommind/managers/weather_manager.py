@@ -85,7 +85,7 @@ class WeatherManager:
             converted = dict(f)
             try:
                 raw_temp = float(f["temperature"])
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 converted.pop("temperature", None)
                 result.append(converted)
                 continue
@@ -113,7 +113,7 @@ class WeatherManager:
                 continue
             try:
                 value = float(cc)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 series.append(None)
                 continue
             series.append(value if math.isfinite(value) else None)

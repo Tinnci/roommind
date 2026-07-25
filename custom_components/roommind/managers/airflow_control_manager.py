@@ -249,7 +249,7 @@ def _fan_observed_q(state: str, attrs: dict[str, Any]) -> float:
     if percentage is not None:
         try:
             q = _clamp_level(float(percentage) / 100.0)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return 1.0
         if q > 0.0 or not preset_mode:
             return q

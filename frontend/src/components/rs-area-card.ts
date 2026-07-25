@@ -6,6 +6,7 @@ import { modeStyles } from "../styles/shared-mode-styles";
 import { localize } from "../utils/localize";
 import { mdiEyeOff } from "../utils/icons";
 import { formatTemp, tempUnit, toDisplayDelta } from "../utils/temperature";
+import { isOverrideEffective } from "../utils/room-overview-status";
 
 @customElement("rs-area-card")
 export class RsAreaCard extends LitElement {
@@ -607,8 +608,14 @@ export class RsAreaCard extends LitElement {
         <span class="badge-row">
           ${live.override_active
             ? html`<span class="status-badge override">
-                <ha-icon icon="mdi:timer-outline"></ha-icon>
-                ${localize("card.override_active", this.hass.language)}
+                <ha-icon
+                  icon=${isOverrideEffective(this.config!, this.climateControlActive)
+                    ? "mdi:timer-outline"
+                    : "mdi:pause-circle-outline"}
+                ></ha-icon>
+                ${isOverrideEffective(this.config!, this.climateControlActive)
+                  ? localize("card.override_active", this.hass.language)
+                  : localize("card.override_paused", this.hass.language)}
               </span>`
             : nothing}
           ${live.window_open

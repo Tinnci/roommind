@@ -216,7 +216,7 @@ class SensorFusionManager:
                 static_c = float(raw_bias.get("static_c", 0.0))
                 active_c = float(raw_bias.get("active_c", 0.0))
                 k_mix = float(raw_bias.get("k_mix", 0.0))
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 continue
             manager._biases[entity_id] = SensorBiasState(
                 static_c=manager._clamp(static_c, manager._STATIC_MIN, manager._STATIC_MAX),

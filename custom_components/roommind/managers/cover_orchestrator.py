@@ -182,7 +182,7 @@ class CoverOrchestrator:
                             )
                         try:
                             _forced_position = max(0, min(100, int(_block_pos))) if _block_pos is not None else 0
-                        except (ValueError, TypeError):
+                        except ValueError, TypeError:
                             _forced_position = 0
                         _forced_reason = "schedule_active"
 

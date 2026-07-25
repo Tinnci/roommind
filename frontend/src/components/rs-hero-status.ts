@@ -748,6 +748,7 @@ export class RsHeroStatus extends LitElement {
                   live,
                   isOutdoor: this.isOutdoor,
                   climateControlActive: this.climateControlActive,
+                  roomControlEnabled: this.config?.climate_control_enabled ?? true,
                 }).map((metric) => this._renderHeroMetric(metric, live))}
               </div>
             `

@@ -632,7 +632,7 @@ class MPCOptimizer:
             try:
                 x = max(0.0, min(1.0, float(item.get("level", 0.0))))
                 y = float(item[key])
-            except (KeyError, TypeError, ValueError):
+            except KeyError, TypeError, ValueError:
                 continue
             points.append((x, y))
         if not points:

@@ -80,7 +80,7 @@ def resolve_target_at_time(
             try:
                 val = float(block_temp)
                 return block_temp_converter(val) if block_temp_converter else val
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 pass
         return comfort_temp
     # Not in any block → eco or off
@@ -105,13 +105,13 @@ def resolve_targets_from_schedule_data(
             try:
                 val = float(heat_temp_raw)
                 heat = block_temp_converter(val) if block_temp_converter else val
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 pass
         if cool_temp_raw is not None:
             try:
                 val = float(cool_temp_raw)
                 cool = block_temp_converter(val) if block_temp_converter else val
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 pass
         return TargetTemps(heat=heat, cool=cool)
 
@@ -121,7 +121,7 @@ def resolve_targets_from_schedule_data(
             val = float(block_temp)
             temp = block_temp_converter(val) if block_temp_converter else val
             return TargetTemps(heat=temp, cool=temp)
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             pass
 
     return TargetTemps(heat=comfort_heat, cool=comfort_cool)
@@ -207,7 +207,7 @@ def resolve_schedule_index(
     if selector_entity.startswith("input_number."):
         try:
             idx = int(float(state.state)) - 1  # 1-based → 0-based
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return 0
         if 0 <= idx < len(schedules):
             return idx

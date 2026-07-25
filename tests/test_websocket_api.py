@@ -2086,9 +2086,32 @@ def test_save_room_cover_deploy_threshold_rejects_negative():
         ("thermostats", ["climate.roommind_living_room_override"]),
         ("acs", ["climate.roommind_living_room_override"]),
         ("temperature_sensor", "sensor.roommind_living_room_target_temp"),
+        ("temperature_sensors", ["sensor.external_temp", "sensor.roommind_living_room_target_temp"]),
         ("humidity_sensor", "sensor.roommind_living_room_mode"),
+        ("humidity_sensors", ["sensor.external_humidity", "sensor.roommind_living_room_mode"]),
         ("window_sensors", ["binary_sensor.roommind_test"]),
+        ("occupancy_sensors", ["binary_sensor.roommind_test"]),
         ("covers", ["cover.roommind_living_room_auto"]),
+        (
+            "airflow_devices",
+            [
+                {
+                    "entity_id": "fan.living_room",
+                    "role": "circulation",
+                    "power_sensor_entity": "sensor.roommind_living_room_mode",
+                }
+            ],
+        ),
+        ("night_controls", [{"entity_id": "switch.roommind_living_room_control"}]),
+        (
+            "adjacent_rooms",
+            [
+                {
+                    "area_id": "bedroom",
+                    "link_sensor_entity": "binary_sensor.roommind_bedroom_window",
+                }
+            ],
+        ),
     ],
 )
 async def test_save_room_rejects_own_entities(ws_hass, store, connection, field, value):

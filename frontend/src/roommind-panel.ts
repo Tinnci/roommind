@@ -6,6 +6,12 @@ import { loadHaElements } from "./load-ha-elements";
 import { localize } from "./utils/localize";
 import { mdiEyeOff } from "./utils/icons";
 import { roommindThemeStyles } from "./styles/theme-styles";
+import { formatTemp, tempUnit } from "./utils/temperature";
+import {
+  isOverrideEffective,
+  isRoomControlEffective,
+  summarizeRoomOverview,
+} from "./utils/room-overview-status";
 import "./components/rs-settings";
 import "./components/rs-analytics";
 
@@ -332,6 +338,11 @@ export class RoomMindPanel extends LitElement {
         color: var(--roommind-warning-color);
       }
 
+      .overview-icon.monitoring {
+        background: var(--roommind-info-tint);
+        color: var(--roommind-info-color);
+      }
+
       .overview-copy {
         flex: 1;
         min-width: 0;
@@ -365,6 +376,56 @@ export class RoomMindPanel extends LitElement {
         flex-wrap: wrap;
         gap: 6px;
         margin-top: 10px;
+      }
+
+      .overview-policy {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px 12px;
+        width: 100%;
+        margin-top: 10px;
+        padding: 8px 10px;
+        border: var(--roommind-border-faint);
+        border-radius: 8px;
+        background: var(--roommind-primary-muted);
+        color: var(--primary-text-color);
+        box-sizing: border-box;
+      }
+
+      .overview-policy ha-icon {
+        --mdc-icon-size: 18px;
+        color: var(--primary-color);
+      }
+
+      .overview-policy-copy {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        min-width: 0;
+      }
+
+      .overview-policy-label {
+        color: var(--secondary-text-color);
+        font-size: 11px;
+        line-height: 1.2;
+      }
+
+      .overview-policy-value {
+        font-size: 13px;
+        font-weight: 650;
+        line-height: 1.3;
+      }
+
+      .overview-policy-exception {
+        margin-left: auto;
+        padding: 3px 8px;
+        border-radius: 8px;
+        background: var(--roommind-surface);
+        color: var(--secondary-text-color);
+        font-size: 12px;
+        font-weight: 600;
+        white-space: nowrap;
       }
 
       .overview-flag {
@@ -703,12 +764,20 @@ export class RoomMindPanel extends LitElement {
     }
 
     const configuredCount = areaInfos.filter((i) => i.config).length;
-    const heatingCount = areaInfos.filter((i) => i.config?.live?.mode === "heating").length;
-    const coolingCount = areaInfos.filter((i) => i.config?.live?.mode === "cooling").length;
-    const activeCount = heatingCount + coolingCount;
+    const overviewStatus = summarizeRoomOverview(
+      areaInfos.flatMap((info) => (info.config ? [info.config] : [])),
+      this._climateControlActive,
+    );
+    const {
+      activeCount,
+      heatingCount,
+      coolingCount,
+      externalActiveCount,
+      effectiveOverrideCount,
+      pausedOverrideCount,
+    } = overviewStatus;
     const windowOpenCount = areaInfos.filter((i) => i.config?.live?.window_open).length;
     const awayCount = areaInfos.filter((i) => i.config?.live?.presence_away).length;
-    const overrideCount = areaInfos.filter((i) => i.config?.live?.override_active).length;
     const moldCount = areaInfos.filter(
       (i) =>
         i.config?.live?.mold_risk_level === "warning" ||
@@ -719,15 +788,25 @@ export class RoomMindPanel extends LitElement {
         ? localize("panel.overview.attention", l, { count: moldCount + windowOpenCount })
         : activeCount > 0
           ? localize("panel.overview.active", l, { count: activeCount })
-          : localize("panel.overview.stable", l);
+          : externalActiveCount > 0
+            ? localize("panel.overview.external", l, { count: externalActiveCount })
+            : localize("panel.overview.stable", l);
     const overviewIconClass =
-      moldCount > 0 || windowOpenCount > 0 ? "warning" : activeCount > 0 ? "active" : "";
+      moldCount > 0 || windowOpenCount > 0
+        ? "warning"
+        : activeCount > 0
+          ? "active"
+          : externalActiveCount > 0
+            ? "monitoring"
+            : "";
     const overviewIcon =
       moldCount > 0 || windowOpenCount > 0
         ? "mdi:alert-circle-outline"
         : activeCount > 0
           ? "mdi:thermostat"
-          : "mdi:check-circle-outline";
+          : externalActiveCount > 0
+            ? "mdi:eye-outline"
+            : "mdi:check-circle-outline";
     return html`
       ${configuredCount > 0 || hiddenAreaInfos.length > 0
         ? html`
@@ -744,13 +823,33 @@ export class RoomMindPanel extends LitElement {
                       total: areaInfos.length,
                     })}
                   </div>
+                  ${this._vacationActive
+                    ? html`<div class="overview-policy">
+                        <ha-icon icon="mdi:airplane"></ha-icon>
+                        <span class="overview-policy-copy">
+                          <span class="overview-policy-label"
+                            >${localize("panel.policy.scope", l)}</span
+                          >
+                          <span class="overview-policy-value">
+                            ${localize("panel.policy.vacation", l, {
+                              temp:
+                                this._vacationTemp !== null
+                                  ? formatTemp(this._vacationTemp, this.hass)
+                                  : "--",
+                              unit: tempUnit(this.hass),
+                            })}
+                          </span>
+                        </span>
+                        ${effectiveOverrideCount > 0
+                          ? html`<span class="overview-policy-exception">
+                              ${localize("panel.policy.exceptions", l, {
+                                count: effectiveOverrideCount,
+                              })}
+                            </span>`
+                          : nothing}
+                      </div>`
+                    : nothing}
                   <div class="overview-flags">
-                    ${this._vacationActive
-                      ? html`<span class="overview-flag">
-                          <ha-icon icon="mdi:airplane"></ha-icon>
-                          ${localize("panel.stat.vacation", l)}
-                        </span>`
-                      : nothing}
                     ${this._presenceEnabled && !this._anyoneHome
                       ? html`<span class="overview-flag">
                           <ha-icon icon="mdi:home-off-outline"></ha-icon>
@@ -769,10 +868,20 @@ export class RoomMindPanel extends LitElement {
                           ${localize("panel.stat.rooms_away", l, { count: awayCount })}
                         </span>`
                       : nothing}
-                    ${overrideCount > 0
+                    ${!this._vacationActive && effectiveOverrideCount > 0
                       ? html`<span class="overview-flag">
                           <ha-icon icon="mdi:timer-outline"></ha-icon>
-                          ${localize("panel.stat.overrides", l, { count: overrideCount })}
+                          ${localize("panel.stat.overrides", l, {
+                            count: effectiveOverrideCount,
+                          })}
+                        </span>`
+                      : nothing}
+                    ${pausedOverrideCount > 0
+                      ? html`<span class="overview-flag">
+                          <ha-icon icon="mdi:pause-circle-outline"></ha-icon>
+                          ${localize("panel.stat.overrides_paused", l, {
+                            count: pausedOverrideCount,
+                          })}
                         </span>`
                       : nothing}
                   </div>
@@ -951,7 +1060,12 @@ export class RoomMindPanel extends LitElement {
     ) {
       return "attention";
     }
-    if (live?.mode === "heating" || live?.mode === "cooling" || live?.override_active) {
+    if (
+      isRoomControlEffective(info.config, this._climateControlActive) &&
+      (live?.mode === "heating" ||
+        live?.mode === "cooling" ||
+        isOverrideEffective(info.config, this._climateControlActive))
+    ) {
       return "active";
     }
     return "monitoring";

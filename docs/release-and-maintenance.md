@@ -19,8 +19,15 @@ Run the focused checks while developing:
 ```bash
 uv run pytest tests/ -q
 uv run ruff check .
+uv run ruff format --check custom_components/ tests/ scripts/
 uv run mypy --explicit-package-bases custom_components/roommind
-cd frontend && bun run typecheck && bun run lint && bun run format:check && bun run build
+cd frontend && bun run test && bun run typecheck && bun run lint && bun run format:check && bun run build
+```
+
+For frontend layout changes, also run:
+
+```bash
+cd frontend && bun run preview:regression
 ```
 
 Run pre-commit before publishing a branch:
@@ -38,13 +45,14 @@ cd frontend
 bun install --frozen-lockfile
 bun run build
 cd ..
-uv run python scripts/build_release_package.py --output dist/roommind.zip --tag v1.7.6
+uv run --locked python scripts/build_release_package.py --output dist/roommind.zip --tag v1.7.16
 ```
 
 The package script validates:
 
 - `custom_components/roommind/manifest.json` exists
-- `custom_components/roommind/frontend/roommind-panel.js` exists
+- `custom_components/roommind/frontend/roommind-panel.js` exists and is not empty
+- `custom_components/roommind/const.py` `VERSION` matches the manifest version
 - manifest version matches the release tag when `--tag` is provided
 
 The zip is deterministic and excludes Python caches, `.DS_Store`, and source maps.
@@ -54,12 +62,12 @@ The zip is deterministic and excludes Python caches, `.DS_Store`, and source map
 CI keeps these paths separate:
 
 - Python tests and coverage through `uv`
-- frontend typecheck, lint, format check, build, and package smoke test through Bun plus Python stdlib
+- frontend unit tests, typecheck, lint, format check, build, and package smoke test through Bun plus Python stdlib
 - Ruff and mypy static checks through `uv`
 - HACS validation
 - hassfest validation
 
-Release workflow builds the frontend, creates `dist/roommind.zip`, uploads it as a workflow artifact, and attaches it to the GitHub release.
+Release workflow runs HACS validation, hassfest, backend tests, Ruff, mypy, frontend checks, and build before creating `dist/roommind.zip`. It uploads the zip as a workflow artifact and attaches it to the GitHub release.
 
 ## Dependabot
 

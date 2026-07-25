@@ -57,6 +57,17 @@ describe("room config draft", () => {
     expect(draft.coversOutdoorMinTemp).toBe(10);
   });
 
+  test("preserves a disabled outdoor cover gate across a save round-trip", () => {
+    const draft = createRoomConfigDraft({
+      ...baseConfig,
+      covers_outdoor_min_temp: null,
+    });
+
+    const payload = buildRoomSavePayload("living_room", draft);
+
+    expect(payload.covers_outdoor_min_temp).toBeNull();
+  });
+
   test("builds the websocket save payload with primary temperature sensor first and no duplicates", () => {
     const draft = createRoomConfigDraft(baseConfig);
     draft.selectedTempSensor = "sensor.secondary_temp";

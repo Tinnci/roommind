@@ -44,7 +44,7 @@ def _safe_float(value: str) -> float | None:
         return None
     try:
         return float(value)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return None
 
 
@@ -54,7 +54,7 @@ def _safe_int(value: str) -> int | None:
         return None
     try:
         return int(float(value))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return None
 
 

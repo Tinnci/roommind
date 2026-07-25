@@ -1,4 +1,9 @@
-import type { AirflowDeviceConfig, AirflowRole, CurvePoint } from "../types";
+import type {
+  AirflowDeviceConfig,
+  AirflowRole,
+  CapacityCurvePoint,
+  PowerCurvePoint,
+} from "../types";
 
 export interface AirflowBehaviorPreferences {
   preferred_direction?: string;
@@ -19,8 +24,8 @@ export interface AirflowModelingProfile {
   assumed_state_ttl?: number | null;
   assumed_state_ttl_s?: number;
   compressor_stage_observer?: "auto" | "power_sensor" | "thermal_slope" | "disabled";
-  fan_capacity_curve?: CurvePoint[];
-  fan_power_curve?: CurvePoint[];
+  fan_capacity_curve?: CapacityCurvePoint[];
+  fan_power_curve?: PowerCurvePoint[];
 }
 
 export interface AirflowDeviceUiSchema {

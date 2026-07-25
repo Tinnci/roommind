@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.7.16 - 2026-07-07
+
+### Added
+
+- Added ground-truth observation storage and thermal analysis support for analytics and diagnostics.
+- Added expanded room sensor and airflow setup controls in the room detail UI.
+- Added release workflow support for packaging from version tags.
+
+### Changed
+
+- Improved the RoomMind UI hierarchy, configuration hub, and room detail layout.
+- Clarified the temperature override apply flow with dedicated frontend copy and controls.
+
+### Fixed
+
+- Fixed configuration card text overflow in compact layouts.
+- Hardened SSH deployment so remote command failures stop the script and password-auth deployments can use `SSHPASS`.
+- Hardened release packaging and validation around version consistency, cache exclusion, and frontend regression coverage.
+
 ## 1.7.6 - 2026-06-17
 
 ### Added

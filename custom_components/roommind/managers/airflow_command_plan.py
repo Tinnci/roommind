@@ -272,7 +272,7 @@ def supports_feature(attrs: dict[str, Any], feature: Any) -> bool:
         return True
     try:
         return bool(int(supported) & int(feature))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return True
 
 

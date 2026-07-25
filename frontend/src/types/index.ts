@@ -110,6 +110,14 @@ export interface CurvePoint {
   power_w?: number;
 }
 
+export interface CapacityCurvePoint extends CurvePoint {
+  capacity_factor: number;
+}
+
+export interface PowerCurvePoint extends CurvePoint {
+  power_w: number;
+}
+
 export interface AirflowDeviceConfig {
   entity_id: string;
   role: AirflowRole;
@@ -130,8 +138,8 @@ export interface AirflowDeviceConfig {
   assumed_state_ttl?: number | null;
   assumed_state_ttl_s?: number;
   compressor_stage_observer?: "auto" | "power_sensor" | "thermal_slope" | "disabled";
-  fan_capacity_curve?: CurvePoint[];
-  fan_power_curve?: CurvePoint[];
+  fan_capacity_curve?: CapacityCurvePoint[];
+  fan_power_curve?: PowerCurvePoint[];
 }
 
 export interface AirflowDeviceStatus {

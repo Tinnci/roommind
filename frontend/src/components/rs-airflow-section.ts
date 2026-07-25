@@ -1195,6 +1195,14 @@ export class RsAirflowSection extends LitElement {
       .join(", ");
   }
 
+  private _parseCurveText(
+    text: string,
+    key: "capacity_factor",
+  ): NonNullable<AirflowDeviceConfig["fan_capacity_curve"]>;
+  private _parseCurveText(
+    text: string,
+    key: "power_w",
+  ): NonNullable<AirflowDeviceConfig["fan_power_curve"]>;
   private _parseCurveText(text: string, key: "capacity_factor" | "power_w"): CurvePoint[] {
     return text
       .split(/[,\n]/)

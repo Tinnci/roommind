@@ -172,22 +172,37 @@ def _compute_anyone_home(hass: HomeAssistant, settings: dict) -> bool:
 
 def _validate_no_own_entities(config: dict, own_prefix: str) -> str | None:
     """Check that no RoomMind-owned entities are assigned. Returns error message or None."""
-    for field in ("thermostats", "acs", "window_sensors", "covers", "occupancy_sensors"):
+    for field in (
+        "thermostats",
+        "acs",
+        "temperature_sensors",
+        "humidity_sensors",
+        "window_sensors",
+        "covers",
+        "occupancy_sensors",
+    ):
         for eid in config.get(field, []):
             if eid.split(".", 1)[-1].startswith(own_prefix):
                 return f"Cannot assign RoomMind's own entity '{eid}' to a room"
-    for device in config.get("devices", []):
-        eid = device.get("entity_id", "")
-        if eid.split(".", 1)[-1].startswith(own_prefix):
-            return f"Cannot assign RoomMind's own entity '{eid}' to a room"
-    for device in config.get("airflow_devices", []):
-        eid = device.get("entity_id", "")
-        if eid.split(".", 1)[-1].startswith(own_prefix):
-            return f"Cannot assign RoomMind's own entity '{eid}' to a room"
+
     for field in ("temperature_sensor", "humidity_sensor"):
         eid = config.get(field, "")
         if eid and eid.split(".", 1)[-1].startswith(own_prefix):
             return f"Cannot assign RoomMind's own entity '{eid}' to a room"
+
+    nested_entity_fields = (
+        ("devices", ("entity_id",)),
+        ("airflow_devices", ("entity_id", "power_sensor_entity")),
+        ("night_controls", ("entity_id",)),
+        ("adjacent_rooms", ("link_sensor_entity", "door_sensor_entity")),
+    )
+    for config_field, entity_fields in nested_entity_fields:
+        for item in config.get(config_field, []):
+            for entity_field in entity_fields:
+                eid = item.get(entity_field, "")
+                if eid and eid.split(".", 1)[-1].startswith(own_prefix):
+                    return f"Cannot assign RoomMind's own entity '{eid}' to a room"
+
     return None
 
 

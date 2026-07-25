@@ -36,4 +36,4 @@ repos:
         entry: bash -c 'cd frontend && bun run format'
         language: system
         pass_filenames: false
-        files: ^frontend/src/.*\.(ts|js|json)$
+        files: ^frontend/((src|scripts)/.*\.(ts|js|json)|vite\.config\.ts|package\.json|tsconfig(\.(test|tools))?\.json)$

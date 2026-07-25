@@ -204,7 +204,8 @@ export function createRoomConfigDraft(config: RoomConfig | null): RoomConfigDraf
   draft.coverOrientations = config.cover_orientations ?? {};
   draft.coversNightCloseElevation = config.covers_night_close_elevation ?? 0;
   draft.coversNightCloseOffsetMinutes = config.covers_night_close_offset_minutes ?? 0;
-  draft.coversOutdoorMinTemp = config.covers_outdoor_min_temp ?? 10;
+  draft.coversOutdoorMinTemp =
+    config.covers_outdoor_min_temp === undefined ? 10 : config.covers_outdoor_min_temp;
   draft.coverMinPositions = config.cover_min_positions ?? {};
   draft.ignorePresence = config.ignore_presence ?? false;
   draft.isOutdoor = config.is_outdoor ?? false;

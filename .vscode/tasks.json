@@ -4,8 +4,8 @@
     {
       "label": "Test: Run all tests",
       "type": "shell",
-      "command": "${workspaceFolder}/.venv/bin/pytest",
-      "args": ["tests/", "-v", "--tb=short"],
+      "command": "uv",
+      "args": ["run", "pytest", "tests/", "-v", "--tb=short"],
       "group": "test",
       "presentation": {
         "reveal": "always",
@@ -22,8 +22,15 @@
     {
       "label": "Test: Run with coverage",
       "type": "shell",
-      "command": "${workspaceFolder}/.venv/bin/pytest",
-      "args": ["tests/", "--cov=custom_components/roommind", "--cov-report=html", "--cov-report=term-missing"],
+      "command": "uv",
+      "args": [
+        "run",
+        "pytest",
+        "tests/",
+        "--cov=custom_components/roommind",
+        "--cov-report=html",
+        "--cov-report=term-missing"
+      ],
       "group": "test",
       "presentation": {
         "reveal": "always",

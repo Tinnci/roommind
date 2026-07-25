@@ -7,19 +7,21 @@
     "dev": "bun --bun vite",
     "dev:panel": "bun --bun vite --host 127.0.0.1 --open /dev/panel-preview.html",
     "dev:room-detail": "bun --bun vite --host 127.0.0.1 --open /dev/room-detail-preview.html",
-    "typecheck": "bun --bun tsgo --noEmit",
+    "test": "bun test src/**/*.test.ts",
+    "typecheck": "bun --bun tsgo --noEmit && bun --bun tsgo --noEmit -p tsconfig.test.json && bun --bun tsgo --noEmit -p tsconfig.tools.json",
     "build": "bun run typecheck && bun --bun vite build",
     "preview": "bun --bun vite preview",
     "preview:regression": "bun scripts/preview-regression.ts",
-    "lint": "bun --bun eslint src/",
-    "format": "bun --bun prettier --write src/",
-    "format:check": "bun --bun prettier --check src/"
+    "lint": "bun --bun eslint src/ scripts/ vite.config.ts",
+    "format": "bun --bun prettier --write src/ scripts/ vite.config.ts package.json tsconfig.json tsconfig.test.json tsconfig.tools.json",
+    "format:check": "bun --bun prettier --check src/ scripts/ vite.config.ts package.json tsconfig.json tsconfig.test.json tsconfig.tools.json"
   },
   "dependencies": {
     "home-assistant-js-websocket": "^9.4.0",
     "lit": "^3.1.0"
   },
   "devDependencies": {
+    "@types/bun": "^1.3.14",
     "@typescript-eslint/eslint-plugin": "^8.59.2",
     "@typescript-eslint/parser": "^8.56.1",
     "@typescript/native-preview": "7.0.0-dev.20260524.1",

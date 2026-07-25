@@ -152,12 +152,12 @@ class NightModeManager:
         if domain in {"number", "input_number"}:
             try:
                 value = float(target)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 return {"outcome": "skipped", "skip_reason": "invalid_number", "last_service": None}
             current = self.hass.states.get(entity_id)
             try:
                 current_value = float(current.state) if current is not None else None
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 current_value = None
             if current_value is not None and abs(current_value - value) < 1e-6:
                 return {"outcome": "already", "last_service": None}

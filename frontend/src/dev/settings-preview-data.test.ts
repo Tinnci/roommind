@@ -1,10 +1,13 @@
 import { describe, expect, test } from "bun:test";
+import type { GlobalSettings } from "../types";
 import { createSettingsPreviewModel } from "./settings-preview-data";
 
 describe("settings preview model", () => {
   test("loads global control settings with horizon optimizer visible to the preview", async () => {
     const model = createSettingsPreviewModel();
-    const result = await model.hass.callWS({ type: "roommind/settings/get" });
+    const result = await model.hass.callWS<{ settings: GlobalSettings }>({
+      type: "roommind/settings/get",
+    });
 
     expect(result.settings.control_mode).toBe("mpc");
     expect(result.settings.optimizer_strategy).toBe("horizon_search");

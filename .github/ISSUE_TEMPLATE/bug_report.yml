@@ -7,7 +7,7 @@ body:
     attributes:
       label: RoomMind version
       description: Found in Settings → Devices & Services → RoomMind
-      placeholder: "1.6.0"
+      placeholder: "1.7.16"
     validations:
       required: true
 
@@ -16,7 +16,7 @@ body:
     attributes:
       label: Home Assistant version
       description: Found in Settings → About
-      placeholder: "2025.3.0"
+      placeholder: "2026.6.3"
     validations:
       required: true
 

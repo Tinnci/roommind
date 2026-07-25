@@ -17,9 +17,6 @@
   "remoteUser": "vscode",
   "runArgs": ["--network=host"],
   "features": {
-    "ghcr.io/devcontainers/features/node:1": {
-      "version": "20"
-    },
     "ghcr.io/devcontainers/features/git:1": {}
   },
   "customizations": {
@@ -41,7 +38,7 @@
         "editor.formatOnSave": true,
         "files.trimTrailingWhitespace": true,
         "editor.tabSize": 4,
-        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.defaultInterpreterPath": "/workspaces/${localWorkspaceFolderBasename}/.venv/bin/python",
         "terminal.integrated.defaultProfile.linux": "bash",
         "python.analysis.autoSearchPaths": true,
         "python.analysis.extraPaths": [

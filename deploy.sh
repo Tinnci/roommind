@@ -59,9 +59,66 @@ fi
 # Suppress macOS resource fork files in tar
 export COPYFILE_DISABLE=1
 
-SSH_OPTS="-p ${SSH_PORT} -o StrictHostKeyChecking=no"
-[[ -n "${SSH_KEY:-}" ]] && SSH_OPTS="-i ${SSH_KEY} ${SSH_OPTS}"
-SSH_CMD="ssh ${SSH_OPTS}"
+SSH_OPTS=(-p "${SSH_PORT}" -o StrictHostKeyChecking=no)
+[[ -n "${SSH_KEY:-}" ]] && SSH_OPTS=(-i "${SSH_KEY}" "${SSH_OPTS[@]}")
+SSH_BIN=(ssh)
+if [[ -n "${SSHPASS:-}" ]]; then
+  if ! command -v sshpass >/dev/null 2>&1; then
+    echo "error: SSHPASS is set, but sshpass is not installed" >&2
+    exit 1
+  fi
+  SSH_BIN=(sshpass -e ssh)
+fi
+SSH_CMD=("${SSH_BIN[@]}" "${SSH_OPTS[@]}")
+
+remote_shell_quote() {
+  local value=${1//\'/\'\\\'\'}
+  printf "'%s'" "${value}"
+}
+
+# shellcheck disable=SC2016
+REMOTE_PREPARE_SCRIPT='
+set -eu
+remote_config=$1
+dest_parent="${remote_config}/custom_components"
+dest="${remote_config}/custom_components/roommind"
+run_as_root() {
+  if [ "$(id -u)" -eq 0 ]; then
+    "$@"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo -n "$@" || {
+      echo "error: remote user is not root and passwordless sudo is unavailable" >&2
+      exit 1
+    }
+  else
+    echo "error: remote user is not root and sudo is unavailable" >&2
+    exit 1
+  fi
+}
+run_as_root mkdir -p "$dest_parent"
+run_as_root rm -rf "$dest"
+run_as_root mkdir -p "$dest"
+'
+
+# shellcheck disable=SC2016
+REMOTE_EXTRACT_SCRIPT='
+set -eu
+remote_config=$1
+dest="${remote_config}/custom_components/roommind"
+if [ "$(id -u)" -eq 0 ]; then
+  tar xzof - -C "$dest"
+elif command -v sudo >/dev/null 2>&1; then
+  sudo -n tar xzof - -C "$dest" || {
+    echo "error: remote user is not root and passwordless sudo is unavailable" >&2
+    exit 1
+  }
+else
+  echo "error: remote user is not root and sudo is unavailable" >&2
+  exit 1
+fi
+'
+REMOTE_CONFIG_Q="$(remote_shell_quote "${REMOTE_CONFIG}")"
+REMOTE_EXTRACT_SCRIPT_Q="$(remote_shell_quote "${REMOTE_EXTRACT_SCRIPT}")"
 
 echo "==> Deploying RoomMind to ${SSH_USER}@${HA_IP}:${SSH_PORT}"
 
@@ -76,11 +133,17 @@ echo "    OK"
 
 # 2. Deploy integration (backend + frontend bundle)
 echo "--- Deploying integration ---"
-${SSH_CMD} "${SSH_USER}@${HA_IP}" \
-  "sudo mkdir -p ${REMOTE_CONFIG}/custom_components/roommind && \
-   sudo find ${REMOTE_CONFIG}/custom_components/roommind -name '__pycache__' -exec rm -rf {} + 2>/dev/null; true"
-tar czf - -C "${SCRIPT_DIR}/custom_components/roommind" . | \
-  ${SSH_CMD} "${SSH_USER}@${HA_IP}" "sudo tar xzf - -C ${REMOTE_CONFIG}/custom_components/roommind/"
+# shellcheck disable=SC2029
+"${SSH_CMD[@]}" "${SSH_USER}@${HA_IP}" "sh -s -- ${REMOTE_CONFIG_Q}" <<<"${REMOTE_PREPARE_SCRIPT}"
+# shellcheck disable=SC2029
+tar czf - \
+  --exclude='__pycache__' \
+  --exclude='*.pyc' \
+  --exclude='*.pyo' \
+  --exclude='.DS_Store' \
+  --exclude='*.map' \
+  -C "${SCRIPT_DIR}/custom_components/roommind" . | \
+  "${SSH_CMD[@]}" "${SSH_USER}@${HA_IP}" "sh -c ${REMOTE_EXTRACT_SCRIPT_Q} deploy-extract ${REMOTE_CONFIG_Q}"
 echo "    OK"
 
 echo ""

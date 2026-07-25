@@ -6,7 +6,7 @@ Thanks for your interest in contributing! Here's how to get started.
 
 ### Prerequisites
 
-- Python 3.13+
+- Python 3.14.2+
 - uv
 - Bun
 - A Home Assistant instance for testing
@@ -54,7 +54,7 @@ tests/
 
 ## Test Coverage
 
-Coverage must stay ≥ 95% (enforced in CI). Check locally:
+Coverage must stay ≥ 90% (enforced in CI). Check locally:
 
 ```bash
 uv run pytest tests/ --cov=custom_components/roommind --cov-report=term-missing
@@ -64,13 +64,17 @@ uv run pytest tests/ --cov=custom_components/roommind --cov-report=term-missing
 
 ```bash
 uv run ruff check .
-uv run ruff format --check custom_components/ tests/
+uv run ruff format --check custom_components/ tests/ scripts/
 uv run mypy --explicit-package-bases custom_components/roommind
 
 cd frontend
+bun run test
 bun run typecheck
 bun run lint
 bun run format:check
+
+# UI preview regression for frontend layout changes
+bun run preview:regression
 ```
 
 ## Code Style

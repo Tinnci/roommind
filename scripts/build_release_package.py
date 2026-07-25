@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import stat
 import sys
@@ -40,21 +41,58 @@ def build_release_package(*, component_dir: Path, output_path: Path, tag: str | 
 
 def _validate_component(component_dir: Path, tag: str | None) -> None:
     manifest_path = component_dir / "manifest.json"
+    const_path = component_dir / "const.py"
     frontend_bundle = component_dir / "frontend" / "roommind-panel.js"
     if not manifest_path.is_file():
         raise ReleasePackageError(f"Missing manifest: {manifest_path}")
+    if not const_path.is_file():
+        raise ReleasePackageError(f"Missing constants file: {const_path}")
     if not frontend_bundle.is_file():
         raise ReleasePackageError(f"Missing frontend bundle: {frontend_bundle}")
+    if frontend_bundle.stat().st_size == 0:
+        raise ReleasePackageError(f"Frontend bundle is empty: {frontend_bundle}")
 
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    version = str(manifest.get("version", ""))
-    if not version:
-        raise ReleasePackageError("manifest.json is missing version")
+    version = _read_manifest_version(manifest_path)
+
+    const_version = _read_const_version(const_path)
+    if version != const_version:
+        raise ReleasePackageError(f"manifest version {version} does not match const.py VERSION {const_version}")
 
     if tag:
         expected = tag.removeprefix("v")
         if version != expected:
             raise ReleasePackageError(f"manifest version {version} does not match tag {tag}")
+
+
+def _read_const_version(const_path: Path) -> str:
+    try:
+        module = ast.parse(const_path.read_text(encoding="utf-8"), filename=str(const_path))
+    except SyntaxError as err:
+        raise ReleasePackageError(f"Invalid const.py syntax: {err}") from err
+    for node in module.body:
+        if (
+            isinstance(node, ast.Assign)
+            and any(isinstance(target, ast.Name) and target.id == "VERSION" for target in node.targets)
+            and isinstance(node.value, ast.Constant)
+            and isinstance(node.value.value, str)
+        ):
+            return node.value.value
+    raise ReleasePackageError("const.py is missing string VERSION")
+
+
+def _read_manifest_version(manifest_path: Path) -> str:
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as err:
+        raise ReleasePackageError(f"Invalid manifest JSON: {err}") from err
+
+    if not isinstance(manifest, dict):
+        raise ReleasePackageError("manifest.json must contain an object")
+
+    version = manifest.get("version")
+    if not isinstance(version, str) or not version:
+        raise ReleasePackageError("manifest.json is missing string version")
+    return version
 
 
 def _is_excluded(path: Path) -> bool:
