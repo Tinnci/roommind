@@ -81,6 +81,7 @@ ROOM_CONFIG_DEFAULTS: dict[str, object] = {
     "heat_source_ac_min_outdoor": DEFAULT_HEAT_SOURCE_AC_MIN_OUTDOOR,
     "climate_control_enabled": True,
 }
+ROOM_CONFIG_FIELDS = tuple(ROOM_CONFIG_DEFAULTS)
 
 
 @dataclass(frozen=True, slots=True)

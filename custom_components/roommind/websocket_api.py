@@ -25,6 +25,7 @@ from .const import (
     build_override_live,
     is_override_suppressed,
 )
+from .room_config import ROOM_CONFIG_FIELDS
 from .services.analytics_service import (
     _compute_target_forecast,  # noqa: F401 - re-exported for tests
     _csv_to_points,  # noqa: F401 - re-exported for tests
@@ -58,66 +59,6 @@ def _get_coordinator(hass: HomeAssistant) -> RoomMindCoordinator | None:
     coordinator: RoomMindCoordinator | None = hass.data.get(DOMAIN, {}).get("coordinator")
     return coordinator
 
-
-_ROOM_SAVE_FIELDS = (
-    "thermostats",
-    "acs",
-    "devices",
-    "temperature_sensor",
-    "temperature_sensors",
-    "airflow_devices",
-    "humidity_sensor",
-    "humidity_sensors",
-    "occupancy_sensors",
-    "climate_mode",
-    "schedules",
-    "schedule_selector_entity",
-    "window_sensors",
-    "window_open_delay",
-    "window_close_delay",
-    "comfort_temp",
-    "eco_temp",
-    "comfort_heat",
-    "comfort_cool",
-    "eco_heat",
-    "eco_cool",
-    "presence_persons",
-    "display_name",
-    "heating_system_type",
-    "covers",
-    "covers_auto_enabled",
-    "covers_deploy_threshold",
-    "covers_min_position",
-    "covers_outdoor_min_temp",
-    "covers_override_minutes",
-    "cover_schedules",
-    "cover_schedule_selector_entity",
-    "cover_orientations",
-    "covers_night_close",
-    "covers_night_close_elevation",
-    "covers_night_close_offset_minutes",
-    "covers_night_position",
-    "covers_snap_deploy",
-    "cover_min_positions",
-    "ignore_presence",
-    "is_outdoor",
-    "heat_source_orchestration",
-    "heat_source_primary_delta",
-    "heat_source_outdoor_threshold",
-    "heat_source_ac_min_outdoor",
-    "valve_protection_exclude",
-    "climate_control_enabled",
-    "room_volume_m3",
-    "control_target",
-    "quiet_hours",
-    "night_mode_enabled",
-    "night_controls",
-    "night_allow_rapid_recovery",
-    "rapid_recovery_delta_c",
-    "max_fan_level_night",
-    "sleep_temp_ramp_c",
-    "adjacent_rooms",
-)
 
 _SETTINGS_SAVE_FIELDS = (
     "outdoor_temp_sensor",
@@ -509,7 +450,7 @@ async def websocket_save_room(
 
     # Build config dict from optional fields present in the message
     config: dict = {}
-    for key in _ROOM_SAVE_FIELDS:
+    for key in ROOM_CONFIG_FIELDS:
         if key in msg:
             config[key] = msg[key]
 

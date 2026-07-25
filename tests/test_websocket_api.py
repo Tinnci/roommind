@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from custom_components.roommind.const import DOMAIN
+from custom_components.roommind.room_config import ROOM_CONFIG_FIELDS
 from custom_components.roommind.websocket_api import (
     _csv_to_points,
     _safe_float,
@@ -54,6 +55,13 @@ def ws_hass(hass, store):
     """Return a hass instance with the store wired into hass.data."""
     hass.data[DOMAIN] = {"store": store}
     return hass
+
+
+def test_room_save_schema_matches_configuration_field_catalog():
+    """Every accepted field is persisted, and every persisted field is validated."""
+    schema_fields = {marker.schema for marker in websocket_save_room._ws_schema.schema}
+
+    assert schema_fields - {"id", "type", "area_id"} == set(ROOM_CONFIG_FIELDS)
 
 
 @pytest.mark.asyncio
