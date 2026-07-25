@@ -16,8 +16,13 @@ _Avoid_: Refresh, update loop
 The time series produced by evaluating an effective target plan for analytics or predictive control.
 _Avoid_: Effective target plan
 
+**Room Configuration**:
+The normalized, persistence-compatible definition of a room's sensors, climate devices, targets, schedules, covers, and control preferences.
+_Avoid_: Draft, live room state
+
 ## Relationships
 
+- A **Room Configuration** supplies the durable policy inputs for each **Control Cycle**.
 - A **Control Cycle** prepares exactly one **Effective Target Plan** per room.
 - An **Effective Target Plan** supplies immediate targets and can produce one or more **Target Forecasts**.
 - Analytics prepares an **Effective Target Plan** from current observations before producing a **Target Forecast**.

@@ -8,103 +8,18 @@ import logging
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
-from .const import (
-    DEFAULT_COMFORT_COOL,
-    DEFAULT_COMFORT_HEAT,
-    DEFAULT_ECO_COOL,
-    DEFAULT_ECO_HEAT,
-    DEFAULT_HEAT_SOURCE_AC_MIN_OUTDOOR,
-    DEFAULT_HEAT_SOURCE_OUTDOOR_THRESHOLD,
-    DEFAULT_HEAT_SOURCE_PRIMARY_DELTA,
-    DOMAIN,
-)
-from .utils.device_utils import (
-    devices_to_legacy,
-    ensure_room_has_devices,
-    get_room_heating_system_type,
-    legacy_to_devices,
-    migrate_heat_pump_devices,
+from .const import DOMAIN
+from .room_config import (
+    migrate_persisted_room,
+    normalize_room_config,
+    normalize_room_sensor_sources,
+    upsert_room_config,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 STORAGE_VERSION = 1
 STORAGE_KEY = DOMAIN
-
-
-def _migrate_room_temps(room: dict) -> dict:
-    """Migrate legacy single comfort/eco temps to split heat/cool fields."""
-    if "comfort_heat" not in room:
-        room["comfort_heat"] = room.get("comfort_temp", DEFAULT_COMFORT_HEAT)
-    if "comfort_cool" not in room:
-        room["comfort_cool"] = DEFAULT_COMFORT_COOL
-    if "eco_heat" not in room:
-        room["eco_heat"] = room.get("eco_temp", DEFAULT_ECO_HEAT)
-    if "eco_cool" not in room:
-        room["eco_cool"] = DEFAULT_ECO_COOL
-    return room
-
-
-def _migrate_room(room: dict) -> dict:
-    """Apply all read-time migrations (safety net)."""
-    _migrate_room_temps(room)
-    room.setdefault("temperature_sensors", [])
-    room.setdefault("humidity_sensors", [])
-    room.setdefault("airflow_devices", [])
-    room.setdefault("room_volume_m3", None)
-    room.setdefault("control_target", "air_temperature")
-    room.setdefault("quiet_hours", None)
-    room.setdefault("night_mode_enabled", True)
-    room.setdefault("night_controls", [])
-    room.setdefault("night_allow_rapid_recovery", True)
-    room.setdefault("rapid_recovery_delta_c", 2.0)
-    room.setdefault("max_fan_level_night", 0.5)
-    room.setdefault("sleep_temp_ramp_c", 0.0)
-    room.setdefault("adjacent_rooms", [])
-    for adjacent in room.get("adjacent_rooms", []) or []:
-        if isinstance(adjacent, dict):
-            adjacent.setdefault("allow_borrowed_conditioning", True)
-    _normalize_temperature_sensors(room)
-    _normalize_humidity_sensors(room)
-    migrate_heat_pump_devices(room.get("devices", []))
-    ensure_room_has_devices(room)
-    return room
-
-
-def _normalize_temperature_sensors(room: dict) -> None:
-    """Keep the primary temperature sensor as the first fusion sensor."""
-    primary = room.get("temperature_sensor") or ""
-    if not primary:
-        room["temperature_sensors"] = []
-        return
-
-    raw_sensors = room.get("temperature_sensors", []) or []
-    if isinstance(raw_sensors, str):
-        raw_sensors = [raw_sensors]
-    sensor_ids = [primary]
-    for item in raw_sensors:
-        entity_id = item.get("entity_id") if isinstance(item, dict) else item
-        if entity_id and entity_id not in sensor_ids:
-            sensor_ids.append(entity_id)
-    room["temperature_sensors"] = sensor_ids
-
-
-def _normalize_humidity_sensors(room: dict) -> None:
-    """Keep the primary humidity sensor as the first fused humidity source."""
-    primary = room.get("humidity_sensor") or ""
-    if not primary:
-        room["humidity_sensors"] = []
-        return
-
-    raw_sensors = room.get("humidity_sensors", []) or []
-    if isinstance(raw_sensors, str):
-        raw_sensors = [raw_sensors]
-    sensor_ids = [primary]
-    for item in raw_sensors:
-        entity_id = item.get("entity_id") if isinstance(item, dict) else item
-        if entity_id and entity_id not in sensor_ids:
-            sensor_ids.append(entity_id)
-    room["humidity_sensors"] = sensor_ids
 
 
 _ORPHAN_SETTINGS_KEYS = ("heating_threshold", "cooling_threshold")
@@ -135,13 +50,10 @@ class RoomMindStore:
         device_migrated = 0
         hp_migrated = 0
         for room in self._data.values():
-            if "devices" not in room:
-                ensure_room_has_devices(room)
+            migration = migrate_persisted_room(room)
+            if migration.device_model_added:
                 device_migrated += 1
-            if migrate_heat_pump_devices(room.get("devices", [])):
-                t, a = devices_to_legacy(room["devices"])
-                room["thermostats"] = t
-                room["acs"] = a
+            if migration.heat_pump_migrated:
                 hp_migrated += 1
         orphan_settings_removed = [k for k in _ORPHAN_SETTINGS_KEYS if self._settings.pop(k, None) is not None]
         if device_migrated or hp_migrated or orphan_settings_removed:
@@ -163,7 +75,7 @@ class RoomMindStore:
         """Return a deep copy of all rooms (with migration applied)."""
         rooms = copy.deepcopy(dict(self._data))
         for room in rooms.values():
-            _migrate_room(room)
+            normalize_room_config(room)
         return rooms
 
     def get_room(self, area_id: str) -> dict | None:
@@ -172,7 +84,7 @@ class RoomMindStore:
         if room is None:
             return None
         result = copy.deepcopy(room)
-        _migrate_room(result)
+        normalize_room_config(result)
         return result
 
     def get_settings(self) -> dict:
@@ -204,146 +116,10 @@ class RoomMindStore:
         self._thermal_data = {}
         await self._async_save()
 
-    @staticmethod
-    def _sync_devices(room: dict, config: dict) -> None:
-        """Bidirectional sync between devices[] and legacy thermostats/acs fields.
-
-        Used for the UPDATE path only. Presence check (not truthiness) on
-        ``"devices" in config`` so that sending ``devices=[]`` still triggers
-        the devices→legacy sync.
-        """
-        if "devices" in config:
-            # New frontend: devices is source of truth -> regenerate legacy.
-            # Also derive heating_system_type from devices (ignore any sent value).
-            t, a = devices_to_legacy(room["devices"])
-            room["thermostats"] = t
-            room["acs"] = a
-            room["heating_system_type"] = get_room_heating_system_type(room["devices"])
-        elif "thermostats" in config or "acs" in config:
-            # Old frontend: legacy is source of truth -> regenerate devices
-            room["devices"] = legacy_to_devices(
-                room.get("thermostats", []),
-                room.get("acs", []),
-                room.get("heating_system_type", ""),
-            )
-
-    def _merge_room(self, area_id: str, config: dict) -> dict:
-        """Merge config changes into an existing room."""
-        existing = self._data[area_id]
-        for key, value in config.items():
-            if key != "area_id":
-                existing[key] = value
-        # Sync legacy fields from split fields for backward compat
-        if "comfort_heat" in config:
-            existing["comfort_temp"] = config["comfort_heat"]
-        if "eco_heat" in config:
-            existing["eco_temp"] = config["eco_heat"]
-        # Reverse-sync: legacy callers sending only comfort_temp/eco_temp
-        if "comfort_temp" in config and "comfort_heat" not in config:
-            existing["comfort_heat"] = config["comfort_temp"]
-        if "eco_temp" in config and "eco_heat" not in config:
-            existing["eco_heat"] = config["eco_temp"]
-        # Directional device sync
-        self._sync_devices(existing, config)
-        if "temperature_sensor" in config or "temperature_sensors" in config:
-            _normalize_temperature_sensors(existing)
-        if "humidity_sensor" in config or "humidity_sensors" in config:
-            _normalize_humidity_sensors(existing)
-        return existing
-
-    def _create_room(self, area_id: str, config: dict) -> dict:
-        """Create a new room with defaults and device sync."""
-        # Derive split fields from legacy if needed
-        comfort_heat = config.get("comfort_heat", config.get("comfort_temp", DEFAULT_COMFORT_HEAT))
-        eco_heat = config.get("eco_heat", config.get("eco_temp", DEFAULT_ECO_HEAT))
-        room = {
-            "area_id": area_id,
-            "devices": config.get("devices", []),
-            "temperature_sensor": config.get("temperature_sensor", ""),
-            "temperature_sensors": config.get("temperature_sensors", []),
-            "airflow_devices": config.get("airflow_devices", []),
-            "room_volume_m3": config.get("room_volume_m3", None),
-            "control_target": config.get("control_target", "air_temperature"),
-            "quiet_hours": config.get("quiet_hours", None),
-            "night_mode_enabled": config.get("night_mode_enabled", True),
-            "night_controls": config.get("night_controls", []),
-            "night_allow_rapid_recovery": config.get("night_allow_rapid_recovery", True),
-            "rapid_recovery_delta_c": config.get("rapid_recovery_delta_c", 2.0),
-            "max_fan_level_night": config.get("max_fan_level_night", 0.5),
-            "sleep_temp_ramp_c": config.get("sleep_temp_ramp_c", 0.0),
-            "adjacent_rooms": config.get("adjacent_rooms", []),
-            "humidity_sensor": config.get("humidity_sensor", ""),
-            "humidity_sensors": config.get("humidity_sensors", []),
-            "occupancy_sensors": config.get("occupancy_sensors", []),
-            "climate_mode": config.get("climate_mode", "auto"),
-            "schedules": config.get("schedules", []),
-            "schedule_selector_entity": config.get("schedule_selector_entity", ""),
-            "window_sensors": config.get("window_sensors", []),
-            "window_open_delay": config.get("window_open_delay", 0),
-            "window_close_delay": config.get("window_close_delay", 0),
-            "comfort_temp": comfort_heat,
-            "eco_temp": eco_heat,
-            "comfort_heat": comfort_heat,
-            "comfort_cool": config.get("comfort_cool", DEFAULT_COMFORT_COOL),
-            "eco_heat": eco_heat,
-            "eco_cool": config.get("eco_cool", DEFAULT_ECO_COOL),
-            "presence_persons": config.get("presence_persons", []),
-            "display_name": config.get("display_name", ""),
-            "heating_system_type": config.get("heating_system_type", ""),
-            "covers": config.get("covers", []),
-            "covers_auto_enabled": config.get("covers_auto_enabled", False),
-            "covers_deploy_threshold": config.get("covers_deploy_threshold", 1.5),
-            "covers_min_position": config.get("covers_min_position", 0),
-            "covers_outdoor_min_temp": config.get("covers_outdoor_min_temp", None),
-            "covers_override_minutes": config.get("covers_override_minutes", 60),
-            "cover_schedules": config.get("cover_schedules", []),
-            "cover_schedule_selector_entity": config.get("cover_schedule_selector_entity", ""),
-            "cover_orientations": config.get("cover_orientations", {}),
-            "covers_night_close": config.get("covers_night_close", False),
-            "covers_night_close_elevation": config.get("covers_night_close_elevation", 0),
-            "covers_night_close_offset_minutes": config.get("covers_night_close_offset_minutes", 0),
-            "covers_night_position": config.get("covers_night_position", 0),
-            "covers_snap_deploy": config.get("covers_snap_deploy", False),
-            "cover_min_positions": config.get("cover_min_positions", {}),
-            "ignore_presence": config.get("ignore_presence", False),
-            "is_outdoor": config.get("is_outdoor", False),
-            "valve_protection_exclude": config.get("valve_protection_exclude", []),
-            "heat_source_orchestration": config.get("heat_source_orchestration", False),
-            "heat_source_primary_delta": config.get("heat_source_primary_delta", DEFAULT_HEAT_SOURCE_PRIMARY_DELTA),
-            "heat_source_outdoor_threshold": config.get(
-                "heat_source_outdoor_threshold", DEFAULT_HEAT_SOURCE_OUTDOOR_THRESHOLD
-            ),
-            "heat_source_ac_min_outdoor": config.get("heat_source_ac_min_outdoor", DEFAULT_HEAT_SOURCE_AC_MIN_OUTDOOR),
-            "climate_control_enabled": config.get("climate_control_enabled", True),
-        }
-        # Directional device sync for new rooms (truthiness check, not just presence)
-        if "devices" in config and config["devices"]:
-            t, a = devices_to_legacy(room["devices"])
-            room["thermostats"] = t
-            room["acs"] = a
-            room["heating_system_type"] = get_room_heating_system_type(room["devices"])
-        elif "thermostats" in config or "acs" in config:
-            room["thermostats"] = config.get("thermostats", [])
-            room["acs"] = config.get("acs", [])
-            room["devices"] = legacy_to_devices(
-                room["thermostats"],
-                room["acs"],
-                room.get("heating_system_type", ""),
-            )
-        # Ensure legacy keys always exist (for backward compat)
-        room.setdefault("thermostats", [])
-        room.setdefault("acs", [])
-        _normalize_temperature_sensors(room)
-        _normalize_humidity_sensors(room)
-        return room
-
     async def async_save_room(self, area_id: str, config: dict) -> dict:
         """Create or update room configuration for an area."""
-        if area_id in self._data:
-            room = self._merge_room(area_id, config)
-        else:
-            room = self._create_room(area_id, config)
-            self._data[area_id] = room
+        room = upsert_room_config(area_id, self._data.get(area_id), config)
+        self._data[area_id] = room
         await self._async_save()
         return room
 
@@ -360,10 +136,13 @@ class RoomMindStore:
         changes.pop("area_id", None)
 
         self._data[area_id].update(changes)
-        if "temperature_sensor" in changes or "temperature_sensors" in changes:
-            _normalize_temperature_sensors(self._data[area_id])
-        if "humidity_sensor" in changes or "humidity_sensors" in changes:
-            _normalize_humidity_sensors(self._data[area_id])
+        if {
+            "temperature_sensor",
+            "temperature_sensors",
+            "humidity_sensor",
+            "humidity_sensors",
+        }.intersection(changes):
+            normalize_room_sensor_sources(self._data[area_id])
         await self._async_save()
         return self._data[area_id]
 

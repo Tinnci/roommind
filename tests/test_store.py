@@ -198,6 +198,39 @@ async def test_get_room(store):
 
 
 @pytest.mark.asyncio
+async def test_get_room_normalizes_sparse_legacy_config_to_current_contract(store):
+    """Old persisted rooms expose the same complete defaults as new rooms."""
+    store._store.async_load = AsyncMock(return_value={"rooms": {"legacy": {"area_id": "legacy"}}})
+    await store.async_load()
+
+    room = store.get_room("legacy")
+
+    assert room is not None
+    assert room["temperature_sensor"] == ""
+    assert room["humidity_sensor"] == ""
+    assert room["window_sensors"] == []
+    assert room["window_open_delay"] == 0
+    assert room["window_close_delay"] == 0
+    assert room["climate_mode"] == "auto"
+    assert room["schedules"] == []
+    assert room["schedule_selector_entity"] == ""
+    assert room["comfort_heat"] == DEFAULT_COMFORT_TEMP
+    assert room["eco_heat"] == DEFAULT_ECO_TEMP
+    assert room["covers_outdoor_min_temp"] is None
+
+
+@pytest.mark.asyncio
+async def test_new_room_mutable_defaults_are_isolated(store):
+    await store.async_load()
+    first = await store.async_save_room("first", {})
+    second = await store.async_save_room("second", {})
+
+    first["schedules"].append({"entity_id": "schedule.first"})
+
+    assert second["schedules"] == []
+
+
+@pytest.mark.asyncio
 async def test_delete_room(store):
     """Deleting a room removes it from the store."""
     await store.async_load()
