@@ -19,7 +19,6 @@ def test_force_off_reduces_to_idle_and_disables_rapid_recovery():
     assert result.mode == MODE_IDLE
     assert result.power_fraction == 0.0
     assert result.rapid_recovery_active is False
-    assert result.forecast_allowed is False
 
 
 def test_window_open_wins_after_rapid_recovery():
@@ -35,7 +34,6 @@ def test_window_open_wins_after_rapid_recovery():
     assert result.mode == MODE_IDLE
     assert result.power_fraction == 0.0
     assert result.rapid_recovery_active is False
-    assert result.forecast_allowed is False
 
 
 def test_compressor_forced_off_all_devices_idles_and_clears_forced_off():

@@ -52,7 +52,6 @@ class ConstraintResult:
     rapid_recovery_active: bool
     compressor_forced_on: frozenset[str]
     compressor_forced_off: frozenset[str]
-    forecast_allowed: bool
 
 
 class ConstraintReducer:
@@ -124,21 +123,12 @@ class ConstraintReducer:
             rapid_recovery_active = False
             compressor_forced_off = frozenset()
 
-        forecast_allowed = (
-            mode in (MODE_HEATING, MODE_COOLING)
-            and not constraints.force_off
-            and not constraints.window_open
-            and not rapid_recovery_active
-            and not compressor_forced_on
-        )
-
         return ConstraintResult(
             mode=mode,
             power_fraction=power_fraction,
             rapid_recovery_active=rapid_recovery_active,
             compressor_forced_on=compressor_forced_on,
             compressor_forced_off=compressor_forced_off,
-            forecast_allowed=forecast_allowed,
         )
 
     def _conflicts_with_mode(self, mode: str, enforced_action: str) -> bool:

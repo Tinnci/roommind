@@ -32,7 +32,6 @@ from .const import (
     MAX_PREDICTION_DELTA,
     MAX_SENSOR_STALENESS,
     MODE_COOLING,
-    MODE_FAN_ONLY,
     MODE_HEATING,
     MODE_IDLE,
     OBSERVATION_INTERVAL_RETENTION_DAYS,
@@ -217,7 +216,6 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         self._history_write_count: int = 0
         self._history_rotate_count: int = 0
         self._pending_predictions: dict[str, float] = {}
-        self._prediction_forecasts: dict[str, list[dict]] = {}
         self._weather_manager = WeatherManager(hass)
         self._current_q_solar: float = 0.0
         self._constraint_reducer = ConstraintReducer()
@@ -1393,30 +1391,6 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         rapid_recovery_active = compressor_constraint_result.rapid_recovery_active
         compressor_forced_on = set(compressor_constraint_result.compressor_forced_on)
         compressor_forced_off = set(compressor_constraint_result.compressor_forced_off)
-
-        # Store the controller forecast only when the final decision still
-        # matches the controller proposal. Post-processing constraints such as
-        # window-open, rapid recovery, or compressor min-run/off can invalidate
-        # the raw MPC trajectory.
-        plan = controller.last_plan
-        plan_action = None
-        if plan and plan.actions:
-            plan_action = plan.get_current_action()
-            if plan_action == MODE_FAN_ONLY:
-                plan_action = MODE_IDLE
-        if (
-            plan
-            and len(plan.temperatures) > 1
-            and plan_action == mode
-            and compressor_constraint_result.forecast_allowed
-        ):
-            now_ts = time.time()
-            dt_s = plan.dt_minutes * 60
-            self._prediction_forecasts[area_id] = [
-                {"ts": round(now_ts + i * dt_s, 1), "temp": round(t, 2)} for i, t in enumerate(plan.temperatures)
-            ]
-        else:
-            self._prediction_forecasts.pop(area_id, None)
 
         # --- Residual heat transition tracking ---
         # After compressor constraints may have changed mode to IDLE.

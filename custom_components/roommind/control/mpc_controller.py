@@ -784,7 +784,6 @@ class MPCController:
         self.q_residual = q_residual
         self._heating_system_type = heating_system_type
         self._mode_on_since = mode_on_since
-        self._shading_factor = self._solar_exposure.shading_factor
         self.q_occupancy = q_occupancy
         self.q_vent = q_vent
         self.airflow_levels = airflow_levels or [0.0]
