@@ -11,12 +11,8 @@ from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 
 from .const import (
-    CONFLICT_RESOLUTIONS,
     DEFAULT_COMFORT_COOL,
     DEFAULT_COMFORT_HEAT,
-    DEFAULT_COMPRESSOR_MIN_OFF_MINUTES,
-    DEFAULT_COMPRESSOR_MIN_RUN_MINUTES,
-    DEFAULT_CONFLICT_RESOLUTION,
     DEFAULT_ECO_COOL,
     DEFAULT_ECO_HEAT,
     DOMAIN,
@@ -30,6 +26,12 @@ from .services.analytics_service import (
     _csv_to_points,  # noqa: F401 - re-exported for tests
     _safe_float,  # noqa: F401 - re-exported for tests
     build_analytics_data,
+)
+from .settings_config import (
+    SETTINGS_FIELDS,
+    SETTINGS_SCHEMA,
+    SettingsValidationError,
+    validate_settings_changes,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -45,45 +47,6 @@ def _get_coordinator(hass: HomeAssistant) -> RoomMindCoordinator | None:
     """Return the RoomMindCoordinator from hass.data, or None."""
     coordinator: RoomMindCoordinator | None = hass.data.get(DOMAIN, {}).get("coordinator")
     return coordinator
-
-
-_SETTINGS_SAVE_FIELDS = (
-    "outdoor_temp_sensor",
-    "outdoor_humidity_sensor",
-    "outdoor_cooling_min",
-    "outdoor_heating_max",
-    "control_mode",
-    "optimizer_strategy",
-    "comfort_weight",
-    "weather_entity",
-    "outdoor_unavailable_notify",
-    "climate_control_active",
-    "learning_disabled_rooms",
-    "hidden_rooms",
-    "vacation_temp",
-    "vacation_until",
-    "prediction_enabled",
-    "presence_enabled",
-    "presence_persons",
-    "presence_away_action",
-    "presence_clears_override",
-    "schedule_off_action",
-    "valve_protection_enabled",
-    "valve_protection_interval_days",
-    "mold_detection_enabled",
-    "mold_humidity_threshold",
-    "mold_sustained_minutes",
-    "mold_notification_cooldown",
-    "mold_notifications_enabled",
-    "mold_notification_targets",
-    "mold_prevention_enabled",
-    "mold_prevention_intensity",
-    "mold_prevention_notify_enabled",
-    "mold_prevention_notify_targets",
-    "room_order",
-    "group_by_floor",
-    "compressor_groups",
-)
 
 
 # _safe_float, _csv_to_points and _compute_target_forecast are imported from
@@ -502,69 +465,7 @@ async def websocket_get_settings(
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "roommind/settings/save",
-        vol.Optional("outdoor_temp_sensor"): str,
-        vol.Optional("outdoor_humidity_sensor"): str,
-        vol.Optional("outdoor_cooling_min"): vol.Coerce(float),
-        vol.Optional("outdoor_heating_max"): vol.Coerce(float),
-        vol.Optional("control_mode"): vol.In(["mpc", "bangbang"]),
-        vol.Optional("optimizer_strategy"): vol.In(["greedy", "horizon_search"]),
-        vol.Optional("comfort_weight"): vol.Coerce(float),
-        vol.Optional("weather_entity"): str,
-        vol.Optional("outdoor_unavailable_notify"): bool,
-        vol.Optional("climate_control_active"): bool,
-        vol.Optional("learning_disabled_rooms"): [str],
-        vol.Optional("hidden_rooms"): [str],
-        vol.Optional("prediction_enabled"): bool,
-        vol.Optional("vacation_temp"): vol.Coerce(float),
-        vol.Optional("vacation_until"): vol.Any(vol.Coerce(float), None),
-        vol.Optional("presence_enabled"): bool,
-        vol.Optional("presence_persons"): [str],
-        vol.Optional("presence_away_action"): vol.In(["eco", "off"]),
-        vol.Optional("presence_clears_override"): bool,
-        vol.Optional("schedule_off_action"): vol.In(["eco", "off"]),
-        vol.Optional("valve_protection_enabled"): bool,
-        vol.Optional("valve_protection_interval_days"): vol.All(vol.Coerce(int), vol.Range(min=1, max=90)),
-        vol.Optional("mold_detection_enabled"): bool,
-        vol.Optional("mold_humidity_threshold"): vol.All(vol.Coerce(float), vol.Range(min=50, max=90)),
-        vol.Optional("mold_sustained_minutes"): vol.All(vol.Coerce(int), vol.Range(min=5, max=120)),
-        vol.Optional("mold_notification_cooldown"): vol.All(vol.Coerce(int), vol.Range(min=10, max=1440)),
-        vol.Optional("mold_notifications_enabled"): bool,
-        vol.Optional("mold_notification_targets"): [
-            {
-                vol.Required("entity_id"): str,
-                vol.Optional("person_entity", default=""): str,
-                vol.Optional("notify_when", default="always"): vol.In(["always", "home_only"]),
-            }
-        ],
-        vol.Optional("mold_prevention_enabled"): bool,
-        vol.Optional("mold_prevention_intensity"): vol.In(["light", "medium", "strong"]),
-        vol.Optional("mold_prevention_notify_enabled"): bool,
-        vol.Optional("mold_prevention_notify_targets"): [
-            {
-                vol.Required("entity_id"): str,
-                vol.Optional("person_entity", default=""): str,
-                vol.Optional("notify_when", default="always"): vol.In(["always", "home_only"]),
-            }
-        ],
-        vol.Optional("room_order"): [str],
-        vol.Optional("group_by_floor"): bool,
-        vol.Optional("compressor_groups"): [
-            {
-                vol.Required("id"): str,
-                vol.Required("name"): str,
-                vol.Required("members"): vol.All([str], vol.Length(min=1)),
-                vol.Optional("min_run_minutes", default=DEFAULT_COMPRESSOR_MIN_RUN_MINUTES): vol.All(
-                    vol.Coerce(int), vol.Range(min=1, max=60)
-                ),
-                vol.Optional("min_off_minutes", default=DEFAULT_COMPRESSOR_MIN_OFF_MINUTES): vol.All(
-                    vol.Coerce(int), vol.Range(min=1, max=30)
-                ),
-                vol.Optional("master_entity", default=""): str,
-                vol.Optional("conflict_resolution", default=DEFAULT_CONFLICT_RESOLUTION): vol.In(CONFLICT_RESOLUTIONS),
-                vol.Optional("action_script", default=""): str,
-                vol.Optional("enforce_uniform_mode", default=False): bool,
-            }
-        ],
+        **SETTINGS_SCHEMA,
     }
 )
 @websocket_api.async_response
@@ -576,82 +477,15 @@ async def websocket_save_settings(
     """Save global settings (partial merge)."""
     store = hass.data[DOMAIN]["store"]
     changes: dict = {}
-    for key in _SETTINGS_SAVE_FIELDS:
+    for key in SETTINGS_FIELDS:
         if key in msg:
             changes[key] = msg[key]
 
-    # Validate compressor groups
-    groups = changes.get("compressor_groups")
-    if groups:
-        group_ids = [g.get("id", "") for g in groups]
-        if len(group_ids) != len(set(group_ids)):
-            connection.send_error(
-                msg["id"],
-                "duplicate_group_id",
-                "Compressor group IDs must be unique",
-            )
-            return
-        all_members: list[str] = []
-        for g in groups:
-            for eid in g.get("members", []):
-                if not eid.startswith("climate."):
-                    connection.send_error(
-                        msg["id"],
-                        "invalid_member",
-                        f"Compressor group member '{eid}' is not a climate entity",
-                    )
-                    return
-            all_members.extend(g.get("members", []))
-        if len(all_members) != len(set(all_members)):
-            connection.send_error(
-                msg["id"],
-                "duplicate_member",
-                "A climate entity cannot be in multiple compressor groups",
-            )
-            return
-
-        # Validate master_entity and action_script fields
-        all_masters: list[str] = []
-        for g in groups:
-            master = g.get("master_entity", "")
-            if master:
-                if not master.startswith("climate."):
-                    connection.send_error(
-                        msg["id"],
-                        "invalid_master_entity",
-                        f"Master entity '{master}' must be a climate entity",
-                    )
-                    return
-                if master in g.get("members", []):
-                    connection.send_error(
-                        msg["id"],
-                        "master_in_members",
-                        f"Master entity '{master}' cannot also be a group member",
-                    )
-                    return
-                if master in all_members:
-                    connection.send_error(
-                        msg["id"],
-                        "master_is_other_member",
-                        f"Master entity '{master}' is a member of another group",
-                    )
-                    return
-                all_masters.append(master)
-            script = g.get("action_script", "")
-            if script and not script.startswith("script."):
-                connection.send_error(
-                    msg["id"],
-                    "invalid_action_script",
-                    f"Action script '{script}' must be a script entity",
-                )
-                return
-        if len(all_masters) != len(set(all_masters)):
-            connection.send_error(
-                msg["id"],
-                "duplicate_master",
-                "A master entity cannot be assigned to multiple groups",
-            )
-            return
+    try:
+        validate_settings_changes(changes)
+    except SettingsValidationError as err:
+        connection.send_error(msg["id"], err.code, str(err))
+        return
 
     settings = await store.async_save_settings(changes)
     connection.send_result(msg["id"], {"settings": settings})

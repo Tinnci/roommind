@@ -13,6 +13,7 @@ from custom_components.roommind.room_config import (
     ROOM_CONFIG_SCHEMA,
     validate_device_idle_action,
 )
+from custom_components.roommind.settings_config import SETTINGS_FIELDS, SETTINGS_SCHEMA
 from custom_components.roommind.websocket_api import (
     _csv_to_points,
     _safe_float,
@@ -69,6 +70,14 @@ def test_room_save_schema_matches_configuration_field_catalog():
     assert schema_fields - {"id", "type", "area_id"} == set(ROOM_CONFIG_FIELDS)
     assert set(ROOM_CONFIG_FIELDS) == set(ROOM_CONFIG_DEFAULTS)
     assert {marker.schema for marker in ROOM_CONFIG_SCHEMA} == set(ROOM_CONFIG_FIELDS)
+
+
+def test_settings_save_schema_matches_configuration_field_catalog():
+    """Every validated setting is eligible for persistence."""
+    schema_fields = {marker.schema for marker in websocket_save_settings._ws_schema.schema}
+
+    assert schema_fields - {"id", "type"} == set(SETTINGS_FIELDS)
+    assert {marker.schema for marker in SETTINGS_SCHEMA} == set(SETTINGS_FIELDS)
 
 
 @pytest.mark.asyncio
