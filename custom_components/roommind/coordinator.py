@@ -64,7 +64,11 @@ from .control.mpc_controller import (
 )
 from .control.perceived_temperature import perceived_temperature
 from .control.solar import SolarExposure, compute_q_solar_norm
-from .control.thermal_model import RoomModelManager, TemperatureObservation
+from .control.thermal_model import (
+    RoomModelManager,
+    RoomModelSimulationContext,
+    TemperatureObservation,
+)
 from .managers.airflow_control_manager import AirflowControlManager
 from .managers.compressor_group_manager import (
     CompressorCommandOutcome,
@@ -84,7 +88,7 @@ from .managers.heat_source_orchestrator import HeatSourcePlan, evaluate_heat_sou
 from .managers.hvac_output_observer import HVACOutputObserver
 from .managers.mold_manager import MoldManager
 from .managers.night_mode_manager import NightModeManager
-from .managers.residual_heat_tracker import ResidualHeatTracker
+from .managers.residual_heat_tracker import ResidualHeatSimulationState, ResidualHeatTracker
 from .managers.room_coupling_manager import RoomCouplingManager
 from .managers.sensor_fusion_manager import SensorFusionManager
 from .managers.valve_manager import ValveManager
@@ -128,6 +132,21 @@ class _EntityPlatformRegistration:
 
     callback: Callable[[list[Any]], None] | None = None
     area_ids: set[str] = field(default_factory=set)
+
+
+@dataclass(frozen=True, slots=True)
+class AnalyticsRuntimeSnapshot:
+    """Coordinator-owned runtime values consumed by analytics."""
+
+    live: dict[str, Any]
+    model_info: dict[str, Any]
+    simulation_context: RoomModelSimulationContext | None
+    mpc_active: bool
+    acs_can_heat: bool | None
+    outdoor_temp: float | None
+    weather_forecast: list[dict[str, Any]]
+    residual: ResidualHeatSimulationState
+    window_open: bool
 
 
 def _get_area_name(hass: HomeAssistant, area_id: str) -> str:
@@ -1116,11 +1135,9 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             mold_prevention_temp_delta,
         ) = await self._evaluate_mold_risk(area_id, current_temp, current_humidity, settings)
 
-        target_plan = await prepare_control_target_plan(
-            self.hass,
+        target_plan = await self.async_prepare_control_target_plan(
             room,
             settings,
-            schedule_blocks_cache=self._schedule_blocks_cache,
             mold_prevention_active=mold_prevention_active_room,
             mold_prevention_delta=mold_prevention_temp_delta,
         )
@@ -2336,6 +2353,70 @@ class RoomMindCoordinator(DataUpdateCoordinator):
     def history_store(self) -> HistoryStore | None:
         """Access to history store for cleanup operations."""
         return self._history_store
+
+    async def async_prepare_control_target_plan(
+        self,
+        room: dict[str, Any],
+        settings: dict[str, Any],
+        *,
+        mold_prevention_active: bool = False,
+        mold_prevention_delta: float = 0.0,
+    ) -> ControlTargetPlan:
+        """Prepare targets while keeping the schedule cache coordinator-owned."""
+        return await prepare_control_target_plan(
+            self.hass,
+            room,
+            settings,
+            schedule_blocks_cache=self._schedule_blocks_cache,
+            mold_prevention_active=mold_prevention_active,
+            mold_prevention_delta=mold_prevention_delta,
+        )
+
+    def analytics_runtime_snapshot(
+        self,
+        area_id: str,
+        room_config: dict[str, Any],
+    ) -> AnalyticsRuntimeSnapshot:
+        """Return immutable-owner analytics inputs without exposing managers."""
+        model_info = self._model_manager.analytics_snapshot(area_id) or {}
+        acs_can_heat: bool | None = None
+        mpc_active = False
+        if model_info and room_config.get("temperature_sensor"):
+            acs_can_heat = check_acs_can_heat(self.hass, room_config)
+            can_heat, can_cool = get_can_heat_cool(
+                room_config,
+                self.outdoor_temp_effective,
+                acs_can_heat=acs_can_heat,
+            )
+            outdoor_temp = (
+                self.outdoor_temp_effective
+                if self.outdoor_temp_effective is not None
+                else DEFAULT_OUTDOOR_TEMP_FALLBACK
+            )
+            mpc_active = is_mpc_active(
+                self._model_manager,
+                area_id,
+                can_heat,
+                can_cool,
+                20.0,
+                outdoor_temp,
+            )
+        if model_info:
+            model_info["mpc_active"] = mpc_active
+            model_info["has_occupancy_sensors"] = bool(room_config.get("occupancy_sensors"))
+
+        system_type = room_config.get("heating_system_type", "")
+        return AnalyticsRuntimeSnapshot(
+            live=dict(self.rooms.get(area_id, {})),
+            model_info=model_info,
+            simulation_context=self._model_manager.simulation_context(area_id),
+            mpc_active=mpc_active,
+            acs_can_heat=acs_can_heat,
+            outdoor_temp=self.outdoor_temp_effective,
+            weather_forecast=[dict(point) for point in self._weather_manager.forecast],
+            residual=self._residual_tracker.simulation_snapshot(area_id, system_type),
+            window_open=self._window_manager.is_paused(area_id),
+        )
 
     # ------------------------------------------------------------------
     # Master device control

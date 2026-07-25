@@ -9,6 +9,7 @@ import pytest
 from homeassistant.core import State
 
 from custom_components.roommind.control.thermal_model import RoomModelManager
+from custom_components.roommind.coordinator import AnalyticsRuntimeSnapshot
 from custom_components.roommind.managers.residual_heat_tracker import ResidualHeatTracker
 from custom_components.roommind.managers.weather_manager import WeatherManager
 from custom_components.roommind.managers.window_manager import WindowManager
@@ -18,13 +19,47 @@ from custom_components.roommind.services.analytics_service import (
     _safe_int,
     build_analytics_data,
 )
+from custom_components.roommind.utils.target_resolution import prepare_control_target_plan
 
 
 def _attach_runtime_managers(coordinator, hass):
-    """Attach real manager adapters used by analytics."""
+    """Attach a coordinator-shaped analytics interface backed by real managers."""
     coordinator._weather_manager = WeatherManager(hass)
     coordinator._residual_tracker = ResidualHeatTracker()
     coordinator._window_manager = WindowManager()
+
+    def runtime_snapshot(area_id, room_config):
+        manager = coordinator._model_manager
+        model_info = manager.analytics_snapshot(area_id) or {}
+        if model_info:
+            model_info["mpc_active"] = False
+            model_info["has_occupancy_sensors"] = bool(room_config.get("occupancy_sensors"))
+        return AnalyticsRuntimeSnapshot(
+            live=dict(coordinator.rooms.get(area_id, {})),
+            model_info=model_info,
+            simulation_context=manager.simulation_context(area_id),
+            mpc_active=False,
+            acs_can_heat=False,
+            outdoor_temp=coordinator.outdoor_temp,
+            weather_forecast=list(coordinator._weather_manager.forecast),
+            residual=coordinator._residual_tracker.simulation_snapshot(
+                area_id,
+                room_config.get("heating_system_type", ""),
+            ),
+            window_open=coordinator._window_manager.is_paused(area_id),
+        )
+
+    async def prepare_plan(room, settings, *, mold_prevention_active=False, mold_prevention_delta=0.0):
+        return await prepare_control_target_plan(
+            hass,
+            room,
+            settings,
+            mold_prevention_active=mold_prevention_active,
+            mold_prevention_delta=mold_prevention_delta,
+        )
+
+    coordinator.analytics_runtime_snapshot.side_effect = runtime_snapshot
+    coordinator.async_prepare_control_target_plan = AsyncMock(side_effect=prepare_plan)
 
 
 def _model_manager_with(area_id, estimator):
@@ -362,18 +397,6 @@ class TestBuildAnalyticsData:
                 return_value=[{"ts": now, "target_temp": 21.0, "heat_target": 21.0, "cool_target": 24.0}],
             ),
             patch(
-                "custom_components.roommind.services.analytics_service.get_can_heat_cool",
-                return_value=(True, False),
-            ),
-            patch(
-                "custom_components.roommind.services.analytics_service.is_mpc_active",
-                return_value=False,
-            ),
-            patch(
-                "custom_components.roommind.services.analytics_service.check_acs_can_heat",
-                return_value=False,
-            ),
-            patch(
                 "custom_components.roommind.control.analytics_simulator.simulate_prediction",
                 return_value=[21.0],
             ) as mock_sim,
@@ -441,18 +464,6 @@ class TestBuildAnalyticsData:
                 new_callable=AsyncMock,
                 return_value=[{"ts": now, "target_temp": 21.0, "heat_target": 21.0, "cool_target": 24.0}],
             ),
-            patch(
-                "custom_components.roommind.services.analytics_service.get_can_heat_cool",
-                return_value=(True, False),
-            ),
-            patch(
-                "custom_components.roommind.services.analytics_service.is_mpc_active",
-                return_value=False,
-            ),
-            patch(
-                "custom_components.roommind.services.analytics_service.check_acs_can_heat",
-                return_value=False,
-            ),
         ):
             result = await build_analytics_data(hass, "room1", "12h", store, coordinator)
             # No room_temp found -> simulate_prediction should NOT be called
@@ -519,18 +530,6 @@ class TestBuildAnalyticsData:
                 "custom_components.roommind.services.analytics_service._compute_target_forecast",
                 new_callable=AsyncMock,
                 return_value=[{"ts": now, "target_temp": 21.0, "heat_target": 21.0, "cool_target": 24.0}],
-            ),
-            patch(
-                "custom_components.roommind.services.analytics_service.get_can_heat_cool",
-                return_value=(True, False),
-            ),
-            patch(
-                "custom_components.roommind.services.analytics_service.is_mpc_active",
-                return_value=False,
-            ),
-            patch(
-                "custom_components.roommind.services.analytics_service.check_acs_can_heat",
-                return_value=False,
             ),
             patch(
                 "custom_components.roommind.control.analytics_simulator.simulate_prediction",
@@ -677,18 +676,6 @@ class TestBuildAnalyticsShadingFactor:
                 return_value=[{"ts": now, "target_temp": 21.0, "heat_target": 21.0, "cool_target": 24.0}],
             ),
             patch(
-                "custom_components.roommind.services.analytics_service.get_can_heat_cool",
-                return_value=(True, False),
-            ),
-            patch(
-                "custom_components.roommind.services.analytics_service.is_mpc_active",
-                return_value=False,
-            ),
-            patch(
-                "custom_components.roommind.services.analytics_service.check_acs_can_heat",
-                return_value=False,
-            ),
-            patch(
                 "custom_components.roommind.managers.cover_manager.compute_shading_factor",
                 return_value=0.5,
             ) as mock_shading,
@@ -767,18 +754,6 @@ class TestBuildAnalyticsOccupancy:
                 return_value=[{"ts": now, "target_temp": 21.0, "heat_target": 21.0, "cool_target": 24.0}],
             ),
             patch(
-                "custom_components.roommind.services.analytics_service.get_can_heat_cool",
-                return_value=(True, False),
-            ),
-            patch(
-                "custom_components.roommind.services.analytics_service.is_mpc_active",
-                return_value=False,
-            ),
-            patch(
-                "custom_components.roommind.services.analytics_service.check_acs_can_heat",
-                return_value=False,
-            ),
-            patch(
                 "custom_components.roommind.control.analytics_simulator.simulate_prediction",
                 return_value=[21.0],
             ) as mock_sim,
@@ -844,18 +819,6 @@ class TestBuildAnalyticsOccupancy:
                 "custom_components.roommind.services.analytics_service._compute_target_forecast",
                 new_callable=AsyncMock,
                 return_value=[{"ts": now, "target_temp": 21.0, "heat_target": 21.0, "cool_target": 24.0}],
-            ),
-            patch(
-                "custom_components.roommind.services.analytics_service.get_can_heat_cool",
-                return_value=(True, False),
-            ),
-            patch(
-                "custom_components.roommind.services.analytics_service.is_mpc_active",
-                return_value=False,
-            ),
-            patch(
-                "custom_components.roommind.services.analytics_service.check_acs_can_heat",
-                return_value=False,
             ),
             patch(
                 "custom_components.roommind.control.analytics_simulator.simulate_prediction",

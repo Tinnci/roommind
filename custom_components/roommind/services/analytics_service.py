@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from homeassistant.core import HomeAssistant
 
@@ -15,10 +15,12 @@ from ..const import (
 from ..control.mpc_controller import (
     DEFAULT_OUTDOOR_TEMP_FALLBACK,
     check_acs_can_heat,
-    get_can_heat_cool,
-    is_mpc_active,
 )
-from ..utils.target_resolution import prepare_control_target_plan
+from ..utils.target_resolution import ControlTargetPlan, prepare_control_target_plan
+
+if TYPE_CHECKING:
+    from ..coordinator import RoomMindCoordinator
+    from ..store import RoomMindStore
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -124,6 +126,7 @@ async def _compute_target_forecast(
     hours: float = 3.0,
     interval_minutes: int = 5,
     schedule_blocks_cache: dict[str, dict] | None = None,
+    target_plan: ControlTargetPlan | None = None,
 ) -> list[dict]:
     """Compute target temperature forecast for the next N hours.
 
@@ -131,14 +134,15 @@ async def _compute_target_forecast(
     ``heat_target`` and ``cool_target`` (for MPC simulator).
     """
     climate_mode = room.get("climate_mode", "auto")
-    target_plan = await prepare_control_target_plan(
-        hass,
-        room,
-        settings,
-        schedule_blocks_cache=schedule_blocks_cache,
-        mold_prevention_active=mold_prevention_delta > 0,
-        mold_prevention_delta=mold_prevention_delta,
-    )
+    if target_plan is None:
+        target_plan = await prepare_control_target_plan(
+            hass,
+            room,
+            settings,
+            schedule_blocks_cache=schedule_blocks_cache,
+            mold_prevention_active=mold_prevention_delta > 0,
+            mold_prevention_delta=mold_prevention_delta,
+        )
     target_resolver = target_plan.resolver
 
     # Generate forecast points
@@ -176,8 +180,8 @@ async def build_analytics_data(
     hass: HomeAssistant,
     area_id: str,
     range_key: str,
-    store: Any,
-    coordinator: Any,
+    store: RoomMindStore,
+    coordinator: RoomMindCoordinator | None,
     custom_start: float | None = None,
     custom_end: float | None = None,
 ) -> dict:
@@ -209,47 +213,34 @@ async def build_analytics_data(
             detail = _csv_to_points(detail_rows)
             history = _csv_to_points(history_rows)
 
-    # Model info (only if estimator exists -- avoid auto-creating for unknown rooms)
-    model_info: dict = {}
-    mpc_active = False
-    acs_can_heat: bool | None = None
-    if coordinator:
-        mgr = coordinator._model_manager
-        model_info = mgr.analytics_snapshot(area_id) or {}
-        if model_info:
-            has_ext_sensor = bool(room_config.get("temperature_sensor"))
-            if has_ext_sensor:
-                acs_can_heat = check_acs_can_heat(hass, room_config)
-                can_heat, can_cool = get_can_heat_cool(
-                    room_config,
-                    coordinator.outdoor_temp_effective,
-                    acs_can_heat=acs_can_heat,
-                )
-                T_out = (
-                    coordinator.outdoor_temp_effective
-                    if coordinator.outdoor_temp_effective is not None
-                    else DEFAULT_OUTDOOR_TEMP_FALLBACK
-                )
-                mpc_active = is_mpc_active(mgr, area_id, can_heat, can_cool, 20.0, T_out)
-            else:
-                mpc_active = False
-            has_occupancy_sensors = len(room_config.get("occupancy_sensors", [])) > 0
-            model_info["mpc_active"] = mpc_active
-            model_info["has_occupancy_sensors"] = has_occupancy_sensors
+    runtime = coordinator.analytics_runtime_snapshot(area_id, room_config) if coordinator else None
+    model_info = dict(runtime.model_info) if runtime else {}
+    mpc_active = runtime.mpc_active if runtime else False
+    acs_can_heat = runtime.acs_can_heat if runtime else None
 
     # Build merged forecast: same format as history points, on a shared 5-min grid
     mold_delta = 0.0
-    if coordinator:
-        live = coordinator.rooms.get(area_id, {})
+    if runtime:
+        live = runtime.live
         if live.get("mold_prevention_active", False):
             mold_delta = live.get("mold_prevention_delta", 0.0)
     try:
+        target_plan = (
+            await coordinator.async_prepare_control_target_plan(
+                room_config,
+                settings,
+                mold_prevention_active=mold_delta > 0,
+                mold_prevention_delta=mold_delta,
+            )
+            if coordinator
+            else None
+        )
         target_forecast = await _compute_target_forecast(
             hass,
             room_config,
             settings,
             mold_prevention_delta=mold_delta,
-            schedule_blocks_cache=getattr(coordinator, "_schedule_blocks_cache", None),
+            target_plan=target_plan,
         )
     except Exception:  # noqa: BLE001
         _LOGGER.debug("Target forecast computation failed for '%s'", area_id)
@@ -264,9 +255,8 @@ async def build_analytics_data(
 
     pred_temps: list[float | None] = list()
     prediction_enabled = settings.get("prediction_enabled", True)
-    if prediction_enabled and target_forecast and coordinator:
-        mgr = coordinator._model_manager
-        simulation_context = mgr.simulation_context(area_id)
+    if prediction_enabled and target_forecast and runtime:
+        simulation_context = runtime.simulation_context
         if simulation_context is not None:
             all_points = detail if detail else history
             current_t: float | None = None
@@ -275,18 +265,14 @@ async def build_analytics_data(
                     current_t = p["room_temp"]
                     break
             if current_t is not None:
-                T_out_now = (
-                    coordinator.outdoor_temp_effective
-                    if coordinator.outdoor_temp_effective is not None
-                    else DEFAULT_OUTDOOR_TEMP_FALLBACK
-                )
+                T_out_now = runtime.outdoor_temp if runtime.outdoor_temp is not None else DEFAULT_OUTDOOR_TEMP_FALLBACK
                 outdoor_series = build_forecast_outdoor_series(
-                    coordinator._weather_manager.forecast,
+                    runtime.weather_forecast,
                     T_out_now,
                     len(target_forecast),
                 )
                 # Shading factor from current cover positions
-                live = coordinator.rooms.get(area_id, {})
+                live = runtime.live
                 _shading = 1.0
                 if live.get("blind_position") is not None:
                     from ..managers.cover_manager import compute_shading_factor
@@ -295,13 +281,13 @@ async def build_analytics_data(
                 solar_series = build_forecast_solar_series(
                     hass.config.latitude,
                     hass.config.longitude,
-                    coordinator._weather_manager.forecast,
+                    runtime.weather_forecast,
                     len(target_forecast),
                     shading_factor=_shading,
                 )
                 # Residual heat state for analytics simulation
                 system_type = room_config.get("heating_system_type", "")
-                residual = coordinator._residual_tracker.simulation_snapshot(area_id, system_type)
+                residual = runtime.residual
 
                 sim_q_occupancy = 0.0
                 for occ_eid in room_config.get("occupancy_sensors", []):
@@ -320,7 +306,7 @@ async def build_analytics_data(
                         target_forecast=target_forecast,
                         outdoor_series=outdoor_series,
                         current_temp=current_t,
-                        window_open=coordinator._window_manager.is_paused(area_id),
+                        window_open=runtime.window_open,
                         mpc_active=mpc_active,
                         room_config=room_config,
                         settings=settings,

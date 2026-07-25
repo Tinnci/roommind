@@ -1421,8 +1421,12 @@ def _make_mock_estimator(**overrides):
     return est
 
 
-def _make_analytics_coordinator(history_rows=None, estimator=None, rooms_live=None):
+def _make_analytics_coordinator(hass, history_rows=None, estimator=None, rooms_live=None):
     """Build a mock coordinator for analytics tests."""
+    from custom_components.roommind.coordinator import AnalyticsRuntimeSnapshot
+    from custom_components.roommind.managers.residual_heat_tracker import ResidualHeatSimulationState
+    from custom_components.roommind.utils.target_resolution import prepare_control_target_plan
+
     coordinator = MagicMock()
     coordinator.rooms = rooms_live or {}
     coordinator.outdoor_temp = 5.0
@@ -1446,6 +1450,35 @@ def _make_analytics_coordinator(history_rows=None, estimator=None, rooms_live=No
         mgr._estimators["room_a"] = estimator
     coordinator._model_manager = mgr
 
+    def runtime_snapshot(area_id, room_config):
+        model_info = mgr.analytics_snapshot(area_id) or {}
+        if model_info:
+            model_info["mpc_active"] = False
+            model_info["has_occupancy_sensors"] = bool(room_config.get("occupancy_sensors"))
+        return AnalyticsRuntimeSnapshot(
+            live=dict(coordinator.rooms.get(area_id, {})),
+            model_info=model_info,
+            simulation_context=mgr.simulation_context(area_id),
+            mpc_active=False,
+            acs_can_heat=False,
+            outdoor_temp=coordinator.outdoor_temp_effective,
+            weather_forecast=[],
+            residual=ResidualHeatSimulationState(),
+            window_open=False,
+        )
+
+    async def prepare_plan(room, settings, *, mold_prevention_active=False, mold_prevention_delta=0.0):
+        return await prepare_control_target_plan(
+            hass,
+            room,
+            settings,
+            mold_prevention_active=mold_prevention_active,
+            mold_prevention_delta=mold_prevention_delta,
+        )
+
+    coordinator.analytics_runtime_snapshot.side_effect = runtime_snapshot
+    coordinator.async_prepare_control_target_plan = AsyncMock(side_effect=prepare_plan)
+
     return coordinator
 
 
@@ -1455,7 +1488,7 @@ async def test_analytics_no_history_store(ws_hass, store, connection):
     await store.async_load()
     await store.async_save_room("room_a", {"thermostats": ["climate.trv1"]})
 
-    coordinator = _make_analytics_coordinator(history_rows=None)
+    coordinator = _make_analytics_coordinator(ws_hass, history_rows=None)
     ws_hass.data[DOMAIN]["coordinator"] = coordinator
 
     msg = {"id": 50, "type": "roommind/analytics/get", "area_id": "room_a"}
@@ -1484,7 +1517,7 @@ async def test_analytics_with_range_key(ws_hass, store, connection):
             "heating_power": "",
         },
     ]
-    coordinator = _make_analytics_coordinator(history_rows=csv_rows)
+    coordinator = _make_analytics_coordinator(ws_hass, history_rows=csv_rows)
     ws_hass.data[DOMAIN]["coordinator"] = coordinator
 
     msg = {"id": 51, "type": "roommind/analytics/get", "area_id": "room_a", "range": "24h"}
@@ -1515,7 +1548,7 @@ async def test_analytics_with_custom_timestamps(ws_hass, store, connection):
             "heating_power": "",
         },
     ]
-    coordinator = _make_analytics_coordinator(history_rows=csv_rows)
+    coordinator = _make_analytics_coordinator(ws_hass, history_rows=csv_rows)
     ws_hass.data[DOMAIN]["coordinator"] = coordinator
 
     msg = {
@@ -1543,7 +1576,7 @@ async def test_analytics_no_estimator(ws_hass, store, connection):
     await store.async_load()
     await store.async_save_room("room_a", {"thermostats": ["climate.trv1"]})
 
-    coordinator = _make_analytics_coordinator(history_rows=[])
+    coordinator = _make_analytics_coordinator(ws_hass, history_rows=[])
     ws_hass.data[DOMAIN]["coordinator"] = coordinator
 
     msg = {"id": 53, "type": "roommind/analytics/get", "area_id": "room_a"}
@@ -1567,7 +1600,7 @@ async def test_analytics_with_estimator(ws_hass, store, connection):
 
     est = _make_mock_estimator()
 
-    coordinator = _make_analytics_coordinator(history_rows=[], estimator=est)
+    coordinator = _make_analytics_coordinator(ws_hass, history_rows=[], estimator=est)
     ws_hass.data[DOMAIN]["coordinator"] = coordinator
 
     msg = {"id": 54, "type": "roommind/analytics/get", "area_id": "room_a"}
@@ -1596,7 +1629,7 @@ async def test_analytics_no_external_sensor_mpc_false(ws_hass, store, connection
 
     est = _make_mock_estimator(n_cooling=0)
 
-    coordinator = _make_analytics_coordinator(history_rows=[], estimator=est)
+    coordinator = _make_analytics_coordinator(ws_hass, history_rows=[], estimator=est)
     ws_hass.data[DOMAIN]["coordinator"] = coordinator
 
     msg = {"id": 55, "type": "roommind/analytics/get", "area_id": "room_a"}
@@ -1625,7 +1658,7 @@ async def test_analytics_prediction_disabled(ws_hass, store, connection):
             "heating_power": "",
         },
     ]
-    coordinator = _make_analytics_coordinator(history_rows=csv_rows)
+    coordinator = _make_analytics_coordinator(ws_hass, history_rows=csv_rows)
     ws_hass.data[DOMAIN]["coordinator"] = coordinator
 
     msg = {"id": 56, "type": "roommind/analytics/get", "area_id": "room_a"}
@@ -1643,7 +1676,7 @@ async def test_analytics_forecast_grid_alignment(ws_hass, store, connection):
     await store.async_load()
     await store.async_save_room("room_a", {"thermostats": ["climate.trv1"]})
 
-    coordinator = _make_analytics_coordinator(history_rows=[])
+    coordinator = _make_analytics_coordinator(ws_hass, history_rows=[])
     ws_hass.data[DOMAIN]["coordinator"] = coordinator
 
     msg = {"id": 57, "type": "roommind/analytics/get", "area_id": "room_a"}
@@ -1670,6 +1703,7 @@ async def test_analytics_mold_delta_from_live(ws_hass, store, connection):
     )
 
     coordinator = _make_analytics_coordinator(
+        ws_hass,
         history_rows=[],
         rooms_live={
             "room_a": {
@@ -1701,7 +1735,7 @@ async def test_analytics_model_has_occupancy_sensors_true(ws_hass, store, connec
     )
 
     est = _make_mock_estimator(model_dict={"Q_heat": 3.0, "Q_solar": 0.5, "Q_occupancy": 0.3})
-    coordinator = _make_analytics_coordinator(history_rows=[], estimator=est)
+    coordinator = _make_analytics_coordinator(ws_hass, history_rows=[], estimator=est)
     ws_hass.data[DOMAIN]["coordinator"] = coordinator
 
     msg = {"id": 60, "type": "roommind/analytics/get", "area_id": "room_a"}
@@ -1719,7 +1753,7 @@ async def test_analytics_model_has_occupancy_sensors_false(ws_hass, store, conne
     await store.async_save_room("room_a", {"thermostats": ["climate.trv1"]})
 
     est = _make_mock_estimator(model_dict={"Q_heat": 3.0, "Q_solar": 0.5, "Q_occupancy": 0.3})
-    coordinator = _make_analytics_coordinator(history_rows=[], estimator=est)
+    coordinator = _make_analytics_coordinator(ws_hass, history_rows=[], estimator=est)
     ws_hass.data[DOMAIN]["coordinator"] = coordinator
 
     msg = {"id": 61, "type": "roommind/analytics/get", "area_id": "room_a"}
