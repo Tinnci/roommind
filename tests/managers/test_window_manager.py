@@ -283,3 +283,20 @@ def test_remove_room_resets_seen_state():
         mock_time.time.return_value = 2000.0
         result = mgr.update("living_room", raw_open=True, open_delay=60, close_delay=0)
         assert result is True  # immediate pause again
+
+
+def test_diagnostics_snapshot_reports_elapsed_state_without_exposing_storage():
+    """Diagnostics owns elapsed-time conversion and returns a fresh mapping."""
+    mgr = WindowManager()
+    with patch("custom_components.roommind.managers.window_manager.time") as mock_time:
+        mock_time.time.return_value = 900.0
+        mgr.update("living_room", raw_open=False, open_delay=30, close_delay=0)
+        mock_time.time.return_value = 1000.0
+        mgr.update("living_room", raw_open=True, open_delay=30, close_delay=0)
+
+        mock_time.time.return_value = 1012.0
+        snapshot = mgr.diagnostics_snapshot("living_room")
+
+        assert snapshot == {"paused": False, "open_since": 12}
+        snapshot["paused"] = True
+        assert mgr.diagnostics_snapshot("living_room")["paused"] is False

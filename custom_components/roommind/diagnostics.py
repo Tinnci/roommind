@@ -67,85 +67,6 @@ def _build_device_states(hass: HomeAssistant, devices: list[dict]) -> list[dict[
     return result
 
 
-def _build_window_state(coordinator: Any, area_id: str) -> dict[str, Any]:
-    """Build window manager state for a room."""
-    wm = coordinator._window_manager
-    now = time.time()
-    result: dict[str, Any] = {
-        "paused": wm._paused.get(area_id, False),
-    }
-    open_since = wm._open_since.get(area_id)
-    if open_since:
-        result["open_since"] = round(now - open_since)
-    closed_since = wm._closed_since.get(area_id)
-    if closed_since:
-        result["closed_since"] = round(now - closed_since)
-    return result
-
-
-def _build_cover_state(coordinator: Any, area_id: str) -> dict[str, Any] | None:
-    """Build cover manager state for a room."""
-    cm = coordinator._cover_manager
-    if area_id not in cm._states:
-        return None
-    cs = cm._states[area_id]
-    now = time.time()
-    result: dict[str, Any] = {
-        "current_position": cs.current_position,
-        "last_commanded_position": cs.last_commanded_position,
-        "last_was_forced": cs.last_was_forced,
-    }
-    if cs.last_change_ts:
-        result["last_change_ago_s"] = round(now - cs.last_change_ts)
-    if cs.last_command_ts:
-        result["last_command_ago_s"] = round(now - cs.last_command_ts)
-    if cs.user_override_until > now:
-        result["user_override_remaining_s"] = round(cs.user_override_until - now)
-
-    return result
-
-
-def _build_compressor_state(coordinator: Any) -> dict[str, Any]:
-    """Build compressor group manager state."""
-    cgm = coordinator._compressor_manager
-    now = time.time()
-    groups: dict[str, Any] = {}
-    for gid, state in cgm._states.items():
-        group_cfg = cgm._groups.get(gid)
-        entry: dict[str, Any] = {
-            "active_members": sorted(state.active_members),
-            "min_run_s": group_cfg.min_run_seconds if group_cfg else None,
-            "min_off_s": group_cfg.min_off_seconds if group_cfg else None,
-        }
-        if state.compressor_on_since:
-            entry["on_for_s"] = round(now - state.compressor_on_since)
-        if state.compressor_off_since:
-            entry["off_for_s"] = round(now - state.compressor_off_since)
-        if group_cfg and (group_cfg.master_entity or group_cfg.enforce_uniform_mode):
-            entry["master_entity"] = group_cfg.master_entity
-            entry["master_action"] = state.master_action
-            entry["conflict_resolution"] = group_cfg.conflict_resolution
-            entry["enforce_uniform_mode"] = group_cfg.enforce_uniform_mode
-            if group_cfg.action_script:
-                entry["action_script"] = group_cfg.action_script
-            if state.master_on_since:
-                entry["master_on_for_s"] = round(now - state.master_on_since)
-        groups[gid] = entry
-    return groups
-
-
-def _build_valve_state(coordinator: Any) -> dict[str, Any]:
-    """Build valve manager state."""
-    vm = coordinator._valve_manager
-    now = time.time()
-    result: dict[str, Any] = {
-        "currently_cycling": {eid: round(now - ts) for eid, ts in vm._cycling.items()},
-    }
-    if vm._last_actuation:
-        result["last_actuation"] = {eid: round(now - ts) for eid, ts in vm._last_actuation.items()}
-    return result
-
-
 async def async_get_config_entry_diagnostics(hass: HomeAssistant, config_entry: ConfigEntry) -> dict[str, Any]:
     """Return diagnostics for a config entry."""
     data = hass.data.get(DOMAIN, {})
@@ -243,11 +164,11 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, config_entry: 
 
         # Window manager state
         if coordinator:
-            room_diag["window"] = _build_window_state(coordinator, area_id)
+            room_diag["window"] = coordinator._window_manager.diagnostics_snapshot(area_id)
 
         # Cover manager state
         if coordinator:
-            cover = _build_cover_state(coordinator, area_id)
+            cover = coordinator._cover_manager.diagnostics_snapshot(area_id)
             if cover:
                 room_diag["cover"] = cover
 
@@ -290,12 +211,12 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, config_entry: 
     # Compressor group state
     compressor: dict[str, Any] = {}
     if coordinator:
-        compressor = _build_compressor_state(coordinator)
+        compressor = coordinator._compressor_manager.diagnostics_snapshot()
 
     # Valve protection state
     valve: dict[str, Any] = {}
     if coordinator:
-        valve = _build_valve_state(coordinator)
+        valve = coordinator._valve_manager.diagnostics_snapshot()
 
     return {
         "integration": {

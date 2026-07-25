@@ -1297,3 +1297,34 @@ def test_set_commanded_position():
     mgr._get_state("lr").last_commanded_position = 10
     mgr.set_commanded_position("lr", 25)
     assert mgr._get_state("lr").last_commanded_position == 25
+
+
+def test_diagnostics_snapshot_unknown_room_has_no_side_effect():
+    """Inspecting an unknown room must not manufacture runtime state."""
+    mgr = CoverManager()
+
+    assert mgr.diagnostics_snapshot("unknown") is None
+    assert mgr._states == {}
+
+
+def test_diagnostics_snapshot_reports_owned_runtime_state():
+    """Cover diagnostics translates timestamps while preserving nullable fields."""
+    mgr = CoverManager()
+    state = mgr._get_state("lr")
+    state.current_position = 42
+    state.last_commanded_position = 40
+    state.last_was_forced = True
+    state.last_change_ts = 900.0
+    state.last_command_ts = 950.0
+    state.user_override_until = 1060.0
+
+    with patch("custom_components.roommind.managers.cover_manager.time") as mock_time:
+        mock_time.time.return_value = 1000.0
+        assert mgr.diagnostics_snapshot("lr") == {
+            "current_position": 42,
+            "last_commanded_position": 40,
+            "last_was_forced": True,
+            "last_change_ago_s": 100,
+            "last_command_ago_s": 50,
+            "user_override_remaining_s": 60,
+        }

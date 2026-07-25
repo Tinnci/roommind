@@ -1,6 +1,7 @@
 """Tests for CompressorGroupManager."""
 
 import time
+from unittest.mock import patch
 
 from custom_components.roommind.managers.compressor_group_manager import (
     CompressorGroupManager,
@@ -193,6 +194,24 @@ class TestCompressorGroupManager:
         mgr.load_groups([_make_group(min_run=5)])
         # Now 10 min > 5 min -> can turn off
         assert mgr.check_must_stay_active("climate.ac1") is False
+
+    def test_diagnostics_snapshot_uses_runtime_monotonic_clock(self):
+        """Elapsed diagnostics must stay in the manager's monotonic clock domain."""
+        mgr = CompressorGroupManager()
+        mgr.load_groups([_make_group(members=["climate.z", "climate.a"])])
+
+        with patch(
+            "custom_components.roommind.managers.compressor_group_manager.monotonic",
+            side_effect=[1000.0, 1060.0],
+        ):
+            mgr.update_member("climate.z", True)
+            mgr.update_member("climate.a", True)
+            snapshot = mgr.diagnostics_snapshot()
+
+        assert snapshot["g1"]["active_members"] == ["climate.a", "climate.z"]
+        assert snapshot["g1"]["on_for_s"] == 60
+        snapshot["g1"]["active_members"].append("climate.injected")
+        assert "climate.injected" not in mgr.get_state("g1").active_members
 
 
 class TestResolveMasterAction:

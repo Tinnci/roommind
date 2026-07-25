@@ -13,6 +13,10 @@ from custom_components.roommind.diagnostics import (
     _build_model_info,
     async_get_config_entry_diagnostics,
 )
+from custom_components.roommind.managers.compressor_group_manager import CompressorGroupManager
+from custom_components.roommind.managers.cover_manager import CoverManager
+from custom_components.roommind.managers.valve_manager import ValveManager
+from custom_components.roommind.managers.window_manager import WindowManager
 
 
 def _make_estimator():
@@ -60,22 +64,24 @@ def _make_coordinator(
     coordinator._history_store = history_store
     coordinator._model_manager._estimators = estimators or {}
 
-    # Window manager
+    # Manager fixtures use real owner Modules; diagnostics only consumes their
+    # public snapshot Interface.
+    coordinator._window_manager = WindowManager()
     coordinator._window_manager._paused = window_paused or {}
     coordinator._window_manager._open_since = window_open_since or {}
     coordinator._window_manager._closed_since = window_closed_since or {}
 
-    # Cover manager
+    coordinator._cover_manager = CoverManager()
     coordinator._cover_manager._states = cover_states or {}
 
     # Heat source states
     coordinator._heat_source_states = heat_source_states or {}
 
-    # Compressor manager
+    coordinator._compressor_manager = CompressorGroupManager()
     coordinator._compressor_manager._groups = compressor_groups or {}
     coordinator._compressor_manager._states = compressor_states or {}
 
-    # Valve manager
+    coordinator._valve_manager = ValveManager(MagicMock())
     coordinator._valve_manager._cycling = valve_cycling or {}
     coordinator._valve_manager._last_actuation = valve_last_actuation or {}
 
@@ -466,7 +472,7 @@ async def test_diagnostics_compressor_groups(hass, mock_config_entry):
     store.get_settings.return_value = {}
     store.get_rooms.return_value = {}
 
-    now = time.time()
+    now = time.monotonic()
     group_cfg = MagicMock()
     group_cfg.min_run_seconds = 180
     group_cfg.min_off_seconds = 300
@@ -499,7 +505,7 @@ async def test_diagnostics_compressor_master_device(hass, mock_config_entry):
     store.get_settings.return_value = {}
     store.get_rooms.return_value = {}
 
-    now = time.time()
+    now = time.monotonic()
     group_cfg = MagicMock()
     group_cfg.min_run_seconds = 180
     group_cfg.min_off_seconds = 300
@@ -575,7 +581,7 @@ async def test_diagnostics_compressor_off_since(hass, mock_config_entry):
     store.get_settings.return_value = {}
     store.get_rooms.return_value = {}
 
-    now = time.time()
+    now = time.monotonic()
     group_cfg = MagicMock()
     group_cfg.min_run_seconds = 180
     group_cfg.min_off_seconds = 300

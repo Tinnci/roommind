@@ -18,6 +18,18 @@ class WindowManager:
         """Return True if climate control is paused due to open window."""
         return self._paused.get(area_id, False)
 
+    def diagnostics_snapshot(self, area_id: str) -> dict[str, bool | int]:
+        """Return a stable diagnostics snapshot for one room."""
+        now = time.time()
+        result: dict[str, bool | int] = {"paused": self.is_paused(area_id)}
+        open_since = self._open_since.get(area_id)
+        if open_since is not None:
+            result["open_since"] = round(now - open_since)
+        closed_since = self._closed_since.get(area_id)
+        if closed_since is not None:
+            result["closed_since"] = round(now - closed_since)
+        return result
+
     def update(self, area_id: str, raw_open: bool, open_delay: int, close_delay: int) -> bool:
         """Update window state machine and return effective window_open status.
 

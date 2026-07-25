@@ -159,6 +159,33 @@ class CompressorGroupManager:
         """Return runtime state for a group."""
         return self._states.get(group_id)
 
+    def diagnostics_snapshot(self) -> dict[str, dict]:
+        """Return diagnostics using the same monotonic clock as runtime state."""
+        now = monotonic()
+        groups: dict[str, dict] = {}
+        for group_id, state in self._states.items():
+            config = self._groups.get(group_id)
+            entry: dict = {
+                "active_members": sorted(state.active_members),
+                "min_run_s": config.min_run_seconds if config else None,
+                "min_off_s": config.min_off_seconds if config else None,
+            }
+            if state.compressor_on_since is not None:
+                entry["on_for_s"] = round(now - state.compressor_on_since)
+            if state.compressor_off_since is not None:
+                entry["off_for_s"] = round(now - state.compressor_off_since)
+            if config and (config.master_entity or config.enforce_uniform_mode):
+                entry["master_entity"] = config.master_entity
+                entry["master_action"] = state.master_action
+                entry["conflict_resolution"] = config.conflict_resolution
+                entry["enforce_uniform_mode"] = config.enforce_uniform_mode
+                if config.action_script:
+                    entry["action_script"] = config.action_script
+                if state.master_on_since is not None:
+                    entry["master_on_for_s"] = round(now - state.master_on_since)
+            groups[group_id] = entry
+        return groups
+
     def get_enforced_action(self, entity_id: str) -> str | None:
         """Return the group's resolved action if uniform mode is enforced, else None."""
         gid = self._entity_to_group.get(entity_id)

@@ -453,3 +453,16 @@ class TestPublicAPI:
         assert vm.is_entity_cycling("climate.test") is False
         vm._cycling["climate.test"] = 123.0
         assert vm.is_entity_cycling("climate.test") is True
+
+
+def test_diagnostics_snapshot_reports_elapsed_state(vm):
+    """Valve diagnostics owns timestamp conversion for cycling and actuation."""
+    vm._cycling["climate.active"] = 1900.0
+    vm.load_actuation_data({"climate.active": 1800.0})
+
+    with patch("custom_components.roommind.managers.valve_manager.time") as mock_time:
+        mock_time.time.return_value = 2000.0
+        assert vm.diagnostics_snapshot() == {
+            "currently_cycling": {"climate.active": 100},
+            "last_actuation": {"climate.active": 200},
+        }
