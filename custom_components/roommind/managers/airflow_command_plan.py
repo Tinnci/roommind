@@ -9,7 +9,8 @@ from homeassistant.components.climate import ClimateEntityFeature
 from homeassistant.components.fan import FanEntityFeature
 
 from ..const import MODE_COOLING, MODE_HEATING
-from .environmental_factor_manager import AIRFLOW_ROLE_HVAC_FAN, _fan_mode_to_q
+from .airflow_levels import fan_mode_level
+from .environmental_factor_manager import AIRFLOW_ROLE_HVAC_FAN
 
 OUTCOME_APPLIED = "applied"
 OUTCOME_SKIPPED_OFF_CLIMATE = "skipped_off_climate"
@@ -262,7 +263,7 @@ def nearest_fan_mode(level: float, fan_modes: list[str]) -> str | None:
     active = [mode for mode in fan_modes if mode.lower() != "off"]
     if not active:
         return None
-    return min(active, key=lambda mode: abs(_fan_mode_to_q(mode, fan_modes) - level))
+    return min(active, key=lambda mode: abs(fan_mode_level(mode, fan_modes) - level))
 
 
 def supports_feature(attrs: dict[str, Any], feature: Any) -> bool:

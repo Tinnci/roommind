@@ -10,6 +10,8 @@ from homeassistant.const import STATE_OFF, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from .airflow_levels import fan_mode_level, fan_preset_mode_level
+
 AIRFLOW_ROLE_CIRCULATION = "circulation"
 AIRFLOW_ROLE_VENTILATION = "ventilation"
 AIRFLOW_ROLE_HVAC_FAN = "hvac_fan"
@@ -235,7 +237,7 @@ class EnvironmentalFactorManager:
         elif percentage is not None and percentage > 0:
             q = percentage / 100.0
         elif preset_mode:
-            q = _fan_preset_mode_to_q(preset_mode, preset_modes)
+            q = fan_preset_mode_level(preset_mode, preset_modes)
         elif percentage is not None:
             q = percentage / 100.0
         else:
@@ -286,7 +288,7 @@ class EnvironmentalFactorManager:
         elif hvac_action_text == "idle" and state.state != "fan_only":
             q = 0.0
         else:
-            q = _fan_mode_to_q(fan_mode, fan_modes)
+            q = fan_mode_level(fan_mode, fan_modes)
         if hvac_action_text == "fan" and q == 0.0 and state.state != STATE_OFF:
             q = 1.0
         levels = _levels_from_fan_modes(fan_modes)
@@ -366,46 +368,7 @@ def _timestamp_iso(value: Any) -> str | None:
 def _levels_from_fan_modes(fan_modes: list[str]) -> list[float]:
     if not fan_modes:
         return [0.0, 1.0]
-    return _unique_levels(_fan_mode_to_q(mode, fan_modes) for mode in fan_modes)
-
-
-def _fan_mode_to_q(mode: Any, fan_modes: list[str] | None = None) -> float:
-    if mode is None:
-        return 0.0
-    text = str(mode).lower()
-    if text in {"off", "none", "stop", "stopped"}:
-        return 0.0
-    if text in {"quiet", "silent", "low", "minimum", "min"}:
-        return 1.0 / 3.0
-    if text in {"medium", "mid", "middle", "normal"}:
-        return 2.0 / 3.0
-    if text in {"high", "max", "maximum", "turbo", "boost", "strong", "on"}:
-        return 1.0
-    if text == "auto":
-        return 0.5
-    if fan_modes and mode in fan_modes:
-        active_modes = [m for m in fan_modes if str(m).lower() not in {"off", "none", "stop", "stopped"}]
-        if mode in active_modes and active_modes:
-            return (active_modes.index(mode) + 1) / len(active_modes)
-    return 1.0
-
-
-def _fan_preset_mode_to_q(mode: Any, preset_modes: list[str] | None = None) -> float:
-    """Return a conservative airflow estimate for preset-only fan states."""
-    text = str(mode).lower()
-    if text in {"off", "none", "stop", "stopped"}:
-        return 0.0
-    if text in {"sleep", "night", "quiet", "silent", "eco", "minimum", "min"}:
-        return 1.0 / 3.0
-    if text in {"auto", "smart", "breeze", "natural", "normal", "standard", "comfort"}:
-        return 0.5
-    if text in {"high", "max", "maximum", "turbo", "boost", "strong", "full", "on"}:
-        return 1.0
-    if preset_modes and mode in preset_modes:
-        active_modes = [m for m in preset_modes if str(m).lower() not in {"off", "none", "stop", "stopped"}]
-        if mode in active_modes and active_modes:
-            return (active_modes.index(mode) + 1) / len(active_modes)
-    return 0.5
+    return _unique_levels(fan_mode_level(mode, fan_modes) for mode in fan_modes)
 
 
 def _unique_levels(levels: Any) -> list[float]:

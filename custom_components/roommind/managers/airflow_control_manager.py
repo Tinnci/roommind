@@ -17,11 +17,8 @@ from .airflow_command_plan import (
     plan_climate_airflow,
     plan_fan_airflow,
 )
-from .environmental_factor_manager import (
-    AIRFLOW_ROLE_VENTILATION,
-    _fan_mode_to_q,
-    _fan_preset_mode_to_q,
-)
+from .airflow_levels import fan_mode_level, fan_preset_mode_level
+from .environmental_factor_manager import AIRFLOW_ROLE_VENTILATION
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -253,9 +250,9 @@ def _fan_observed_q(state: str, attrs: dict[str, Any]) -> float:
             return 1.0
         if q > 0.0 or not preset_mode:
             return q
-        return _fan_preset_mode_to_q(preset_mode, preset_modes)
+        return fan_preset_mode_level(preset_mode, preset_modes)
     if preset_mode:
-        return _fan_preset_mode_to_q(preset_mode, preset_modes)
+        return fan_preset_mode_level(preset_mode, preset_modes)
     return 1.0
 
 
@@ -265,5 +262,5 @@ def _climate_observed_q(state: str, attrs: dict[str, Any]) -> float:
     fan_modes = [str(item) for item in attrs.get("fan_modes") or []]
     fan_mode = attrs.get("fan_mode")
     if fan_mode:
-        return _fan_mode_to_q(str(fan_mode), fan_modes)
+        return fan_mode_level(str(fan_mode), fan_modes)
     return 1.0 if state == "fan_only" else 0.0
