@@ -14,7 +14,7 @@ from .coordinator import EntityPlatform, RoomMindCoordinator
 from .utils.entity_translation import room_translation_placeholders
 
 
-def _create_room_entities(coordinator: RoomMindCoordinator, area_id: str) -> list[SensorEntity]:
+def create_room_sensors(coordinator: RoomMindCoordinator, area_id: str) -> list[SensorEntity]:
     """Create the standard set of sensor entities for a room."""
     return [
         RoomMindTargetTemperatureSensor(coordinator, area_id),
@@ -36,11 +36,12 @@ async def async_setup_entry(
     coordinator.register_entity_platform(
         EntityPlatform.SENSOR,
         async_add_entities,
+        create_room_sensors,
         rooms,
     )
     entities: list[SensorEntity] = []
     for area_id in rooms:
-        entities.extend(_create_room_entities(coordinator, area_id))
+        entities.extend(create_room_sensors(coordinator, area_id))
     if entities:
         async_add_entities(entities)
 

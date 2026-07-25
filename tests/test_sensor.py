@@ -11,8 +11,8 @@ from custom_components.roommind.coordinator import EntityPlatform
 from custom_components.roommind.sensor import (
     RoomMindModeSensor,
     RoomMindTargetTemperatureSensor,
-    _create_room_entities,
     async_setup_entry,
+    create_room_sensors,
 )
 
 
@@ -39,9 +39,10 @@ async def test_setup_entry_creates_entities(hass, mock_config_entry, store):
     await async_setup_entry(hass, mock_config_entry, add_entities)
 
     coordinator.register_entity_platform.assert_called_once()
-    platform, callback, area_ids = coordinator.register_entity_platform.call_args.args
+    platform, callback, factory, area_ids = coordinator.register_entity_platform.call_args.args
     assert platform is EntityPlatform.SENSOR
     assert callback is add_entities
+    assert factory is create_room_sensors
     assert list(area_ids) == ["room_a"]
     # 2 entities per room (target_temp + mode)
     add_entities.assert_called_once()
@@ -64,9 +65,10 @@ async def test_setup_entry_no_rooms(hass, mock_config_entry, store):
     await async_setup_entry(hass, mock_config_entry, add_entities)
 
     coordinator.register_entity_platform.assert_called_once()
-    platform, callback, area_ids = coordinator.register_entity_platform.call_args.args
+    platform, callback, factory, area_ids = coordinator.register_entity_platform.call_args.args
     assert platform is EntityPlatform.SENSOR
     assert callback is add_entities
+    assert factory is create_room_sensors
     assert list(area_ids) == []
     add_entities.assert_not_called()
 
@@ -92,9 +94,9 @@ async def test_setup_entry_multiple_rooms(hass, mock_config_entry, store):
 
 
 def test_create_room_entities():
-    """_create_room_entities returns target temp and mode sensors."""
+    """create_room_sensors returns target temp and mode sensors."""
     coordinator = _make_coordinator()
-    entities = _create_room_entities(coordinator, "room_a")
+    entities = create_room_sensors(coordinator, "room_a")
     assert len(entities) == 2
     assert isinstance(entities[0], RoomMindTargetTemperatureSensor)
     assert isinstance(entities[1], RoomMindModeSensor)

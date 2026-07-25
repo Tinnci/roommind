@@ -10,8 +10,8 @@ from homeassistant.components.climate import HVACMode
 
 from custom_components.roommind.climate import (
     RoomMindOverrideClimate,
-    _create_room_climates,
     async_setup_entry,
+    create_room_climates,
 )
 from custom_components.roommind.const import DEFAULT_COMFORT_TEMP, DOMAIN, OVERRIDE_CUSTOM
 from custom_components.roommind.coordinator import EntityPlatform
@@ -31,7 +31,7 @@ def mock_coordinator():
 def test_create_room_climates(mock_coordinator):
     """Factory creates exactly one climate entity per room."""
     coordinator, _ = mock_coordinator
-    climates = _create_room_climates(coordinator, "living_room")
+    climates = create_room_climates(coordinator, "living_room")
     assert len(climates) == 1
     assert isinstance(climates[0], RoomMindOverrideClimate)
 
@@ -259,6 +259,7 @@ async def test_async_setup_entry_creates_entities_for_all_rooms():
     coordinator.register_entity_platform.assert_called_once_with(
         EntityPlatform.CLIMATE,
         async_add_entities,
+        create_room_climates,
         store.get_rooms.return_value,
     )
     async_add_entities.assert_called_once()

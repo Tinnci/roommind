@@ -16,12 +16,20 @@ from .coordinator import EntityPlatform, RoomMindCoordinator
 from .utils.entity_translation import room_translation_placeholders
 
 
-def _create_room_switches(
+def create_room_cover_switches(
     coordinator: RoomMindCoordinator,
     area_id: str,
 ) -> list[SwitchEntity]:
     """Create switch entities for a room."""
     return [RoomMindCoverAutoSwitch(coordinator, area_id)]
+
+
+def create_room_climate_control_switches(
+    coordinator: RoomMindCoordinator,
+    area_id: str,
+) -> list[SwitchEntity]:
+    """Create climate-control switch entities for a room."""
+    return [RoomMindClimateControlSwitch(coordinator, area_id)]
 
 
 async def async_setup_entry(
@@ -39,17 +47,19 @@ async def async_setup_entry(
     coordinator.register_entity_platform(
         EntityPlatform.CLIMATE_CONTROL_SWITCH,
         async_add_entities,
+        create_room_climate_control_switches,
         rooms,
     )
     coordinator.register_entity_platform(
         EntityPlatform.COVER_SWITCH,
         async_add_entities,
+        create_room_cover_switches,
         [area_id for area_id, room in rooms.items() if room.get("covers")],
     )
     for area_id, room in rooms.items():
-        entities.append(RoomMindClimateControlSwitch(coordinator, area_id))
+        entities.extend(create_room_climate_control_switches(coordinator, area_id))
         if room.get("covers"):
-            entities.extend(_create_room_switches(coordinator, area_id))
+            entities.extend(create_room_cover_switches(coordinator, area_id))
 
     async_add_entities(entities)
 

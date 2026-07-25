@@ -21,7 +21,7 @@ from .coordinator import EntityPlatform, RoomMindCoordinator
 from .utils.entity_translation import room_translation_placeholders
 
 
-def _create_room_climates(
+def create_room_climates(
     coordinator: RoomMindCoordinator,
     area_id: str,
 ) -> list[ClimateEntity]:
@@ -41,11 +41,12 @@ async def async_setup_entry(
     coordinator.register_entity_platform(
         EntityPlatform.CLIMATE,
         async_add_entities,
+        create_room_climates,
         rooms,
     )
     entities: list[ClimateEntity] = []
     for area_id in rooms:
-        entities.extend(_create_room_climates(coordinator, area_id))
+        entities.extend(create_room_climates(coordinator, area_id))
     if entities:
         async_add_entities(entities)
 

@@ -13,8 +13,9 @@ from custom_components.roommind.switch import (
     RoomMindClimateControlSwitch,
     RoomMindCoverAutoSwitch,
     RoomMindVacationSwitch,
-    _create_room_switches,
     async_setup_entry,
+    create_room_climate_control_switches,
+    create_room_cover_switches,
 )
 
 
@@ -82,7 +83,7 @@ def test_switch_unique_id_and_entity_id(mock_coordinator):
 def test_create_room_switches(mock_coordinator):
     """Factory creates exactly one switch per room."""
     coordinator, _ = mock_coordinator
-    switches = _create_room_switches(coordinator, "living_room")
+    switches = create_room_cover_switches(coordinator, "living_room")
     assert len(switches) == 1
     assert isinstance(switches[0], RoomMindCoverAutoSwitch)
 
@@ -123,11 +124,13 @@ async def test_async_setup_entry_creates_entities_for_rooms_with_covers():
     coordinator.register_entity_platform.assert_any_call(
         EntityPlatform.CLIMATE_CONTROL_SWITCH,
         async_add_entities,
+        create_room_climate_control_switches,
         store.get_rooms.return_value,
     )
     coordinator.register_entity_platform.assert_any_call(
         EntityPlatform.COVER_SWITCH,
         async_add_entities,
+        create_room_cover_switches,
         ["living_room"],
     )
     async_add_entities.assert_called_once()

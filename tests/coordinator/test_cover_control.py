@@ -16,6 +16,10 @@ from .conftest import (
 )
 
 
+def _entity_factory(coordinator, area_id):
+    return [MagicMock()]
+
+
 class TestCoverageGaps:
     """Tests covering uncovered coordinator lines."""
 
@@ -24,20 +28,23 @@ class TestCoverageGaps:
         """async_room_added creates switch and binary_sensor entities when covers are configured."""
         coordinator = _create_coordinator(hass, mock_config_entry)
         coordinator.async_request_refresh = AsyncMock()
-        coordinator.register_entity_platform(EntityPlatform.SENSOR, MagicMock())
+        coordinator.register_entity_platform(EntityPlatform.SENSOR, MagicMock(), _entity_factory)
         mock_add_switch = MagicMock()
         mock_add_binary = MagicMock()
         coordinator.register_entity_platform(
             EntityPlatform.CLIMATE_CONTROL_SWITCH,
             mock_add_switch,
+            _entity_factory,
         )
         coordinator.register_entity_platform(
             EntityPlatform.COVER_SWITCH,
             mock_add_switch,
+            _entity_factory,
         )
         coordinator.register_entity_platform(
             EntityPlatform.COVER_BINARY_SENSOR,
             mock_add_binary,
+            _entity_factory,
         )
 
         room = {"area_id": "bedroom_abc", "covers": ["cover.blind1"]}
@@ -63,20 +70,23 @@ class TestCoverageGaps:
         """Calling async_room_added twice for same room with covers does not duplicate cover entities."""
         coordinator = _create_coordinator(hass, mock_config_entry)
         coordinator.async_request_refresh = AsyncMock()
-        coordinator.register_entity_platform(EntityPlatform.SENSOR, MagicMock())
+        coordinator.register_entity_platform(EntityPlatform.SENSOR, MagicMock(), _entity_factory)
         mock_add_switch = MagicMock()
         mock_add_binary = MagicMock()
         coordinator.register_entity_platform(
             EntityPlatform.CLIMATE_CONTROL_SWITCH,
             mock_add_switch,
+            _entity_factory,
         )
         coordinator.register_entity_platform(
             EntityPlatform.COVER_SWITCH,
             mock_add_switch,
+            _entity_factory,
         )
         coordinator.register_entity_platform(
             EntityPlatform.COVER_BINARY_SENSOR,
             mock_add_binary,
+            _entity_factory,
         )
 
         room = {"area_id": "bedroom_abc", "covers": ["cover.blind1"]}
@@ -91,20 +101,23 @@ class TestCoverageGaps:
         """async_room_added without covers does not create switch/binary_sensor entities."""
         coordinator = _create_coordinator(hass, mock_config_entry)
         coordinator.async_request_refresh = AsyncMock()
-        coordinator.register_entity_platform(EntityPlatform.SENSOR, MagicMock())
+        coordinator.register_entity_platform(EntityPlatform.SENSOR, MagicMock(), _entity_factory)
         mock_add_switch = MagicMock()
         mock_add_binary = MagicMock()
         coordinator.register_entity_platform(
             EntityPlatform.CLIMATE_CONTROL_SWITCH,
             mock_add_switch,
+            _entity_factory,
         )
         coordinator.register_entity_platform(
             EntityPlatform.COVER_SWITCH,
             mock_add_switch,
+            _entity_factory,
         )
         coordinator.register_entity_platform(
             EntityPlatform.COVER_BINARY_SENSOR,
             mock_add_binary,
+            _entity_factory,
         )
 
         room = {"area_id": "bedroom_abc"}

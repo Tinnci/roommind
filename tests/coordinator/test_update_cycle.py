@@ -9,6 +9,7 @@ import pytest
 
 from custom_components.roommind.const import MODE_IDLE
 from custom_components.roommind.coordinator import EntityPlatform
+from custom_components.roommind.sensor import create_room_sensors
 
 from .conftest import (
     SAMPLE_ROOM,
@@ -181,6 +182,7 @@ class TestRoomMindCoordinator:
         coordinator.register_entity_platform(
             EntityPlatform.SENSOR,
             mock_add_entities,
+            create_room_sensors,
         )
 
         room = {"area_id": "bedroom_abc12345"}
@@ -227,6 +229,7 @@ class TestRoomMindCoordinator:
         coordinator.register_entity_platform(
             EntityPlatform.SENSOR,
             mock_add_entities,
+            create_room_sensors,
         )
 
         room = {"area_id": "bedroom_abc12345"}
@@ -245,6 +248,7 @@ class TestRoomMindCoordinator:
         coordinator.register_entity_platform(
             EntityPlatform.SENSOR,
             mock_add_entities,
+            create_room_sensors,
         )
 
         room = {"area_id": "bedroom_abc12345"}

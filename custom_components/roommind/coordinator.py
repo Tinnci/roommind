@@ -131,6 +131,7 @@ class _EntityPlatformRegistration:
     """Callback and registered rooms for one Home Assistant entity platform."""
 
     callback: Callable[[list[Any]], None] | None = None
+    factory: Callable[[RoomMindCoordinator, str], list[Any]] | None = None
     area_ids: set[str] = field(default_factory=set)
 
 
@@ -260,11 +261,13 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         self,
         platform: EntityPlatform,
         callback: Callable[[list[Any]], None],
+        factory: Callable[[RoomMindCoordinator, str], list[Any]],
         area_ids: Iterable[str] = (),
     ) -> None:
-        """Register a platform callback and its already-created room entities."""
+        """Register a platform's entity factory, callback, and existing rooms."""
         registration = self._entity_platforms[platform]
         registration.callback = callback
+        registration.factory = factory
         registration.area_ids.update(area_ids)
 
     def is_entity_platform_registered(
@@ -279,13 +282,12 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         self,
         platform: EntityPlatform,
         area_id: str,
-        create_entities: Callable[[], list[Any]],
     ) -> bool:
         """Add one room's entities once through its registered callback."""
         registration = self._entity_platforms[platform]
-        if registration.callback is None or area_id in registration.area_ids:
+        if registration.callback is None or registration.factory is None or area_id in registration.area_ids:
             return False
-        registration.callback(create_entities())
+        registration.callback(registration.factory(self, area_id))
         registration.area_ids.add(area_id)
         return True
 
@@ -2221,48 +2223,16 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         area_id = room["area_id"]
         has_covers = bool(room.get("covers"))
 
-        from .sensor import _create_room_entities
-
-        self._add_entity_platform_room(
-            EntityPlatform.SENSOR,
-            area_id,
-            lambda: _create_room_entities(self, area_id),
-        )
-
-        # Climate entities (override control): always create
-        from .climate import _create_room_climates
-
-        self._add_entity_platform_room(
-            EntityPlatform.CLIMATE,
-            area_id,
-            lambda: _create_room_climates(self, area_id),
-        )
-
-        from .switch import RoomMindClimateControlSwitch
-
-        self._add_entity_platform_room(
-            EntityPlatform.CLIMATE_CONTROL_SWITCH,
-            area_id,
-            lambda: [RoomMindClimateControlSwitch(self, area_id)],
-        )
+        self._add_entity_platform_room(EntityPlatform.SENSOR, area_id)
+        self._add_entity_platform_room(EntityPlatform.CLIMATE, area_id)
+        self._add_entity_platform_room(EntityPlatform.CLIMATE_CONTROL_SWITCH, area_id)
 
         # Cover entities: only create when covers are configured.
         # Not removed on save — cleanup_orphaned_entities() handles that at startup
         # so brief config changes don't break user automations.
         if has_covers:
-            from .binary_sensor import _create_room_binary_sensors
-            from .switch import _create_room_switches
-
-            self._add_entity_platform_room(
-                EntityPlatform.COVER_SWITCH,
-                area_id,
-                lambda: _create_room_switches(self, area_id),
-            )
-            self._add_entity_platform_room(
-                EntityPlatform.COVER_BINARY_SENSOR,
-                area_id,
-                lambda: _create_room_binary_sensors(self, area_id),
-            )
+            self._add_entity_platform_room(EntityPlatform.COVER_SWITCH, area_id)
+            self._add_entity_platform_room(EntityPlatform.COVER_BINARY_SENSOR, area_id)
 
         await self.async_request_refresh()
 

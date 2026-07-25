@@ -13,7 +13,7 @@ from .coordinator import EntityPlatform, RoomMindCoordinator
 from .utils.entity_translation import room_translation_placeholders
 
 
-def _create_room_binary_sensors(
+def create_room_binary_sensors(
     coordinator: RoomMindCoordinator,
     area_id: str,
 ) -> list[BinarySensorEntity]:
@@ -33,12 +33,13 @@ async def async_setup_entry(
     coordinator.register_entity_platform(
         EntityPlatform.COVER_BINARY_SENSOR,
         async_add_entities,
+        create_room_binary_sensors,
         [area_id for area_id, room in rooms.items() if room.get("covers")],
     )
     entities: list[BinarySensorEntity] = []
     for area_id, room in rooms.items():
         if room.get("covers"):
-            entities.extend(_create_room_binary_sensors(coordinator, area_id))
+            entities.extend(create_room_binary_sensors(coordinator, area_id))
     if entities:
         async_add_entities(entities)
 

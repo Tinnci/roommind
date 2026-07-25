@@ -8,8 +8,8 @@ import pytest
 
 from custom_components.roommind.binary_sensor import (
     RoomMindCoverPausedSensor,
-    _create_room_binary_sensors,
     async_setup_entry,
+    create_room_binary_sensors,
 )
 from custom_components.roommind.const import DOMAIN
 from custom_components.roommind.coordinator import EntityPlatform
@@ -60,7 +60,7 @@ def test_binary_sensor_unique_id_and_entity_id(mock_coordinator):
 
 def test_create_room_binary_sensors(mock_coordinator):
     """Factory creates exactly one binary sensor per room."""
-    sensors = _create_room_binary_sensors(mock_coordinator, "living_room")
+    sensors = create_room_binary_sensors(mock_coordinator, "living_room")
     assert len(sensors) == 1
     assert isinstance(sensors[0], RoomMindCoverPausedSensor)
 
@@ -96,6 +96,7 @@ async def test_async_setup_entry_creates_entities_for_rooms_with_covers():
     coordinator.register_entity_platform.assert_called_once_with(
         EntityPlatform.COVER_BINARY_SENSOR,
         async_add_entities,
+        create_room_binary_sensors,
         ["living_room"],
     )
     # Only living_room has covers, so one entity created
