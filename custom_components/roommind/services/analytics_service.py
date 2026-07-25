@@ -228,7 +228,7 @@ async def build_analytics_data(
     """
     settings = store.get_settings()
     room_config = store.get_room(area_id) or {}
-    history_store = getattr(coordinator, "_history_store", None)
+    history_store = coordinator.history_store if coordinator else None
 
     # Read history data -- custom timestamps take precedence over range preset
     detail: list = []

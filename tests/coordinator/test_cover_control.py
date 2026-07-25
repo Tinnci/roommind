@@ -6,6 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from custom_components.roommind.coordinator import EntityPlatform
+
 from .conftest import (
     SAMPLE_ROOM,
     _create_coordinator,
@@ -22,53 +24,102 @@ class TestCoverageGaps:
         """async_room_added creates switch and binary_sensor entities when covers are configured."""
         coordinator = _create_coordinator(hass, mock_config_entry)
         coordinator.async_request_refresh = AsyncMock()
-        coordinator.async_add_entities = MagicMock()
+        coordinator.register_entity_platform(EntityPlatform.SENSOR, MagicMock())
         mock_add_switch = MagicMock()
         mock_add_binary = MagicMock()
-        coordinator.async_add_switch_entities = mock_add_switch
-        coordinator.async_add_binary_sensor_entities = mock_add_binary
+        coordinator.register_entity_platform(
+            EntityPlatform.CLIMATE_CONTROL_SWITCH,
+            mock_add_switch,
+        )
+        coordinator.register_entity_platform(
+            EntityPlatform.COVER_SWITCH,
+            mock_add_switch,
+        )
+        coordinator.register_entity_platform(
+            EntityPlatform.COVER_BINARY_SENSOR,
+            mock_add_binary,
+        )
 
         room = {"area_id": "bedroom_abc", "covers": ["cover.blind1"]}
         await coordinator.async_room_added(room)
 
         assert mock_add_switch.call_count == 2
         mock_add_binary.assert_called_once()
-        assert "bedroom_abc" in coordinator._switch_entity_areas
-        assert "bedroom_abc" in coordinator._binary_sensor_entity_areas
-        assert "bedroom_abc" in coordinator._climate_control_switch_areas
+        assert coordinator.is_entity_platform_registered(
+            EntityPlatform.COVER_SWITCH,
+            "bedroom_abc",
+        )
+        assert coordinator.is_entity_platform_registered(
+            EntityPlatform.COVER_BINARY_SENSOR,
+            "bedroom_abc",
+        )
+        assert coordinator.is_entity_platform_registered(
+            EntityPlatform.CLIMATE_CONTROL_SWITCH,
+            "bedroom_abc",
+        )
 
     @pytest.mark.asyncio
     async def test_async_room_added_with_covers_no_duplicate(self, hass, mock_config_entry):
         """Calling async_room_added twice for same room with covers does not duplicate cover entities."""
         coordinator = _create_coordinator(hass, mock_config_entry)
         coordinator.async_request_refresh = AsyncMock()
-        coordinator.async_add_entities = MagicMock()
-        coordinator.async_add_switch_entities = MagicMock()
-        coordinator.async_add_binary_sensor_entities = MagicMock()
+        coordinator.register_entity_platform(EntityPlatform.SENSOR, MagicMock())
+        mock_add_switch = MagicMock()
+        mock_add_binary = MagicMock()
+        coordinator.register_entity_platform(
+            EntityPlatform.CLIMATE_CONTROL_SWITCH,
+            mock_add_switch,
+        )
+        coordinator.register_entity_platform(
+            EntityPlatform.COVER_SWITCH,
+            mock_add_switch,
+        )
+        coordinator.register_entity_platform(
+            EntityPlatform.COVER_BINARY_SENSOR,
+            mock_add_binary,
+        )
 
         room = {"area_id": "bedroom_abc", "covers": ["cover.blind1"]}
         await coordinator.async_room_added(room)
         await coordinator.async_room_added(room)
 
-        assert coordinator.async_add_switch_entities.call_count == 2
-        coordinator.async_add_binary_sensor_entities.assert_called_once()
+        assert mock_add_switch.call_count == 2
+        mock_add_binary.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_async_room_added_without_covers_no_switch_binary(self, hass, mock_config_entry):
         """async_room_added without covers does not create switch/binary_sensor entities."""
         coordinator = _create_coordinator(hass, mock_config_entry)
         coordinator.async_request_refresh = AsyncMock()
-        coordinator.async_add_entities = MagicMock()
-        coordinator.async_add_switch_entities = MagicMock()
-        coordinator.async_add_binary_sensor_entities = MagicMock()
+        coordinator.register_entity_platform(EntityPlatform.SENSOR, MagicMock())
+        mock_add_switch = MagicMock()
+        mock_add_binary = MagicMock()
+        coordinator.register_entity_platform(
+            EntityPlatform.CLIMATE_CONTROL_SWITCH,
+            mock_add_switch,
+        )
+        coordinator.register_entity_platform(
+            EntityPlatform.COVER_SWITCH,
+            mock_add_switch,
+        )
+        coordinator.register_entity_platform(
+            EntityPlatform.COVER_BINARY_SENSOR,
+            mock_add_binary,
+        )
 
         room = {"area_id": "bedroom_abc"}
         await coordinator.async_room_added(room)
 
-        coordinator.async_add_switch_entities.assert_called_once()
-        coordinator.async_add_binary_sensor_entities.assert_not_called()
-        assert "bedroom_abc" in coordinator._climate_control_switch_areas
-        assert "bedroom_abc" not in coordinator._switch_entity_areas
+        mock_add_switch.assert_called_once()
+        mock_add_binary.assert_not_called()
+        assert coordinator.is_entity_platform_registered(
+            EntityPlatform.CLIMATE_CONTROL_SWITCH,
+            "bedroom_abc",
+        )
+        assert not coordinator.is_entity_platform_registered(
+            EntityPlatform.COVER_SWITCH,
+            "bedroom_abc",
+        )
 
     @pytest.mark.asyncio
     async def test_is_mpc_active_exception_handled_gracefully(self, hass, mock_config_entry):

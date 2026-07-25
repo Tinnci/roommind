@@ -1427,9 +1427,9 @@ def _make_analytics_coordinator(history_rows=None, estimator=None, rooms_live=No
         hs = MagicMock()
         hs.read_detail.return_value = history_rows
         hs.read_history.return_value = []
-        coordinator._history_store = hs
+        coordinator.history_store = hs
     else:
-        coordinator._history_store = None
+        coordinator.history_store = None
 
     from custom_components.roommind.control.thermal_model import RoomModelManager
 
@@ -1486,7 +1486,7 @@ async def test_analytics_with_range_key(ws_hass, store, connection):
     assert len(result["detail"]) == 1
     assert result["detail"][0]["ts"] == 1000.0
     # read_detail was called with max_age=86400
-    coordinator._history_store.read_detail.assert_called_once_with("room_a", 86400)
+    coordinator.history_store.read_detail.assert_called_once_with("room_a", 86400)
 
 
 @pytest.mark.asyncio
@@ -1521,7 +1521,7 @@ async def test_analytics_with_custom_timestamps(ws_hass, store, connection):
 
     result = connection.send_result.call_args[0][1]
     assert len(result["detail"]) == 1
-    coordinator._history_store.read_detail.assert_called_once_with(
+    coordinator.history_store.read_detail.assert_called_once_with(
         "room_a",
         None,
         1000.0,
@@ -2732,7 +2732,7 @@ async def test_get_diagnostics_returns_full_structure(ws_hass, store, connection
     coordinator._heat_source_states = {}
     coordinator._weather_manager = MagicMock()
     coordinator._weather_manager._outdoor_forecast = []
-    coordinator._history_store = None
+    coordinator.history_store = None
     coordinator._compressor_manager = MagicMock()
     coordinator._compressor_manager._groups = {}
     coordinator._compressor_manager._member_states = {}

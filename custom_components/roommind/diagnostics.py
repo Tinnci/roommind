@@ -171,10 +171,10 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, config_entry: 
 
     # Recent history (last 2 hours of detail data per room)
     recent_history: dict[str, list] = {}
-    if coordinator and coordinator._history_store:
+    if coordinator and coordinator.history_store:
         for area_id in rooms_config:
             try:
-                rows = await hass.async_add_executor_job(coordinator._history_store.read_detail, area_id, 7200)
+                rows = await hass.async_add_executor_job(coordinator.history_store.read_detail, area_id, 7200)
                 recent_history[area_id] = [
                     {
                         "ts": row.get("timestamp", ""),

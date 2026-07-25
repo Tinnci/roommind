@@ -365,7 +365,7 @@ class TestBuildAnalyticsData:
         history_store = MagicMock()
         history_store.read_detail.return_value = detail_rows
         history_store.read_history.return_value = []
-        coordinator._history_store = history_store
+        coordinator.history_store = history_store
 
         now = time.time()
         with (
@@ -445,7 +445,7 @@ class TestBuildAnalyticsData:
         history_store = MagicMock()
         history_store.read_detail.return_value = detail_rows
         history_store.read_history.return_value = []
-        coordinator._history_store = history_store
+        coordinator.history_store = history_store
 
         now = time.time()
         with (
@@ -527,7 +527,7 @@ class TestBuildAnalyticsData:
         history_store = MagicMock()
         history_store.read_detail.return_value = detail_rows
         history_store.read_history.return_value = []
-        coordinator._history_store = history_store
+        coordinator.history_store = history_store
 
         with (
             patch(
@@ -683,7 +683,7 @@ class TestBuildAnalyticsShadingFactor:
         history_store = MagicMock()
         history_store.read_detail.return_value = detail_rows
         history_store.read_history.return_value = []
-        coordinator._history_store = history_store
+        coordinator.history_store = history_store
 
         with (
             patch(
@@ -773,7 +773,7 @@ class TestBuildAnalyticsOccupancy:
         history_store = MagicMock()
         history_store.read_detail.return_value = detail_rows
         history_store.read_history.return_value = []
-        coordinator._history_store = history_store
+        coordinator.history_store = history_store
 
         with (
             patch(
@@ -852,7 +852,7 @@ class TestBuildAnalyticsOccupancy:
         history_store = MagicMock()
         history_store.read_detail.return_value = detail_rows
         history_store.read_history.return_value = []
-        coordinator._history_store = history_store
+        coordinator.history_store = history_store
 
         with (
             patch(

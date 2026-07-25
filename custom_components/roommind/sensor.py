@@ -10,7 +10,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .coordinator import RoomMindCoordinator
+from .coordinator import EntityPlatform, RoomMindCoordinator
 from .utils.entity_translation import room_translation_placeholders
 
 
@@ -31,15 +31,16 @@ async def async_setup_entry(
     coordinator: RoomMindCoordinator = hass.data[DOMAIN][entry.entry_id]
     store = hass.data[DOMAIN]["store"]
 
-    # Store the callback on the coordinator so dynamic entity creation works
-    coordinator.async_add_entities = async_add_entities
-
     # Create entities for rooms that already exist in the store
     rooms = store.get_rooms()
+    coordinator.register_entity_platform(
+        EntityPlatform.SENSOR,
+        async_add_entities,
+        rooms,
+    )
     entities: list[SensorEntity] = []
     for area_id in rooms:
         entities.extend(_create_room_entities(coordinator, area_id))
-        coordinator._entity_areas.add(area_id)
     if entities:
         async_add_entities(entities)
 

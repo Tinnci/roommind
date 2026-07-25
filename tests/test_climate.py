@@ -14,6 +14,7 @@ from custom_components.roommind.climate import (
     async_setup_entry,
 )
 from custom_components.roommind.const import DEFAULT_COMFORT_TEMP, DOMAIN, OVERRIDE_CUSTOM
+from custom_components.roommind.coordinator import EntityPlatform
 
 
 @pytest.fixture
@@ -238,7 +239,6 @@ def test_hvac_mode_off_when_room_missing(mock_coordinator):
 async def test_async_setup_entry_creates_entities_for_all_rooms():
     """async_setup_entry creates climate entities for all rooms."""
     coordinator = MagicMock()
-    coordinator._climate_entity_areas = set()
 
     store = MagicMock()
     store.get_rooms.return_value = {
@@ -256,20 +256,21 @@ async def test_async_setup_entry_creates_entities_for_all_rooms():
 
     await async_setup_entry(hass, entry, async_add_entities)
 
-    assert coordinator.async_add_climate_entities is async_add_entities
+    coordinator.register_entity_platform.assert_called_once_with(
+        EntityPlatform.CLIMATE,
+        async_add_entities,
+        store.get_rooms.return_value,
+    )
     async_add_entities.assert_called_once()
     entities = async_add_entities.call_args[0][0]
     assert len(entities) == 2
     assert all(isinstance(e, RoomMindOverrideClimate) for e in entities)
-    assert "living_room" in coordinator._climate_entity_areas
-    assert "bedroom" in coordinator._climate_entity_areas
 
 
 @pytest.mark.asyncio
 async def test_async_setup_entry_no_rooms():
     """async_setup_entry does not call async_add_entities when no rooms exist."""
     coordinator = MagicMock()
-    coordinator._climate_entity_areas = set()
 
     store = MagicMock()
     store.get_rooms.return_value = {}

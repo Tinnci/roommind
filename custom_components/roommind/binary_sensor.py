@@ -9,7 +9,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .coordinator import RoomMindCoordinator
+from .coordinator import EntityPlatform, RoomMindCoordinator
 from .utils.entity_translation import room_translation_placeholders
 
 
@@ -29,13 +29,16 @@ async def async_setup_entry(
     """Set up RoomMind binary sensor entities from a config entry."""
     coordinator: RoomMindCoordinator = hass.data[DOMAIN][entry.entry_id]
     store = hass.data[DOMAIN]["store"]
-    coordinator.async_add_binary_sensor_entities = async_add_entities
     rooms = store.get_rooms()
+    coordinator.register_entity_platform(
+        EntityPlatform.COVER_BINARY_SENSOR,
+        async_add_entities,
+        [area_id for area_id, room in rooms.items() if room.get("covers")],
+    )
     entities: list[BinarySensorEntity] = []
     for area_id, room in rooms.items():
         if room.get("covers"):
             entities.extend(_create_room_binary_sensors(coordinator, area_id))
-            coordinator._binary_sensor_entity_areas.add(area_id)
     if entities:
         async_add_entities(entities)
 

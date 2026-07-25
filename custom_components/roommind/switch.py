@@ -12,7 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, VACATION_SENTINEL_UNTIL
-from .coordinator import RoomMindCoordinator
+from .coordinator import EntityPlatform, RoomMindCoordinator
 from .utils.entity_translation import room_translation_placeholders
 
 
@@ -32,18 +32,24 @@ async def async_setup_entry(
     """Set up RoomMind switch entities from a config entry."""
     coordinator: RoomMindCoordinator = hass.data[DOMAIN][entry.entry_id]
     store = hass.data[DOMAIN]["store"]
-    coordinator.async_add_switch_entities = async_add_entities
-
     # Global vacation switch (always created)
     entities: list[SwitchEntity] = [RoomMindVacationSwitch(coordinator)]
 
     rooms = store.get_rooms()
+    coordinator.register_entity_platform(
+        EntityPlatform.CLIMATE_CONTROL_SWITCH,
+        async_add_entities,
+        rooms,
+    )
+    coordinator.register_entity_platform(
+        EntityPlatform.COVER_SWITCH,
+        async_add_entities,
+        [area_id for area_id, room in rooms.items() if room.get("covers")],
+    )
     for area_id, room in rooms.items():
         entities.append(RoomMindClimateControlSwitch(coordinator, area_id))
-        coordinator._climate_control_switch_areas.add(area_id)
         if room.get("covers"):
             entities.extend(_create_room_switches(coordinator, area_id))
-            coordinator._switch_entity_areas.add(area_id)
 
     async_add_entities(entities)
 

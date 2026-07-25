@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from custom_components.roommind.const import DOMAIN
+from custom_components.roommind.coordinator import EntityPlatform
 from custom_components.roommind.sensor import (
     RoomMindModeSensor,
     RoomMindTargetTemperatureSensor,
@@ -37,8 +38,11 @@ async def test_setup_entry_creates_entities(hass, mock_config_entry, store):
 
     await async_setup_entry(hass, mock_config_entry, add_entities)
 
-    # Callback stored on coordinator
-    assert coordinator.async_add_entities is add_entities
+    coordinator.register_entity_platform.assert_called_once()
+    platform, callback, area_ids = coordinator.register_entity_platform.call_args.args
+    assert platform is EntityPlatform.SENSOR
+    assert callback is add_entities
+    assert list(area_ids) == ["room_a"]
     # 2 entities per room (target_temp + mode)
     add_entities.assert_called_once()
     entities = add_entities.call_args[0][0]
@@ -59,7 +63,11 @@ async def test_setup_entry_no_rooms(hass, mock_config_entry, store):
 
     await async_setup_entry(hass, mock_config_entry, add_entities)
 
-    assert coordinator.async_add_entities is add_entities
+    coordinator.register_entity_platform.assert_called_once()
+    platform, callback, area_ids = coordinator.register_entity_platform.call_args.args
+    assert platform is EntityPlatform.SENSOR
+    assert callback is add_entities
+    assert list(area_ids) == []
     add_entities.assert_not_called()
 
 

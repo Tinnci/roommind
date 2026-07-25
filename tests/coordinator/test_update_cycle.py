@@ -8,6 +8,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
 import pytest
 
 from custom_components.roommind.const import MODE_IDLE
+from custom_components.roommind.coordinator import EntityPlatform
 
 from .conftest import (
     SAMPLE_ROOM,
@@ -177,7 +178,10 @@ class TestRoomMindCoordinator:
         coordinator = _create_coordinator(hass, mock_config_entry)
         coordinator.async_request_refresh = AsyncMock()
         mock_add_entities = MagicMock()
-        coordinator.async_add_entities = mock_add_entities
+        coordinator.register_entity_platform(
+            EntityPlatform.SENSOR,
+            mock_add_entities,
+        )
 
         room = {"area_id": "bedroom_abc12345"}
         await coordinator.async_room_added(room)
@@ -220,7 +224,10 @@ class TestRoomMindCoordinator:
         coordinator = _create_coordinator(hass, mock_config_entry)
         coordinator.async_request_refresh = AsyncMock()
         mock_add_entities = MagicMock()
-        coordinator.async_add_entities = mock_add_entities
+        coordinator.register_entity_platform(
+            EntityPlatform.SENSOR,
+            mock_add_entities,
+        )
 
         room = {"area_id": "bedroom_abc12345"}
         await coordinator.async_room_added(room)
@@ -235,7 +242,10 @@ class TestRoomMindCoordinator:
         coordinator = _create_coordinator(hass, mock_config_entry)
         coordinator.async_request_refresh = AsyncMock()
         mock_add_entities = MagicMock()
-        coordinator.async_add_entities = mock_add_entities
+        coordinator.register_entity_platform(
+            EntityPlatform.SENSOR,
+            mock_add_entities,
+        )
 
         room = {"area_id": "bedroom_abc12345"}
         await coordinator.async_room_added(room)

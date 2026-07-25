@@ -17,7 +17,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DEFAULT_COMFORT_TEMP, DOMAIN, OVERRIDE_CUSTOM
-from .coordinator import RoomMindCoordinator
+from .coordinator import EntityPlatform, RoomMindCoordinator
 from .utils.entity_translation import room_translation_placeholders
 
 
@@ -37,12 +37,15 @@ async def async_setup_entry(
     """Set up RoomMind climate entities from a config entry."""
     coordinator: RoomMindCoordinator = hass.data[DOMAIN][entry.entry_id]
     store = hass.data[DOMAIN]["store"]
-    coordinator.async_add_climate_entities = async_add_entities
     rooms = store.get_rooms()
+    coordinator.register_entity_platform(
+        EntityPlatform.CLIMATE,
+        async_add_entities,
+        rooms,
+    )
     entities: list[ClimateEntity] = []
     for area_id in rooms:
         entities.extend(_create_room_climates(coordinator, area_id))
-        coordinator._climate_entity_areas.add(area_id)
     if entities:
         async_add_entities(entities)
 

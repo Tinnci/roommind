@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 from functools import partial
 from typing import Any
 
@@ -115,6 +118,24 @@ from .utils.temp_utils import celsius_delta_to_ha, ha_temp_to_celsius, ha_temp_u
 _LOGGER = logging.getLogger(__name__)
 
 
+class EntityPlatform(StrEnum):
+    """RoomMind entity groups tracked for dynamic room registration."""
+
+    SENSOR = "sensor"
+    CLIMATE = "climate"
+    CLIMATE_CONTROL_SWITCH = "climate_control_switch"
+    COVER_SWITCH = "cover_switch"
+    COVER_BINARY_SENSOR = "cover_binary_sensor"
+
+
+@dataclass
+class _EntityPlatformRegistration:
+    """Callback and registered rooms for one Home Assistant entity platform."""
+
+    callback: Callable[[list[Any]], None] | None = None
+    area_ids: set[str] = field(default_factory=set)
+
+
 def _get_area_name(hass: HomeAssistant, area_id: str) -> str:
     """Get human-readable area name from area registry."""
     try:
@@ -184,24 +205,50 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         self._compressor_manager = CompressorGroupManager()
         # Heat source orchestration state (per room)
         self._heat_source_states: dict[str, str] = {}
-        # Track which rooms already have entity platform entities registered
-        self._entity_areas: set[str] = set()
+        self._entity_platforms = {
+            platform: _EntityPlatformRegistration()
+            for platform in EntityPlatform
+        }
         # Min-run enforcement: timestamp when current non-idle mode started
         self._mode_on_since: dict[str, float] = {}
         # Sensor dropout fallback: last valid temperature per room
         self._last_valid_temps: dict[str, tuple[float, float]] = {}  # {area_id: (celsius, monotonic_ts)}
         self._last_humidity_status: dict[str, dict] = {}
-        self._switch_entity_areas: set[str] = set()
-        self._climate_control_switch_areas: set[str] = set()
-        self._binary_sensor_entity_areas: set[str] = set()
-        self._climate_entity_areas: set[str] = set()
         # Per-entity cache of schedule blocks; fallback when schedule.get_schedule fails (#308)
         self._schedule_blocks_cache: dict[str, dict] = {}
-        # Entity platform callbacks, set by platform async_setup_entry
-        self.async_add_entities: Any = None
-        self.async_add_switch_entities: Any = None
-        self.async_add_climate_entities: Any = None
-        self.async_add_binary_sensor_entities: Any = None
+
+    def register_entity_platform(
+        self,
+        platform: EntityPlatform,
+        callback: Callable[[list[Any]], None],
+        area_ids: Iterable[str] = (),
+    ) -> None:
+        """Register a platform callback and its already-created room entities."""
+        registration = self._entity_platforms[platform]
+        registration.callback = callback
+        registration.area_ids.update(area_ids)
+
+    def is_entity_platform_registered(
+        self,
+        platform: EntityPlatform,
+        area_id: str,
+    ) -> bool:
+        """Return whether a room already has entities for a platform group."""
+        return area_id in self._entity_platforms[platform].area_ids
+
+    def _add_entity_platform_room(
+        self,
+        platform: EntityPlatform,
+        area_id: str,
+        create_entities: Callable[[], list[Any]],
+    ) -> bool:
+        """Add one room's entities once through its registered callback."""
+        registration = self._entity_platforms[platform]
+        if registration.callback is None or area_id in registration.area_ids:
+            return False
+        registration.callback(create_entities())
+        registration.area_ids.add(area_id)
+        return True
 
     async def _async_update_data(self) -> dict:
         """Fetch and compute state for all rooms.
@@ -2226,56 +2273,48 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         area_id = room["area_id"]
         has_covers = bool(room.get("covers"))
 
-        if area_id not in self._entity_areas and hasattr(self, "async_add_entities") and self.async_add_entities:
-            from .sensor import _create_room_entities
+        from .sensor import _create_room_entities
 
-            entities = _create_room_entities(self, area_id)
-            self.async_add_entities(entities)
-            self._entity_areas.add(area_id)
+        self._add_entity_platform_room(
+            EntityPlatform.SENSOR,
+            area_id,
+            lambda: _create_room_entities(self, area_id),
+        )
 
         # Climate entities (override control): always create
-        if (
-            area_id not in self._climate_entity_areas
-            and hasattr(self, "async_add_climate_entities")
-            and self.async_add_climate_entities
-        ):
-            from .climate import _create_room_climates
+        from .climate import _create_room_climates
 
-            self.async_add_climate_entities(_create_room_climates(self, area_id))
-            self._climate_entity_areas.add(area_id)
+        self._add_entity_platform_room(
+            EntityPlatform.CLIMATE,
+            area_id,
+            lambda: _create_room_climates(self, area_id),
+        )
 
-        if (
-            area_id not in self._climate_control_switch_areas
-            and hasattr(self, "async_add_switch_entities")
-            and self.async_add_switch_entities
-        ):
-            from .switch import RoomMindClimateControlSwitch
+        from .switch import RoomMindClimateControlSwitch
 
-            self.async_add_switch_entities([RoomMindClimateControlSwitch(self, area_id)])
-            self._climate_control_switch_areas.add(area_id)
+        self._add_entity_platform_room(
+            EntityPlatform.CLIMATE_CONTROL_SWITCH,
+            area_id,
+            lambda: [RoomMindClimateControlSwitch(self, area_id)],
+        )
 
         # Cover entities: only create when covers are configured.
         # Not removed on save — cleanup_orphaned_entities() handles that at startup
         # so brief config changes don't break user automations.
         if has_covers:
-            if (
-                area_id not in self._switch_entity_areas
-                and hasattr(self, "async_add_switch_entities")
-                and self.async_add_switch_entities
-            ):
-                from .switch import _create_room_switches
+            from .binary_sensor import _create_room_binary_sensors
+            from .switch import _create_room_switches
 
-                self.async_add_switch_entities(_create_room_switches(self, area_id))
-                self._switch_entity_areas.add(area_id)
-            if (
-                area_id not in self._binary_sensor_entity_areas
-                and hasattr(self, "async_add_binary_sensor_entities")
-                and self.async_add_binary_sensor_entities
-            ):
-                from .binary_sensor import _create_room_binary_sensors
-
-                self.async_add_binary_sensor_entities(_create_room_binary_sensors(self, area_id))
-                self._binary_sensor_entity_areas.add(area_id)
+            self._add_entity_platform_room(
+                EntityPlatform.COVER_SWITCH,
+                area_id,
+                lambda: _create_room_switches(self, area_id),
+            )
+            self._add_entity_platform_room(
+                EntityPlatform.COVER_BINARY_SENSOR,
+                area_id,
+                lambda: _create_room_binary_sensors(self, area_id),
+            )
 
         await self.async_request_refresh()
 
@@ -2303,12 +2342,9 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         self._pending_predictions.pop(area_id, None)
         self._residual_tracker.remove_room(area_id)
         self._cover_orchestrator.remove_room(area_id)
-        self._entity_areas.discard(area_id)
         self._mode_on_since.pop(area_id, None)
-        self._switch_entity_areas.discard(area_id)
-        self._climate_control_switch_areas.discard(area_id)
-        self._binary_sensor_entity_areas.discard(area_id)
-        self._climate_entity_areas.discard(area_id)
+        for registration in self._entity_platforms.values():
+            registration.area_ids.discard(area_id)
         self._model_manager.remove_room(area_id)
         self._heat_source_states.pop(area_id, None)
         if self._history_store:

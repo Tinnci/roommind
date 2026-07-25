@@ -58,7 +58,7 @@ def _make_coordinator(
     coordinator.outdoor_temp = outdoor_temp
     coordinator.outdoor_humidity = outdoor_humidity
     coordinator._weather_manager.forecast = forecast or []
-    coordinator._history_store = history_store
+    coordinator.history_store = history_store
     coordinator._model_manager = RoomModelManager()
     coordinator._model_manager._estimators = estimators or {}
 

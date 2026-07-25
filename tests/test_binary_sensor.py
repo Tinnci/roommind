@@ -12,6 +12,7 @@ from custom_components.roommind.binary_sensor import (
     async_setup_entry,
 )
 from custom_components.roommind.const import DOMAIN
+from custom_components.roommind.coordinator import EntityPlatform
 
 
 @pytest.fixture
@@ -75,7 +76,6 @@ def test_cover_paused_coordinator_data_none(mock_coordinator):
 async def test_async_setup_entry_creates_entities_for_rooms_with_covers():
     """async_setup_entry creates binary sensors for rooms with covers configured."""
     coordinator = MagicMock()
-    coordinator._binary_sensor_entity_areas = set()
 
     store = MagicMock()
     store.get_rooms.return_value = {
@@ -93,23 +93,22 @@ async def test_async_setup_entry_creates_entities_for_rooms_with_covers():
 
     await async_setup_entry(hass, entry, async_add_entities)
 
-    # Callback stored on coordinator
-    assert coordinator.async_add_binary_sensor_entities is async_add_entities
+    coordinator.register_entity_platform.assert_called_once_with(
+        EntityPlatform.COVER_BINARY_SENSOR,
+        async_add_entities,
+        ["living_room"],
+    )
     # Only living_room has covers, so one entity created
     async_add_entities.assert_called_once()
     entities = async_add_entities.call_args[0][0]
     assert len(entities) == 1
     assert isinstance(entities[0], RoomMindCoverPausedSensor)
-    # Area tracked
-    assert "living_room" in coordinator._binary_sensor_entity_areas
-    assert "bedroom" not in coordinator._binary_sensor_entity_areas
 
 
 @pytest.mark.asyncio
 async def test_async_setup_entry_no_covers_no_entities():
     """async_setup_entry does not call async_add_entities when no rooms have covers."""
     coordinator = MagicMock()
-    coordinator._binary_sensor_entity_areas = set()
 
     store = MagicMock()
     store.get_rooms.return_value = {"bedroom": {}}

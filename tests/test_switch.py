@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from custom_components.roommind.const import DOMAIN, VACATION_SENTINEL_UNTIL
+from custom_components.roommind.coordinator import EntityPlatform
 from custom_components.roommind.switch import (
     RoomMindClimateControlSwitch,
     RoomMindCoverAutoSwitch,
@@ -100,8 +101,6 @@ async def test_cover_auto_switch_turn_on_store_raises_keyerror(mock_coordinator)
 async def test_async_setup_entry_creates_entities_for_rooms_with_covers():
     """async_setup_entry creates vacation switch + cover switches for rooms with covers."""
     coordinator = MagicMock()
-    coordinator._switch_entity_areas = set()
-    coordinator._climate_control_switch_areas = set()
     coordinator.hass = MagicMock()
     coordinator.hass.data = {DOMAIN: {"store": MagicMock()}}
 
@@ -121,7 +120,16 @@ async def test_async_setup_entry_creates_entities_for_rooms_with_covers():
 
     await async_setup_entry(hass, entry, async_add_entities)
 
-    assert coordinator.async_add_switch_entities is async_add_entities
+    coordinator.register_entity_platform.assert_any_call(
+        EntityPlatform.CLIMATE_CONTROL_SWITCH,
+        async_add_entities,
+        store.get_rooms.return_value,
+    )
+    coordinator.register_entity_platform.assert_any_call(
+        EntityPlatform.COVER_SWITCH,
+        async_add_entities,
+        ["living_room"],
+    )
     async_add_entities.assert_called_once()
     entities = async_add_entities.call_args[0][0]
     assert len(entities) == 4
@@ -131,18 +139,12 @@ async def test_async_setup_entry_creates_entities_for_rooms_with_covers():
     assert len(climate_switches) == 2
     assert {switch._attr_translation_key for switch in climate_switches} == {"climate_control"}
     assert len(cover_switches) == 1
-    assert "living_room" in coordinator._switch_entity_areas
-    assert "bedroom" not in coordinator._switch_entity_areas
-    assert "living_room" in coordinator._climate_control_switch_areas
-    assert "bedroom" in coordinator._climate_control_switch_areas
 
 
 @pytest.mark.asyncio
 async def test_async_setup_entry_no_covers_still_creates_vacation_switch():
     """async_setup_entry always creates the global vacation switch even without covers."""
     coordinator = MagicMock()
-    coordinator._switch_entity_areas = set()
-    coordinator._climate_control_switch_areas = set()
 
     store = MagicMock()
     store.get_rooms.return_value = {"bedroom": {}}
