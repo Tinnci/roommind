@@ -8,11 +8,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from custom_components.roommind.const import DOMAIN
-from custom_components.roommind.diagnostics import (
-    _build_device_states,
-    _build_model_info,
-    async_get_config_entry_diagnostics,
-)
+from custom_components.roommind.control.thermal_model import RoomModelManager
+from custom_components.roommind.diagnostics import _build_device_states, async_get_config_entry_diagnostics
 from custom_components.roommind.managers.compressor_group_manager import CompressorGroupManager
 from custom_components.roommind.managers.cover_manager import CoverManager
 from custom_components.roommind.managers.valve_manager import ValveManager
@@ -60,8 +57,9 @@ def _make_coordinator(
     coordinator.rooms = rooms or {}
     coordinator.outdoor_temp = outdoor_temp
     coordinator.outdoor_humidity = outdoor_humidity
-    coordinator._weather_manager._outdoor_forecast = forecast or []
+    coordinator._weather_manager.forecast = forecast or []
     coordinator._history_store = history_store
+    coordinator._model_manager = RoomModelManager()
     coordinator._model_manager._estimators = estimators or {}
 
     # Manager fixtures use real owner Modules; diagnostics only consumes their
@@ -88,11 +86,14 @@ def _make_coordinator(
     return coordinator
 
 
-def test_build_model_info():
-    """_build_model_info extracts correct fields from estimator."""
+def test_model_manager_builds_diagnostics_snapshot():
+    """RoomModelManager owns extraction of EKF diagnostics."""
     est = _make_estimator()
-    info = _build_model_info(est)
+    manager = RoomModelManager()
+    manager._estimators["room_a"] = est
+    info = manager.diagnostics_snapshot("room_a")
 
+    assert info is not None
     assert info["alpha"] == 0.5
     assert info["beta_h"] == 100.0
     assert info["beta_c"] == 80.0

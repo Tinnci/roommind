@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import math
 import time
 from typing import Any, cast
 
@@ -257,11 +256,8 @@ async def build_analytics_data(
     acs_can_heat: bool | None = None
     if coordinator:
         mgr = coordinator._model_manager
-        if area_id in mgr._estimators:
-            est = mgr._estimators[area_id]
-            rc = est.get_model()
-            pred_std_idle = est.prediction_std(0.0, 20.0, 15.0, 5.0)
-            pred_std_heat = est.prediction_std(rc.Q_heat, 20.0, 10.0, 5.0)
+        model_info = mgr.analytics_snapshot(area_id) or {}
+        if model_info:
             has_ext_sensor = bool(room_config.get("temperature_sensor"))
             if has_ext_sensor:
                 acs_can_heat = check_acs_can_heat(hass, room_config)
@@ -278,23 +274,9 @@ async def build_analytics_data(
                 mpc_active = is_mpc_active(mgr, area_id, can_heat, can_cool, 20.0, T_out)
             else:
                 mpc_active = False
-            # EKF uncertainty: sqrt(P[0][0]) as proxy for sigma_e
-            sigma_proxy = math.sqrt(max(est._P[0][0], 0.0))
             has_occupancy_sensors = len(room_config.get("occupancy_sensors", [])) > 0
-            model_info = {
-                "confidence": est.confidence,
-                "model": rc.to_dict(),
-                "n_samples": est._n_updates,
-                "n_observations": est._n_updates,
-                "n_heating": est._n_heating,
-                "n_cooling": est._n_cooling,
-                "applicable_modes": sorted(est._applicable_modes),
-                "mpc_active": mpc_active,
-                "sigma_e": round(sigma_proxy, 4),
-                "prediction_std_idle": round(pred_std_idle, 4),
-                "prediction_std_heating": round(pred_std_heat, 4),
-                "has_occupancy_sensors": has_occupancy_sensors,
-            }
+            model_info["mpc_active"] = mpc_active
+            model_info["has_occupancy_sensors"] = has_occupancy_sensors
 
     # Build merged forecast: same format as history points, on a shared 5-min grid
     mold_delta = 0.0
@@ -324,9 +306,8 @@ async def build_analytics_data(
     prediction_enabled = settings.get("prediction_enabled", True)
     if prediction_enabled and target_forecast and coordinator:
         mgr = coordinator._model_manager
-        if area_id in mgr._estimators:
-            model = mgr.get_model(area_id)
-            est = mgr._estimators[area_id]
+        simulation_context = mgr.simulation_context(area_id)
+        if simulation_context is not None:
             all_points = detail if detail else history
             current_t: float | None = None
             for p in reversed(all_points):
@@ -340,7 +321,7 @@ async def build_analytics_data(
                     else DEFAULT_OUTDOOR_TEMP_FALLBACK
                 )
                 outdoor_series = build_forecast_outdoor_series(
-                    coordinator._weather_manager._outdoor_forecast,
+                    coordinator._weather_manager.forecast,
                     T_out_now,
                     len(target_forecast),
                 )
@@ -354,25 +335,13 @@ async def build_analytics_data(
                 solar_series = build_forecast_solar_series(
                     hass.config.latitude,
                     hass.config.longitude,
-                    coordinator._weather_manager._outdoor_forecast,
+                    coordinator._weather_manager.forecast,
                     len(target_forecast),
                     shading_factor=_shading,
                 )
                 # Residual heat state for analytics simulation
                 system_type = room_config.get("heating_system_type", "")
-                sim_q_residual = 0.0
-                sim_heat_dur = 0.0
-                sim_last_pf = 1.0
-                if system_type and area_id in getattr(coordinator._residual_tracker, "_off_since", {}):
-                    import time as _time
-
-                    off_since = coordinator._residual_tracker._off_since[area_id]
-                    elapsed = (_time.time() - off_since) / 60.0
-                    sim_heat_dur = (off_since - coordinator._residual_tracker._on_since.get(area_id, off_since)) / 60.0
-                    sim_last_pf = coordinator._residual_tracker._off_power.get(area_id, 1.0)
-                    from ..control.residual_heat import compute_residual_heat
-
-                    sim_q_residual = compute_residual_heat(elapsed, system_type, sim_last_pf, sim_heat_dur)
+                residual = coordinator._residual_tracker.simulation_snapshot(area_id, system_type)
 
                 sim_q_occupancy = 0.0
                 for occ_eid in room_config.get("occupancy_sensors", []):
@@ -386,22 +355,22 @@ async def build_analytics_data(
                 pred_temps = cast(
                     list[float | None],
                     simulate_prediction(
-                        model=model,
-                        estimator=est,
+                        model=simulation_context.model,
+                        estimator=simulation_context.estimator,
                         target_forecast=target_forecast,
                         outdoor_series=outdoor_series,
                         current_temp=current_t,
-                        window_open=coordinator._window_manager._paused.get(area_id, False),
+                        window_open=coordinator._window_manager.is_paused(area_id),
                         mpc_active=mpc_active,
                         room_config=room_config,
                         settings=settings,
                         all_points=all_points,
                         solar_series=solar_series,
                         acs_can_heat=acs_can_heat,
-                        q_residual=sim_q_residual,
+                        q_residual=residual.q_residual,
                         heating_system_type=system_type,
-                        heating_duration_minutes=sim_heat_dur,
-                        last_power_fraction=sim_last_pf,
+                        heating_duration_minutes=residual.heating_duration_minutes,
+                        last_power_fraction=residual.last_power_fraction,
                         q_occupancy=sim_q_occupancy,
                     ),
                 )

@@ -130,6 +130,33 @@ def test_get_q_residual_empty_system_type_returns_zero():
 
 
 @patch("custom_components.roommind.managers.residual_heat_tracker.time")
+def test_simulation_snapshot_owns_residual_state_translation(mock_time):
+    """Simulation callers receive values, not the tracker's timestamp storage."""
+    mock_time.time.return_value = 2000.0
+    tracker = ResidualHeatTracker()
+    tracker._off_since["room1"] = 1900.0
+    tracker._on_since["room1"] = 1600.0
+    tracker._off_power["room1"] = 0.7
+
+    snapshot = tracker.simulation_snapshot("room1", "radiator")
+
+    assert snapshot.heating_duration_minutes == 5.0
+    assert snapshot.last_power_fraction == 0.7
+    assert snapshot.q_residual == pytest.approx(
+        tracker.get_q_residual("room1", "radiator", MODE_IDLE)
+    )
+
+
+def test_simulation_snapshot_defaults_without_residual_state():
+    """Unknown rooms expose neutral simulation inputs."""
+    snapshot = ResidualHeatTracker().simulation_snapshot("unknown", "radiator")
+
+    assert snapshot.q_residual == 0.0
+    assert snapshot.heating_duration_minutes == 0.0
+    assert snapshot.last_power_fraction == 1.0
+
+
+@patch("custom_components.roommind.managers.residual_heat_tracker.time")
 def test_get_q_residual_computes_correctly_radiator(mock_time):
     """Verify computed residual heat matches compute_residual_heat for radiator."""
     now = 2000.0

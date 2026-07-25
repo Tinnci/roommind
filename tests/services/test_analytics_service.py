@@ -7,12 +7,30 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from custom_components.roommind.control.thermal_model import RoomModelManager
+from custom_components.roommind.managers.residual_heat_tracker import ResidualHeatTracker
+from custom_components.roommind.managers.weather_manager import WeatherManager
+from custom_components.roommind.managers.window_manager import WindowManager
 from custom_components.roommind.services.analytics_service import (
     _compute_target_forecast,
     _csv_to_points,
     _safe_int,
     build_analytics_data,
 )
+
+
+def _attach_runtime_managers(coordinator, hass):
+    """Attach real manager adapters used by analytics."""
+    coordinator._weather_manager = WeatherManager(hass)
+    coordinator._residual_tracker = ResidualHeatTracker()
+    coordinator._window_manager = WindowManager()
+
+
+def _model_manager_with(area_id, estimator):
+    """Build a real model owner with one pre-existing estimator."""
+    manager = RoomModelManager()
+    manager._estimators[area_id] = estimator
+    return manager
 
 # ---------------------------------------------------------------------------
 # _csv_to_points -- extended environmental observations
@@ -308,18 +326,13 @@ class TestBuildAnalyticsData:
         from custom_components.roommind.control.thermal_model import ThermalEKF
 
         est = ThermalEKF()
-        model = est.get_model()
-        mgr = MagicMock()
-        mgr._estimators = {"living_room": est}
-        mgr.get_model.return_value = model
+        mgr = _model_manager_with("living_room", est)
 
         coordinator = MagicMock()
         coordinator._model_manager = mgr
         coordinator.outdoor_temp = 10.0
         coordinator.rooms = {"living_room": {}}
-        coordinator._weather_manager._outdoor_forecast = []
-        coordinator._residual_tracker._off_since = {}
-        coordinator._window_manager._paused = {}
+        _attach_runtime_managers(coordinator, hass)
 
         detail_rows = [
             {
@@ -403,17 +416,13 @@ class TestBuildAnalyticsData:
         est._n_cooling = 10
         est._applicable_modes = {"heating", "idle"}
 
-        mgr = MagicMock()
-        mgr._estimators = {"room1": est}
-        mgr.get_model.return_value = MagicMock()
+        mgr = _model_manager_with("room1", est)
 
         coordinator = MagicMock()
         coordinator._model_manager = mgr
         coordinator.outdoor_temp = 10.0
         coordinator.rooms = {"room1": {}}
-        coordinator._weather_manager._outdoor_forecast = []
-        coordinator._residual_tracker._off_since = {}
-        coordinator._window_manager._paused = {}
+        _attach_runtime_managers(coordinator, hass)
 
         detail_rows = [
             {
@@ -481,22 +490,21 @@ class TestBuildAnalyticsData:
         from custom_components.roommind.control.thermal_model import ThermalEKF
 
         est = ThermalEKF()
-        model = est.get_model()
-        mgr = MagicMock()
-        mgr._estimators = {"room1": est}
-        mgr.get_model.return_value = model
+        mgr = _model_manager_with("room1", est)
 
         coordinator = MagicMock()
         coordinator._model_manager = mgr
         coordinator.outdoor_temp = 10.0
         coordinator.rooms = {"room1": {}}
-        coordinator._weather_manager._outdoor_forecast = []
-        coordinator._window_manager._paused = {}
-
+        _attach_runtime_managers(coordinator, hass)
         now = time.time()
-        coordinator._residual_tracker._off_since = {"room1": now - 300}
-        coordinator._residual_tracker._on_since = {"room1": now - 900}
-        coordinator._residual_tracker._off_power = {"room1": 0.8}
+        with patch(
+            "custom_components.roommind.managers.residual_heat_tracker.time"
+        ) as mock_time:
+            mock_time.time.return_value = now - 900
+            coordinator._residual_tracker.update("room1", "heating", 0.8, "idle")
+            mock_time.time.return_value = now - 300
+            coordinator._residual_tracker.update("room1", "idle", 0.0, "heating")
 
         detail_rows = [
             {
@@ -645,18 +653,13 @@ class TestBuildAnalyticsShadingFactor:
         from custom_components.roommind.control.thermal_model import ThermalEKF
 
         est = ThermalEKF()
-        model = est.get_model()
-        mgr = MagicMock()
-        mgr._estimators = {"room1": est}
-        mgr.get_model.return_value = model
+        mgr = _model_manager_with("room1", est)
 
         coordinator = MagicMock()
         coordinator._model_manager = mgr
         coordinator.outdoor_temp = 10.0
         coordinator.rooms = {"room1": {"blind_position": 50}}
-        coordinator._weather_manager._outdoor_forecast = []
-        coordinator._residual_tracker._off_since = {}
-        coordinator._window_manager._paused = {}
+        _attach_runtime_managers(coordinator, hass)
 
         now = time.time()
         detail_rows = [
@@ -740,18 +743,13 @@ class TestBuildAnalyticsOccupancy:
         from custom_components.roommind.control.thermal_model import ThermalEKF
 
         est = ThermalEKF()
-        model = est.get_model()
-        mgr = MagicMock()
-        mgr._estimators = {"room1": est}
-        mgr.get_model.return_value = model
+        mgr = _model_manager_with("room1", est)
 
         coordinator = MagicMock()
         coordinator._model_manager = mgr
         coordinator.outdoor_temp = 10.0
         coordinator.rooms = {"room1": {}}
-        coordinator._weather_manager._outdoor_forecast = []
-        coordinator._residual_tracker._off_since = {}
-        coordinator._window_manager._paused = {}
+        _attach_runtime_managers(coordinator, hass)
 
         now = time.time()
         detail_rows = [
@@ -824,18 +822,13 @@ class TestBuildAnalyticsOccupancy:
         from custom_components.roommind.control.thermal_model import ThermalEKF
 
         est = ThermalEKF()
-        model = est.get_model()
-        mgr = MagicMock()
-        mgr._estimators = {"room1": est}
-        mgr.get_model.return_value = model
+        mgr = _model_manager_with("room1", est)
 
         coordinator = MagicMock()
         coordinator._model_manager = mgr
         coordinator.outdoor_temp = 10.0
         coordinator.rooms = {"room1": {}}
-        coordinator._weather_manager._outdoor_forecast = []
-        coordinator._residual_tracker._off_since = {}
-        coordinator._window_manager._paused = {}
+        _attach_runtime_managers(coordinator, hass)
 
         now = time.time()
         detail_rows = [

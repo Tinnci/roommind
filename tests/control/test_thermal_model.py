@@ -641,6 +641,53 @@ def test_manager_get_confidence():
     assert mgr.get_confidence("nonexistent_room") == 0.0
 
 
+def test_manager_snapshots_do_not_create_unknown_room():
+    """Read-only model interfaces must not mutate manager state."""
+    mgr = RoomModelManager()
+
+    assert mgr.analytics_snapshot("unknown") is None
+    assert mgr.diagnostics_snapshot("unknown") is None
+    assert mgr.simulation_context("unknown") is None
+    assert mgr.get_room_ids() == []
+
+
+def test_manager_analytics_snapshot_hides_estimator_storage():
+    """Analytics receives stable model values without reading EKF internals."""
+    mgr = RoomModelManager()
+    est = mgr.get_estimator("living_room")
+    est._n_updates = 7
+    est._n_heating = 3
+    est._n_cooling = 2
+    est._applicable_modes = {"idle", "heating"}
+
+    snapshot = mgr.analytics_snapshot("living_room")
+
+    assert snapshot is not None
+    assert snapshot["n_samples"] == 7
+    assert snapshot["n_heating"] == 3
+    assert snapshot["n_cooling"] == 2
+    assert snapshot["applicable_modes"] == ["heating", "idle"]
+    assert "sigma_e" in snapshot
+    assert "model" in snapshot
+
+
+def test_manager_diagnostics_snapshot_and_simulation_context():
+    """Diagnostics and simulation share a non-creating owner interface."""
+    mgr = RoomModelManager()
+    est = mgr.get_estimator("living_room")
+    est._n_updates = 5
+
+    diagnostics = mgr.diagnostics_snapshot("living_room")
+    context = mgr.simulation_context("living_room")
+
+    assert diagnostics is not None
+    assert diagnostics["n_updates"] == 5
+    assert len(diagnostics["P_diagonal"]) == len(est._x)
+    assert context is not None
+    assert context.estimator is est
+    assert context.model.to_dict() == est.get_model().to_dict()
+
+
 def test_manager_serialization():
     """to_dict/from_dict preserves multiple rooms."""
     mgr = RoomModelManager()

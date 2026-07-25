@@ -12,26 +12,6 @@ from .const import DOMAIN, VERSION
 from .control.mpc_controller import _last_commands
 
 
-def _build_model_info(estimator: Any) -> dict[str, Any]:
-    """Build model diagnostics from a ThermalEKF estimator."""
-    rc = estimator.get_model()
-    return {
-        "alpha": round(estimator._x[1], 6),
-        "beta_h": round(estimator._x[2], 4),
-        "beta_c": round(estimator._x[3], 4),
-        "n_updates": estimator._n_updates,
-        "n_idle": estimator._n_idle,
-        "n_heating": estimator._n_heating,
-        "n_cooling": estimator._n_cooling,
-        "applicable_modes": sorted(estimator._applicable_modes),
-        "P_diagonal": [round(estimator._P[i][i], 6) for i in range(len(estimator._x))],
-        "prediction_std_idle": round(estimator.prediction_std(0.0, 20.0, 15.0, 5.0), 4),
-        "prediction_std_heating": round(estimator.prediction_std(rc.Q_heat, 20.0, 10.0, 5.0), 4),
-        "confidence": round(estimator.confidence, 4),
-        "model_params": rc.to_dict(),
-    }
-
-
 def _build_device_states(hass: HomeAssistant, devices: list[dict]) -> list[dict[str, Any]]:
     """Build HA entity state snapshot for each device."""
     result = []
@@ -159,8 +139,9 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, config_entry: 
         # Model info from EKF estimator
         if coordinator:
             mgr = coordinator._model_manager
-            if area_id in mgr._estimators:
-                room_diag["model"] = _build_model_info(mgr._estimators[area_id])
+            model = mgr.diagnostics_snapshot(area_id)
+            if model is not None:
+                room_diag["model"] = model
 
         # Window manager state
         if coordinator:
@@ -184,7 +165,7 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, config_entry: 
         "humidity": coordinator.outdoor_humidity if coordinator else None,
     }
     if coordinator:
-        forecast = coordinator._weather_manager._outdoor_forecast
+        forecast = coordinator._weather_manager.forecast
         outdoor["forecast_available"] = bool(forecast)
         outdoor["forecast_points"] = len(forecast) if forecast else 0
 

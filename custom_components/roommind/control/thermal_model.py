@@ -1211,6 +1211,14 @@ class ThermalEKF:
 # ---------------------------------------------------------------------------
 
 
+@dataclass(frozen=True, slots=True)
+class RoomModelSimulationContext:
+    """Existing learned model inputs required by a forward simulation."""
+
+    model: RCModel
+    estimator: ThermalEKF
+
+
 class RoomModelManager:
     """Manages per-room ThermalEKF instances.
 
@@ -1224,6 +1232,67 @@ class RoomModelManager:
     def get_room_ids(self) -> list[str]:
         """Return list of room IDs with learned models."""
         return list(self._estimators.keys())
+
+    def analytics_snapshot(self, area_id: str) -> dict[str, Any] | None:
+        """Return learned-model values used by analytics without creating state."""
+        estimator = self._estimators.get(area_id)
+        if estimator is None:
+            return None
+        model = estimator.get_model()
+        sigma_proxy = math.sqrt(max(estimator._P[0][0], 0.0))
+        return {
+            "confidence": estimator.confidence,
+            "model": model.to_dict(),
+            "n_samples": estimator._n_updates,
+            "n_observations": estimator._n_updates,
+            "n_heating": estimator._n_heating,
+            "n_cooling": estimator._n_cooling,
+            "applicable_modes": sorted(estimator._applicable_modes),
+            "sigma_e": round(sigma_proxy, 4),
+            "prediction_std_idle": round(estimator.prediction_std(0.0, 20.0, 15.0, 5.0), 4),
+            "prediction_std_heating": round(
+                estimator.prediction_std(model.Q_heat, 20.0, 10.0, 5.0),
+                4,
+            ),
+        }
+
+    def diagnostics_snapshot(self, area_id: str) -> dict[str, Any] | None:
+        """Return detailed learned-model diagnostics without exposing EKF storage."""
+        estimator = self._estimators.get(area_id)
+        if estimator is None:
+            return None
+        model = estimator.get_model()
+        return {
+            "alpha": round(estimator._x[1], 6),
+            "beta_h": round(estimator._x[2], 4),
+            "beta_c": round(estimator._x[3], 4),
+            "n_updates": estimator._n_updates,
+            "n_idle": estimator._n_idle,
+            "n_heating": estimator._n_heating,
+            "n_cooling": estimator._n_cooling,
+            "applicable_modes": sorted(estimator._applicable_modes),
+            "P_diagonal": [
+                round(estimator._P[index][index], 6)
+                for index in range(len(estimator._x))
+            ],
+            "prediction_std_idle": round(estimator.prediction_std(0.0, 20.0, 15.0, 5.0), 4),
+            "prediction_std_heating": round(
+                estimator.prediction_std(model.Q_heat, 20.0, 10.0, 5.0),
+                4,
+            ),
+            "confidence": round(estimator.confidence, 4),
+            "model_params": model.to_dict(),
+        }
+
+    def simulation_context(self, area_id: str) -> RoomModelSimulationContext | None:
+        """Return existing model objects required for simulation without creating state."""
+        estimator = self._estimators.get(area_id)
+        if estimator is None:
+            return None
+        return RoomModelSimulationContext(
+            model=estimator.get_model(),
+            estimator=estimator,
+        )
 
     def get_estimator(self, area_id: str) -> ThermalEKF:
         """Return the estimator for *area_id*, creating one if needed."""
