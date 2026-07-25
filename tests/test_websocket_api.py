@@ -7,7 +7,12 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from custom_components.roommind.const import DOMAIN
-from custom_components.roommind.room_config import ROOM_CONFIG_FIELDS
+from custom_components.roommind.room_config import (
+    ROOM_CONFIG_DEFAULTS,
+    ROOM_CONFIG_FIELDS,
+    ROOM_CONFIG_SCHEMA,
+    validate_device_idle_action,
+)
 from custom_components.roommind.websocket_api import (
     _csv_to_points,
     _safe_float,
@@ -62,6 +67,8 @@ def test_room_save_schema_matches_configuration_field_catalog():
     schema_fields = {marker.schema for marker in websocket_save_room._ws_schema.schema}
 
     assert schema_fields - {"id", "type", "area_id"} == set(ROOM_CONFIG_FIELDS)
+    assert set(ROOM_CONFIG_FIELDS) == set(ROOM_CONFIG_DEFAULTS)
+    assert {marker.schema for marker in ROOM_CONFIG_SCHEMA} == set(ROOM_CONFIG_FIELDS)
 
 
 @pytest.mark.asyncio
@@ -2315,12 +2322,10 @@ async def test_save_room_accepts_idle_action_low_for_trv(ws_hass, store, connect
 async def test_save_room_rejects_ac_with_low_idle_action(ws_hass, store, connection):
     """idle_action='low' is not permitted on AC devices — they would cool continuously.
 
-    Imports the real _validate_device_idle_action so the test catches any regression
+    Imports the real validate_device_idle_action so the test catches any regression
     in the production validator, not a local copy.
     """
     import voluptuous as vol
-
-    from custom_components.roommind.websocket_api import _validate_device_idle_action
 
     device_schema = vol.All(
         vol.Schema(
@@ -2331,7 +2336,7 @@ async def test_save_room_rejects_ac_with_low_idle_action(ws_hass, store, connect
                 vol.Optional("idle_action", default="off"): vol.In(["off", "fan_only", "setback", "low"]),
             }
         ),
-        _validate_device_idle_action,
+        validate_device_idle_action,
     )
     save_room_schema = vol.Schema(
         {
@@ -2361,21 +2366,19 @@ async def test_validate_device_idle_action_unit():
     """Direct unit test of the real validator — catches regressions if the function changes."""
     import voluptuous as vol
 
-    from custom_components.roommind.websocket_api import _validate_device_idle_action
-
     # TRV + low is allowed
-    assert _validate_device_idle_action({"type": "trv", "idle_action": "low"}) == {
+    assert validate_device_idle_action({"type": "trv", "idle_action": "low"}) == {
         "type": "trv",
         "idle_action": "low",
     }
     # AC + off is allowed
-    assert _validate_device_idle_action({"type": "ac", "idle_action": "off"}) == {
+    assert validate_device_idle_action({"type": "ac", "idle_action": "off"}) == {
         "type": "ac",
         "idle_action": "off",
     }
     # AC + low is rejected
     with pytest.raises(vol.Invalid):
-        _validate_device_idle_action({"type": "ac", "idle_action": "low"})
+        validate_device_idle_action({"type": "ac", "idle_action": "low"})
 
 
 @pytest.mark.asyncio
