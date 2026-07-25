@@ -23,8 +23,6 @@ from .const import (
     AC_HEATING_BOOST_TARGET,
     CLIMATE_MODE_COOL_ONLY,
     CLIMATE_MODE_HEAT_ONLY,
-    DEFAULT_ECO_COOL,
-    DEFAULT_ECO_HEAT,
     DEFAULT_OUTDOOR_COOLING_MIN,
     DEFAULT_OUTDOOR_HEATING_MAX,
     DOMAIN,
@@ -1131,6 +1129,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
 
         # Load schedule blocks once — used for both target temp resolution and MPC lookahead.
         from .utils.schedule_utils import (
+            apply_mold_prevention_to_targets,
             get_active_schedule_entity,
             make_target_resolver,
             read_schedule_blocks,
@@ -1149,21 +1148,12 @@ class RoomMindCoordinator(DataUpdateCoordinator):
 
         # Apply mold prevention temperature delta (heating target only).
         # Safety: mold prevention overrides "off" to prevent structural damage.
+        targets = apply_mold_prevention_to_targets(
+            targets,
+            room,
+            mold_prevention_temp_delta if mold_prevention_active_room else 0.0,
+        )
         force_off = targets.heat is None and targets.cool is None
-        if mold_prevention_active_room and mold_prevention_temp_delta > 0:
-            if force_off:
-                eco_heat = room.get("eco_heat", room.get("eco_temp", DEFAULT_ECO_HEAT))
-                eco_cool = room.get("eco_cool", DEFAULT_ECO_COOL)
-                targets = TargetTemps(
-                    heat=eco_heat + mold_prevention_temp_delta,
-                    cool=eco_cool,
-                )
-                force_off = False
-            elif targets.heat is not None:
-                targets = TargetTemps(
-                    heat=targets.heat + mold_prevention_temp_delta,
-                    cool=targets.cool,
-                )
         presence_away = not room.get("ignore_presence", False) and self._is_presence_away(room, settings)
         target_resolver = make_target_resolver(
             schedule_blocks,

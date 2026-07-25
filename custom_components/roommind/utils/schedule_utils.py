@@ -334,11 +334,27 @@ def make_target_resolver(
             schedule_off_action=schedule_off_action,
             presence_clears_override=presence_clears_override,
         )
-        if targets.heat is None and targets.cool is None:
-            return targets
-        return TargetTemps(
-            heat=targets.heat + mold_prevention_delta if targets.heat is not None else None,
-            cool=targets.cool if targets.cool is not None else None,
+        return apply_mold_prevention_to_targets(
+            targets,
+            room,
+            mold_prevention_delta,
         )
 
     return resolver
+
+
+def apply_mold_prevention_to_targets(
+    targets: TargetTemps,
+    room: dict,
+    mold_prevention_delta: float,
+) -> TargetTemps:
+    """Raise heating targets, restoring eco targets when control was off."""
+    if mold_prevention_delta <= 0:
+        return targets
+    eco_heat = room.get("eco_heat", room.get("eco_temp", DEFAULT_ECO_HEAT))
+    eco_cool = room.get("eco_cool", DEFAULT_ECO_COOL)
+    base_heat = targets.heat if targets.heat is not None else eco_heat
+    return TargetTemps(
+        heat=base_heat + mold_prevention_delta,
+        cool=targets.cool if targets.cool is not None else eco_cool,
+    )

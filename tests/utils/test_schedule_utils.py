@@ -525,9 +525,13 @@ class TestMakeTargetResolverOffActions:
         resolver2 = make_target_resolver(blocks, room, settings)
         assert resolver2(ts) == TargetTemps(heat=None, cool=None)
 
-    def test_resolver_skips_mold_delta_when_none(self):
-        """Mold delta is NOT added when base target is None."""
-        room = {"comfort_temp": 21.0, "eco_temp": 17.0}
+    def test_resolver_mold_prevention_overrides_off_action(self):
+        """Structural protection restores eco targets when an off action is active."""
+        room = {
+            "comfort_temp": 21.0,
+            "eco_temp": 17.0,
+            "eco_cool": 27.0,
+        }
         settings = {"presence_away_action": "off"}
         resolver = make_target_resolver(
             None,
@@ -536,7 +540,32 @@ class TestMakeTargetResolverOffActions:
             presence_away=True,
             mold_prevention_delta=2.0,
         )
-        assert resolver(time.time()) == TargetTemps(heat=None, cool=None)
+        assert resolver(time.time()) == TargetTemps(heat=19.0, cool=27.0)
+
+    def test_resolver_mold_prevention_overrides_schedule_off_forecast(self):
+        """MPC lookahead keeps structural protection outside schedule blocks."""
+        room = {"comfort_temp": 21.0, "eco_temp": 17.0, "eco_cool": 27.0}
+        settings = {"schedule_off_action": "off"}
+        blocks = {
+            "monday": [
+                {
+                    "from": "08:00:00",
+                    "to": "12:00:00",
+                    "data": {"temperature": 22.0},
+                }
+            ]
+        }
+        resolver = make_target_resolver(
+            blocks,
+            room,
+            settings,
+            mold_prevention_delta=2.0,
+        )
+
+        assert resolver(datetime(2025, 1, 6, 23, 0).timestamp()) == TargetTemps(
+            heat=19.0,
+            cool=27.0,
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -12,10 +12,6 @@ from homeassistant.core import HomeAssistant
 from ..const import (
     CLIMATE_MODE_COOL_ONLY,
     CLIMATE_MODE_HEAT_ONLY,
-    DEFAULT_COMFORT_COOL,
-    DEFAULT_COMFORT_HEAT,
-    DEFAULT_ECO_COOL,
-    DEFAULT_ECO_HEAT,
 )
 from ..control.mpc_controller import (
     DEFAULT_OUTDOOR_TEMP_FALLBACK,
@@ -137,19 +133,9 @@ async def _compute_target_forecast(
     from ..utils.presence_utils import is_presence_away
     from ..utils.schedule_utils import (
         get_active_schedule_entity,
+        make_target_resolver,
         read_schedule_blocks,
-        resolve_targets_at_time,
     )
-    from ..utils.temp_utils import ha_temp_to_celsius
-
-    comfort_heat = room.get("comfort_heat", room.get("comfort_temp", DEFAULT_COMFORT_HEAT))
-    comfort_cool = room.get("comfort_cool", DEFAULT_COMFORT_COOL)
-    eco_heat = room.get("eco_heat", room.get("eco_temp", DEFAULT_ECO_HEAT))
-    eco_cool = room.get("eco_cool", DEFAULT_ECO_COOL)
-    override_until = room.get("override_until")
-    override_temp = room.get("override_temp")
-    vacation_until = settings.get("vacation_until")
-    vacation_temp = settings.get("vacation_temp")
     climate_mode = room.get("climate_mode", "auto")
 
     presence_away = not room.get("ignore_presence", False) and is_presence_away(hass, room, settings)
@@ -157,8 +143,14 @@ async def _compute_target_forecast(
     entity_id = get_active_schedule_entity(hass, room)
     schedule_blocks = await read_schedule_blocks(hass, entity_id, cache=schedule_blocks_cache) if entity_id else None
 
-    _hass = hass
-    converter = lambda v: ha_temp_to_celsius(_hass, v)  # noqa: E731
+    target_resolver = make_target_resolver(
+        schedule_blocks,
+        room,
+        settings,
+        hass=hass,
+        presence_away=presence_away,
+        mold_prevention_delta=mold_prevention_delta,
+    )
 
     # Generate forecast points
     now = time.time()
@@ -166,31 +158,9 @@ async def _compute_target_forecast(
     result: list[dict] = []
     ts = now
     while ts <= end_ts:
-        targets = resolve_targets_at_time(
-            ts,
-            schedule_blocks,
-            override_until,
-            override_temp,
-            vacation_until,
-            vacation_temp,
-            comfort_heat,
-            comfort_cool,
-            eco_heat,
-            eco_cool,
-            presence_away=presence_away,
-            block_temp_converter=converter,
-            presence_away_action=settings.get("presence_away_action", "eco"),
-            schedule_off_action=settings.get("schedule_off_action", "eco"),
-            presence_clears_override=bool(settings.get("presence_clears_override", False)),
-        )
-        heat_target = targets.heat
+        targets = target_resolver(ts)
+        heat_target = round(targets.heat, 1) if targets.heat is not None else None
         cool_target = targets.cool
-
-        # Apply mold prevention delta to heat target only
-        if heat_target is not None:
-            heat_target = round(heat_target + mold_prevention_delta, 1)
-        elif mold_prevention_delta > 0:
-            heat_target = round(eco_heat + mold_prevention_delta, 1)
 
         # Chart display: mode-aware single value
         if climate_mode == CLIMATE_MODE_COOL_ONLY:
