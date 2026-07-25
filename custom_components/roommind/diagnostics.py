@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN, VERSION
-from .control.mpc_controller import _last_commands
+from .control.mpc_controller import last_command_snapshot
 
 
-def _build_device_states(hass: HomeAssistant, devices: list[dict]) -> list[dict[str, Any]]:
+def _build_device_states(
+    hass: HomeAssistant,
+    devices: list[dict],
+    *,
+    last_commands: Mapping[str, Mapping[str, Any]],
+) -> list[dict[str, Any]]:
     """Build HA entity state snapshot for each device."""
     result = []
     for dev in devices:
@@ -39,7 +45,7 @@ def _build_device_states(hass: HomeAssistant, devices: list[dict]) -> list[dict[
             entry["fan_modes"] = attrs.get("fan_modes", [])
         else:
             entry["ha_state"] = "not_found"
-        last_cmd = _last_commands.get(eid)
+        last_cmd = last_commands.get(eid)
         if last_cmd:
             entry["last_command"] = dict(last_cmd)
         result.append(entry)
@@ -58,6 +64,7 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, config_entry: 
     settings = store.get_settings()
     rooms_config = store.get_rooms()
     runtime = coordinator.diagnostics_runtime_snapshot(rooms_config) if coordinator else None
+    last_commands = last_command_snapshot()
 
     # Build per-room diagnostics
     rooms_diag: dict[str, dict] = {}
@@ -121,7 +128,11 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, config_entry: 
         # Device entity states
         devices = config.get("devices", [])
         if devices:
-            room_diag["device_states"] = _build_device_states(hass, devices)
+            room_diag["device_states"] = _build_device_states(
+                hass,
+                devices,
+                last_commands=last_commands,
+            )
 
         # Model info from EKF estimator
         if room_runtime and room_runtime.model is not None:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from types import MethodType
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -322,11 +322,11 @@ def test_build_device_states_with_ha_state(hass):
         {"entity_id": "climate.ac1", "type": "ac", "role": "auto", "idle_action": "fan_only", "idle_fan_mode": "low"},
     ]
 
-    with patch(
-        "custom_components.roommind.diagnostics._last_commands",
-        {"climate.ac1": {"service": "set_hvac_mode", "hvac_mode": "heat"}},
-    ):
-        result = _build_device_states(hass, devices)
+    result = _build_device_states(
+        hass,
+        devices,
+        last_commands={"climate.ac1": {"service": "set_hvac_mode", "hvac_mode": "heat"}},
+    )
 
     assert len(result) == 1
     dev = result[0]
@@ -346,8 +346,7 @@ def test_build_device_states_entity_not_found(hass):
     hass.states.get = MagicMock(return_value=None)
     devices = [{"entity_id": "climate.gone", "type": "trv", "role": "auto"}]
 
-    with patch("custom_components.roommind.diagnostics._last_commands", {}):
-        result = _build_device_states(hass, devices)
+    result = _build_device_states(hass, devices, last_commands={})
 
     assert result[0]["ha_state"] == "not_found"
     assert "last_command" not in result[0]

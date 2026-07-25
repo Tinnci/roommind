@@ -117,6 +117,11 @@ def clear_command_cache() -> None:
     _setpoint_override_warned.clear()
 
 
+def last_command_snapshot() -> dict[str, dict[str, Any]]:
+    """Return a detached snapshot of the most recently sent device commands."""
+    return {entity_id: dict(command) for entity_id, command in _last_commands.items()}
+
+
 def _resolve_idle_setpoint(
     state: Any,
     fallback_setpoint: float | None,
