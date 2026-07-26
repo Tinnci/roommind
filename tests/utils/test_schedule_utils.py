@@ -6,11 +6,14 @@ import logging
 import time
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
+from zoneinfo import ZoneInfo
 
 import pytest
+from homeassistant.util import dt as dt_util
 
 from custom_components.roommind.const import TargetTemps
 from custom_components.roommind.utils.schedule_utils import (
+    find_active_block,
     get_active_schedule_entity,
     make_target_resolver,
     read_schedule_blocks,
@@ -48,6 +51,11 @@ def _make_room(**overrides):
     }
     room.update(overrides)
     return room
+
+
+def _ha_timestamp(value: datetime) -> float:
+    """Interpret a naive test datetime in Home Assistant's configured timezone."""
+    return value.replace(tzinfo=dt_util.DEFAULT_TIME_ZONE).timestamp()
 
 
 # ---------------------------------------------------------------------------
@@ -147,6 +155,31 @@ class TestResolveScheduleIndex:
 # ---------------------------------------------------------------------------
 # resolve_target_at_time
 # ---------------------------------------------------------------------------
+
+
+def test_find_active_block_uses_home_assistant_timezone(monkeypatch):
+    """Schedule weekday and wall-clock time follow HA, not the host timezone."""
+    timestamp = datetime.fromisoformat("2026-07-27T02:30:00+00:00").timestamp()
+    schedule_blocks = {
+        "sunday": [
+            {
+                "from": "22:00:00",
+                "to": "23:00:00",
+                "data": {"temperature": 19.0},
+            }
+        ],
+        "monday": [
+            {
+                "from": "02:00:00",
+                "to": "03:00:00",
+                "data": {"temperature": 25.0},
+            }
+        ],
+    }
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(dt_util, "DEFAULT_TIME_ZONE", ZoneInfo("America/New_York"))
+        assert find_active_block(schedule_blocks, timestamp) == {"temperature": 19.0}
 
 
 class TestResolveTargetAtTime:
@@ -249,7 +282,7 @@ class TestResolveTargetAtTime:
         # Create a timestamp that falls on a known day and time
         # Use a Monday at 10:00
         dt = datetime(2025, 1, 6, 10, 0, 0)  # Monday
-        ts = dt.timestamp()
+        ts = _ha_timestamp(dt)
         schedule_blocks = {
             "monday": [
                 {
@@ -274,7 +307,7 @@ class TestResolveTargetAtTime:
     def test_inside_block_without_temperature(self):
         """Inside a block without temperature data → returns comfort_temp."""
         dt = datetime(2025, 1, 6, 10, 0, 0)  # Monday
-        ts = dt.timestamp()
+        ts = _ha_timestamp(dt)
         schedule_blocks = {
             "monday": [
                 {
@@ -299,7 +332,7 @@ class TestResolveTargetAtTime:
     def test_outside_all_blocks_returns_eco(self):
         """Outside all schedule blocks → returns eco_temp."""
         dt = datetime(2025, 1, 6, 6, 0, 0)  # Monday 06:00 — before any block
-        ts = dt.timestamp()
+        ts = _ha_timestamp(dt)
         schedule_blocks = {
             "monday": [
                 {
@@ -324,7 +357,7 @@ class TestResolveTargetAtTime:
     def test_day_with_no_blocks_returns_eco(self):
         """Day without any blocks → returns eco_temp."""
         dt = datetime(2025, 1, 7, 10, 0, 0)  # Tuesday
-        ts = dt.timestamp()
+        ts = _ha_timestamp(dt)
         schedule_blocks = {
             "monday": [
                 {
@@ -349,7 +382,7 @@ class TestResolveTargetAtTime:
     def test_block_with_invalid_temperature(self):
         """Block with non-numeric temperature → falls back to comfort_temp."""
         dt = datetime(2025, 1, 6, 10, 0, 0)  # Monday
-        ts = dt.timestamp()
+        ts = _ha_timestamp(dt)
         schedule_blocks = {
             "monday": [
                 {
@@ -374,7 +407,7 @@ class TestResolveTargetAtTime:
     def test_vacation_expired_falls_through(self):
         """Expired vacation falls through to schedule."""
         dt = datetime(2025, 1, 6, 10, 0, 0)  # Monday
-        ts = dt.timestamp()
+        ts = _ha_timestamp(dt)
         schedule_blocks = {
             "monday": [
                 {
@@ -433,7 +466,7 @@ class TestResolveTargetAtTime:
     def test_schedule_off_action_off_returns_none(self):
         """When schedule_off_action is 'off' and outside schedule blocks, returns None."""
         dt = datetime(2025, 1, 6, 23, 0, 0)  # Monday 23:00 - outside blocks
-        ts = dt.timestamp()
+        ts = _ha_timestamp(dt)
         schedule_blocks = {
             "monday": [
                 {"from": "08:00:00", "to": "12:00:00", "data": {"temperature": 22.0}},
@@ -455,7 +488,7 @@ class TestResolveTargetAtTime:
     def test_schedule_off_action_eco_returns_eco(self):
         """When schedule_off_action is 'eco' (default), returns eco_temp."""
         dt = datetime(2025, 1, 6, 23, 0, 0)  # Monday 23:00 - outside blocks
-        ts = dt.timestamp()
+        ts = _ha_timestamp(dt)
         schedule_blocks = {
             "monday": [
                 {"from": "08:00:00", "to": "12:00:00", "data": {"temperature": 22.0}},
@@ -520,7 +553,7 @@ class TestMakeTargetResolverOffActions:
         # Actually with no schedule blocks, it returns comfort_temp (no blocks = comfort)
         # So we need schedule_blocks with no matching block
         dt = datetime(2025, 1, 6, 23, 0, 0)
-        ts = dt.timestamp()
+        ts = _ha_timestamp(dt)
         blocks = {"monday": [{"from": "08:00:00", "to": "12:00:00", "data": {"temperature": 22.0}}]}
         resolver2 = make_target_resolver(blocks, room, settings)
         assert resolver2(ts) == TargetTemps(heat=None, cool=None)
@@ -562,7 +595,7 @@ class TestMakeTargetResolverOffActions:
             mold_prevention_delta=2.0,
         )
 
-        assert resolver(datetime(2025, 1, 6, 23, 0).timestamp()) == TargetTemps(
+        assert resolver(_ha_timestamp(datetime(2025, 1, 6, 23, 0))) == TargetTemps(
             heat=19.0,
             cool=27.0,
         )
@@ -661,7 +694,7 @@ class TestFahrenheitBlockConversion:
         from datetime import datetime
 
         dt = datetime(2025, 1, 6, 10, 0, 0)  # Monday 10:00
-        ts = dt.timestamp()
+        ts = _ha_timestamp(dt)
         schedule_blocks = {
             "monday": [
                 {
@@ -695,7 +728,7 @@ class TestFahrenheitBlockConversion:
         from datetime import datetime
 
         dt = datetime(2025, 1, 6, 10, 0, 0)  # Monday 10:00
-        ts = dt.timestamp()
+        ts = _ha_timestamp(dt)
         schedule_blocks = {
             "monday": [
                 {
@@ -740,7 +773,7 @@ class TestFahrenheitBlockConversion:
 
         # Monday 10:00 schedule block with 71.6°F
         dt = datetime(2025, 1, 6, 10, 0, 0)
-        ts = dt.timestamp()
+        ts = _ha_timestamp(dt)
         schedule_blocks = {
             "monday": [
                 {
@@ -774,7 +807,7 @@ class TestFahrenheitBlockConversion:
         settings: dict = {}
 
         dt = datetime(2025, 1, 6, 10, 0, 0)
-        ts = dt.timestamp()
+        ts = _ha_timestamp(dt)
         schedule_blocks = {
             "monday": [
                 {
@@ -807,7 +840,7 @@ class TestResolveTargetsAtTime:
         from custom_components.roommind.utils.schedule_utils import resolve_targets_at_time
 
         dt = datetime(2025, 1, 6, 10, 0, 0)  # Monday 10:00
-        ts = dt.timestamp()
+        ts = _ha_timestamp(dt)
         schedule_blocks = {
             "monday": [
                 {"from": "08:00:00", "to": "12:00:00", "data": {}},
@@ -832,7 +865,7 @@ class TestResolveTargetsAtTime:
         from custom_components.roommind.utils.schedule_utils import resolve_targets_at_time
 
         dt = datetime(2025, 1, 6, 6, 0, 0)  # Monday 06:00 - before blocks
-        ts = dt.timestamp()
+        ts = _ha_timestamp(dt)
         schedule_blocks = {
             "monday": [
                 {"from": "08:00:00", "to": "12:00:00", "data": {}},
@@ -960,7 +993,7 @@ class TestResolveTargetsAtTime:
         from custom_components.roommind.utils.schedule_utils import resolve_targets_at_time
 
         dt = datetime(2025, 1, 6, 10, 0, 0)  # Monday 10:00
-        ts = dt.timestamp()
+        ts = _ha_timestamp(dt)
         schedule_blocks = {
             "monday": [
                 {"from": "08:00:00", "to": "12:00:00", "data": {"temperature": 22.5}},
@@ -1030,7 +1063,7 @@ class TestResolveTargetsAtTimeSplitBlockTemps:
         from custom_components.roommind.utils.schedule_utils import resolve_targets_at_time
 
         dt = datetime(2025, 1, 6, 10, 0, 0)  # Monday 10:00
-        ts = dt.timestamp()
+        ts = _ha_timestamp(dt)
         schedule_blocks = {
             "monday": [
                 {
@@ -1059,7 +1092,7 @@ class TestResolveTargetsAtTimeSplitBlockTemps:
         from custom_components.roommind.utils.schedule_utils import resolve_targets_at_time
 
         dt = datetime(2025, 1, 6, 10, 0, 0)  # Monday 10:00
-        ts = dt.timestamp()
+        ts = _ha_timestamp(dt)
         schedule_blocks = {
             "monday": [
                 {
@@ -1088,7 +1121,7 @@ class TestResolveTargetsAtTimeSplitBlockTemps:
         from custom_components.roommind.utils.schedule_utils import resolve_targets_at_time
 
         dt = datetime(2025, 1, 6, 10, 0, 0)  # Monday 10:00
-        ts = dt.timestamp()
+        ts = _ha_timestamp(dt)
         schedule_blocks = {
             "monday": [
                 {
@@ -1117,7 +1150,7 @@ class TestResolveTargetsAtTimeSplitBlockTemps:
         from custom_components.roommind.utils.schedule_utils import resolve_targets_at_time
 
         dt = datetime(2025, 1, 6, 10, 0, 0)  # Monday 10:00
-        ts = dt.timestamp()
+        ts = _ha_timestamp(dt)
         schedule_blocks = {
             "monday": [
                 {

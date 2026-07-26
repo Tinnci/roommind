@@ -6,6 +6,7 @@ from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from homeassistant.util import dt as dt_util
 
 from custom_components.roommind.control.thermal_model import RoomModelManager
 
@@ -68,7 +69,7 @@ def _make_schedule_blocks_at(hour: int, minute: int, duration_hours: int, day_na
 
 
 # Frozen time: Monday 2026-03-09 10:00:00 (inside a typical schedule window)
-FROZEN_TS = datetime(2026, 3, 9, 10, 0, 0).timestamp()
+FROZEN_TS = datetime(2026, 3, 9, 10, 0, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE).timestamp()
 
 # Schedule block that covers 06:00-22:00 on Monday (frozen time is inside it)
 ACTIVE_SCHEDULE = _make_schedule_blocks_at(6, 0, 16, "monday")
@@ -154,7 +155,7 @@ class TestMPCPreheating:
 
         # Schedule state "off" -> current target is eco (17C)
         coordinator.hass.states.get = MagicMock(side_effect=make_hass_states(temp="17.0", schedule_state="off"))
-        # But read_schedule_blocks returns blocks showing comfort starts at 10:30
+        # But read_schedule_blocks returns blocks showing comfort starts at 10:10
         coordinator.hass.services.async_call = _make_schedule_service_mock(UPCOMING_SCHEDULE)
 
         with patch("time.time", return_value=FROZEN_TS):
