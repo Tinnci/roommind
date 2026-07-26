@@ -35,6 +35,24 @@ def test_record_and_read_preserves_value_text_and_numeric_value(tmp_path):
     assert rows[0]["attrs_json"] == '{"device_class":"temperature"}'
 
 
+def test_record_preserves_epoch_ingested_at(tmp_path):
+    """An explicit Unix epoch timestamp is distinct from a missing timestamp."""
+    store = ObservationStore(str(tmp_path / "observations.sqlite"))
+
+    store.record(
+        {
+            "room_id": "bedroom",
+            "entity_id": "sensor.bedroom_temp",
+            "kind": "temperature",
+            "observed_at": 0.0,
+            "ingested_at": 0.0,
+            "value": "20.0",
+        }
+    )
+
+    assert store.read()[0]["ingested_at"] == 0.0
+
+
 def test_duplicate_observation_is_ignored(tmp_path):
     store = ObservationStore(str(tmp_path / "observations.sqlite"))
     observation = {

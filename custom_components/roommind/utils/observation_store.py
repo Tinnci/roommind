@@ -702,7 +702,9 @@ class ObservationStore:
         observed_at = _safe_float(observation.get("observed_at"))
         if not room_id or not entity_id or not kind or observed_at is None:
             return None
-        ingested_at = _safe_float(observation.get("ingested_at")) or time.time()
+        ingested_at = _safe_float(observation.get("ingested_at"))
+        if ingested_at is None:
+            ingested_at = time.time()
         state = str(observation.get("state") or "ok")
         value_text, value_real = _value_fields(observation.get("value"))
         unit = _optional_text(observation.get("unit"))
