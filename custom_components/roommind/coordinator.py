@@ -94,6 +94,7 @@ from .managers.valve_manager import ValveManager
 from .managers.weather_manager import WeatherManager
 from .managers.window_manager import WindowManager
 from .settings_config import mpc_control_enabled
+from .store import RoomMindStore
 from .utils.device_utils import (
     build_rooms_devices_map,
     get_ac_eids,
@@ -453,56 +454,14 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             set(settings.get("learning_disabled_rooms", [])),
         )
 
-        # Save thermal data periodically
-        self._thermal_save_count += 1
-        if self._thermal_save_count >= THERMAL_SAVE_CYCLES:
-            self._thermal_save_count = 0
-            await store.async_save_thermal_data(
-                {
-                    "models": self._model_manager.to_dict(),
-                    "sensor_biases": self._sensor_fusion.to_dict(),
-                }
-            )
-
-        # Rotate history periodically
-        self._history_rotate_count += 1
-        if self._history_rotate_count >= HISTORY_ROTATE_CYCLES and self._history_store:
-            self._history_rotate_count = 0
-            now_ts = time.time()
-            for area_id in rooms:
-                try:
-                    await self.hass.async_add_executor_job(self._history_store.rotate, area_id)
-                except Exception:  # noqa: BLE001
-                    _LOGGER.warning("History rotation failed for '%s'", area_id)
-                await self._async_store_observed_derivatives(area_id, now_ts=now_ts)
-            await self._async_store_observation_summaries(
-                "global",
-                ("outdoor_temperature", "outdoor_humidity"),
-                now_ts=now_ts,
-            )
-        self._raw_observation_prune_count += 1
-        if self._raw_observation_prune_count >= RAW_OBSERVATION_PRUNE_CYCLES and self._observation_store:
-            self._raw_observation_prune_count = 0
-            try:
-                await self.hass.async_add_executor_job(self._observation_store.prune_raw)
-                await self.hass.async_add_executor_job(self._observation_store.prune_derived)
-            except Exception:  # noqa: BLE001
-                _LOGGER.warning("Raw observation pruning failed")
-
-        # Valve protection: finish active cycles (runs every tick, cheap).
-        # Pass a {eid: devices[]} map so idle_action is respected when the
-        # cycle closes (idle_action="low" TRVs stay awake instead of being
-        # hard-turned-off).
-        await self._valve_manager.async_finish_cycles(build_rooms_devices_map(rooms))
-
-        # Valve protection: check for stale valves (throttled)
-        if self._valve_manager.should_run_cycle_check():
-            await self._valve_manager.async_check_and_cycle(rooms, settings)
-
-        # Persist valve actuation timestamps (piggyback on thermal save cycle)
-        if self._valve_manager.actuation_dirty and self._thermal_save_count == 0:
-            await store.async_save_settings({"valve_last_actuation": self._valve_manager.get_actuation_data()})
-            self._valve_manager.actuation_dirty = False
+        thermal_state_saved = await self._async_save_thermal_state(store)
+        await self._async_rotate_and_prune_observations(rooms)
+        await self._async_maintain_valves(
+            store,
+            rooms,
+            settings,
+            persist_actuation=thermal_state_saved,
+        )
 
         self.rooms = room_states
         return {"rooms": room_states}
@@ -620,6 +579,65 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             self._pending_predictions[area_id] = round(clamped, 2)
         except Exception:  # noqa: BLE001
             pass
+
+    async def _async_save_thermal_state(self, store: RoomMindStore) -> bool:
+        """Save learned thermal state when its cycle is due."""
+        self._thermal_save_count += 1
+        if self._thermal_save_count < THERMAL_SAVE_CYCLES:
+            return False
+
+        self._thermal_save_count = 0
+        await store.async_save_thermal_data(
+            {
+                "models": self._model_manager.to_dict(),
+                "sensor_biases": self._sensor_fusion.to_dict(),
+            }
+        )
+        return True
+
+    async def _async_rotate_and_prune_observations(self, rooms: dict[str, dict]) -> None:
+        """Run throttled history rotation and observation retention."""
+        self._history_rotate_count += 1
+        if self._history_rotate_count >= HISTORY_ROTATE_CYCLES and self._history_store:
+            self._history_rotate_count = 0
+            now_ts = time.time()
+            for area_id in rooms:
+                try:
+                    await self.hass.async_add_executor_job(self._history_store.rotate, area_id)
+                except Exception:  # noqa: BLE001
+                    _LOGGER.warning("History rotation failed for '%s'", area_id)
+                await self._async_store_observed_derivatives(area_id, now_ts=now_ts)
+            await self._async_store_observation_summaries(
+                "global",
+                ("outdoor_temperature", "outdoor_humidity"),
+                now_ts=now_ts,
+            )
+
+        self._raw_observation_prune_count += 1
+        if self._raw_observation_prune_count < RAW_OBSERVATION_PRUNE_CYCLES or not self._observation_store:
+            return
+        self._raw_observation_prune_count = 0
+        try:
+            await self.hass.async_add_executor_job(self._observation_store.prune_raw)
+            await self.hass.async_add_executor_job(self._observation_store.prune_derived)
+        except Exception:  # noqa: BLE001
+            _LOGGER.warning("Raw observation pruning failed")
+
+    async def _async_maintain_valves(
+        self,
+        store: RoomMindStore,
+        rooms: dict[str, dict],
+        settings: dict,
+        *,
+        persist_actuation: bool,
+    ) -> None:
+        """Finish protection cycles and persist actuation state when due."""
+        await self._valve_manager.async_finish_cycles(build_rooms_devices_map(rooms))
+        if self._valve_manager.should_run_cycle_check():
+            await self._valve_manager.async_check_and_cycle(rooms, settings)
+        if persist_actuation and self._valve_manager.actuation_dirty:
+            await store.async_save_settings({"valve_last_actuation": self._valve_manager.get_actuation_data()})
+            self._valve_manager.actuation_dirty = False
 
     async def _async_store_observed_derivatives(self, area_id: str, *, now_ts: float) -> None:
         """Persist low-frequency observed summaries and thermal episodes."""
