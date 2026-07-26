@@ -38,8 +38,9 @@ class TestPresenceDetection:
         room = data["rooms"]["living_room_abc12345"]
         assert room["target_temp"] == 17.0  # eco_temp
         assert room["presence_away"] is True
-        airflow_room = coordinator._airflow_control.async_apply.call_args.args[1]
-        assert airflow_room["_presence_away"] is True
+        airflow_call = coordinator._airflow_control.async_apply.call_args
+        assert airflow_call.kwargs["context"].presence_away is True
+        assert "_presence_away" not in airflow_call.args[1]
 
     @pytest.mark.asyncio
     async def test_someone_home_uses_schedule(self, hass, mock_config_entry):

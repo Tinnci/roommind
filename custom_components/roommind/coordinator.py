@@ -68,7 +68,7 @@ from .control.thermal_model import (
     RoomModelSimulationContext,
     TemperatureObservation,
 )
-from .managers.airflow_control_manager import AirflowControlManager
+from .managers.airflow_control_manager import AirflowControlManager, AirflowRuntimeContext
 from .managers.compressor_group_manager import (
     CompressorCommandOutcome,
     CompressorGroupConfig,
@@ -1303,10 +1303,11 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             airflow_mix_plan_level = min(airflow_mix_plan_level, max(0.0, min(1.0, float(night_fan_limit))))
         airflow_plan_level = max(airflow_mix_plan_level, airflow_vent_plan_level)
         airflow_command_status: list[dict[str, Any]] = []
-        runtime_room = dict(room)
-        runtime_room["_night_mode_active"] = night_mode_active
-        runtime_room["_presence_away"] = presence_away
-        runtime_room["_rapid_recovery_active"] = rapid_recovery_active
+        airflow_context = AirflowRuntimeContext(
+            night_active=night_mode_active,
+            presence_away=presence_away,
+            rapid_recovery_active=rapid_recovery_active,
+        )
 
         # Read device temperature limits for dynamic boost targets
         trv_max_temps: list[float] = []
@@ -1430,10 +1431,11 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             try:
                 airflow_command_status = await self._airflow_control.async_apply(
                     area_id,
-                    runtime_room,
+                    room,
                     mix_level=airflow_mix_plan_level,
                     vent_level=airflow_vent_plan_level,
                     mode=mode,
+                    context=airflow_context,
                 )
             except Exception:  # noqa: BLE001
                 _LOGGER.warning(
@@ -1469,10 +1471,11 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             airflow_plan_level = 0.0
             airflow_command_status = await self._airflow_control.async_apply(
                 area_id,
-                runtime_room,
+                room,
                 mix_level=0.0,
                 vent_level=0.0,
                 mode=MODE_IDLE,
+                context=airflow_context,
             )
 
         night_control_status: list[dict[str, Any]] = []

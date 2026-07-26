@@ -5,12 +5,12 @@ from __future__ import annotations
 import inspect
 import logging
 import time
+from dataclasses import dataclass
 from typing import Any
 
 from homeassistant.core import HomeAssistant
 
 from ..const import make_roommind_context
-from ..utils.night_utils import is_night_mode_active
 from .airflow_command_plan import (
     OUTCOME_BLOCKED_BY_MODE,
     AirflowCommandPlan,
@@ -24,6 +24,18 @@ _LOGGER = logging.getLogger(__name__)
 
 OUTCOME_FAILED = "failed"
 COMMAND_LEVEL_TOLERANCE = 0.15
+
+
+@dataclass(frozen=True, slots=True)
+class AirflowRuntimeContext:
+    """Transient control state kept separate from persisted room config."""
+
+    night_active: bool = False
+    presence_away: bool = False
+    rapid_recovery_active: bool = False
+
+
+_DEFAULT_RUNTIME_CONTEXT = AirflowRuntimeContext()
 
 
 class AirflowControlManager:
@@ -44,14 +56,15 @@ class AirflowControlManager:
         level: float | None = None,
         mix_level: float | None = None,
         vent_level: float | None = None,
+        context: AirflowRuntimeContext = _DEFAULT_RUNTIME_CONTEXT,
     ) -> list[dict[str, Any]]:
         """Apply normalized role-specific airflow levels to configured devices."""
         legacy_target = _clamp_level(level) if level is not None else None
         mix_target = _clamp_level(mix_level if mix_level is not None else (legacy_target or 0.0))
         vent_target = _clamp_level(vent_level if vent_level is not None else (legacy_target or 0.0))
-        night_active = _is_night_context(room)
-        away_active = bool(room.get("_presence_away", False))
-        rapid_recovery = bool(room.get("_rapid_recovery_active", False))
+        night_active = context.night_active
+        away_active = context.presence_away
+        rapid_recovery = context.rapid_recovery_active
         night_cap = room.get("max_fan_level_night")
         capped_by_night = False
         if night_active and not rapid_recovery and night_cap is not None:
@@ -244,10 +257,6 @@ def _command_confidence(command: dict[str, Any], observed: float | None) -> str:
     if awaiting_first_status:
         return "assumed"
     return "conflicting"
-
-
-def _is_night_context(config: dict) -> bool:
-    return is_night_mode_active(config)
 
 
 def _fan_observed_q(state: str, attrs: dict[str, Any]) -> float:

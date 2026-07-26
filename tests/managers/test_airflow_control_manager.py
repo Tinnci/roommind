@@ -8,7 +8,10 @@ import pytest
 from homeassistant.components.climate import ClimateEntityFeature
 from homeassistant.components.fan import FanEntityFeature
 
-from custom_components.roommind.managers.airflow_control_manager import AirflowControlManager
+from custom_components.roommind.managers.airflow_control_manager import (
+    AirflowControlManager,
+    AirflowRuntimeContext,
+)
 
 
 def _state(state: str, attrs: dict | None = None):
@@ -392,7 +395,6 @@ async def test_climate_preset_is_selected_by_context_and_guarded(hass):
                     "preferred_preset_mode_night": "sleep",
                 }
             ],
-            "_night_mode_active": False,
         },
         level=1.0,
         mode="cooling",
@@ -510,7 +512,6 @@ async def test_night_mode_caps_mix_level_and_reports_skip_reasons(hass):
     statuses = await mgr.async_apply(
         "bedroom",
         {
-            "_night_mode_active": True,
             "max_fan_level_night": 0.3,
             "airflow_devices": [
                 {
@@ -526,6 +527,7 @@ async def test_night_mode_caps_mix_level_and_reports_skip_reasons(hass):
         mix_level=0.8,
         vent_level=0.0,
         mode="cooling",
+        context=AirflowRuntimeContext(night_active=True),
     )
 
     calls = [c.args[:3] for c in hass.services.async_call.call_args_list]
@@ -553,7 +555,6 @@ async def test_night_climate_uses_night_preset_preference(hass):
     await mgr.async_apply(
         "bedroom",
         {
-            "_night_mode_active": True,
             "airflow_devices": [
                 {
                     "entity_id": "climate.bedroom_ac",
@@ -567,6 +568,7 @@ async def test_night_climate_uses_night_preset_preference(hass):
         },
         mix_level=1.0,
         mode="cooling",
+        context=AirflowRuntimeContext(night_active=True),
     )
 
     calls = [c.args[:3] for c in hass.services.async_call.call_args_list]
@@ -592,8 +594,6 @@ async def test_away_climate_uses_away_preset_over_night_preference(hass):
     await mgr.async_apply(
         "bedroom",
         {
-            "_presence_away": True,
-            "_night_mode_active": True,
             "airflow_devices": [
                 {
                     "entity_id": "climate.bedroom_ac",
@@ -608,6 +608,7 @@ async def test_away_climate_uses_away_preset_over_night_preference(hass):
         },
         mix_level=1.0,
         mode="cooling",
+        context=AirflowRuntimeContext(night_active=True, presence_away=True),
     )
 
     calls = [call.args[:3] for call in hass.services.async_call.call_args_list]
