@@ -156,6 +156,67 @@ def _snap_to_step(value: float, step: float | None) -> float:
     return round(round(value / step) * step, 2)
 
 
+def _normalize_temperature_payload(state: Any, data: dict[str, Any], temp_intent: str) -> dict[str, Any]:
+    """Clamp and adapt one temperature command to device capabilities."""
+    normalized = dict(data)
+    attrs = state.attributes
+    dev_min = attrs.get("min_temp")
+    dev_max = attrs.get("max_temp")
+
+    if "temperature" in normalized:
+        temperature = normalized["temperature"]
+        if dev_max is not None and temperature > dev_max:
+            normalized["temperature"] = dev_max
+        if dev_min is not None and normalized["temperature"] < dev_min:
+            normalized["temperature"] = dev_min
+
+    if (
+        "temperature" in normalized
+        and temp_intent in ("heat", "cool")
+        and attrs.get("target_temp_low") is not None
+    ):
+        temperature = normalized.pop("temperature")
+        if temp_intent == "heat":
+            range_max = attrs.get("max_temp", temperature)
+            current_high = attrs.get("target_temp_high", range_max)
+            normalized["target_temp_low"] = temperature
+            normalized["target_temp_high"] = max(temperature, current_high)
+        elif temp_intent == "cool":
+            range_min = attrs.get("min_temp", temperature)
+            current_low = attrs.get("target_temp_low", range_min)
+            normalized["target_temp_low"] = min(temperature, current_low)
+            normalized["target_temp_high"] = temperature
+
+    if "target_temp_low" in normalized:
+        if dev_min is not None and normalized["target_temp_low"] < dev_min:
+            normalized["target_temp_low"] = dev_min
+        if dev_max is not None and normalized["target_temp_high"] > dev_max:
+            normalized["target_temp_high"] = dev_max
+
+    raw_step = attrs.get("target_temp_step")
+    if raw_step is None:
+        return normalized
+    step = float(raw_step)
+    if "temperature" in normalized:
+        temperature = _snap_to_step(normalized["temperature"], step)
+        if dev_max is not None and temperature > dev_max:
+            temperature = dev_max
+        if dev_min is not None and temperature < dev_min:
+            temperature = dev_min
+        normalized["temperature"] = temperature
+    if "target_temp_low" in normalized:
+        low = _snap_to_step(normalized["target_temp_low"], step)
+        if dev_min is not None and low < dev_min:
+            low = dev_min
+        normalized["target_temp_low"] = low
+    if "target_temp_high" in normalized:
+        high = _snap_to_step(normalized["target_temp_high"], step)
+        if dev_max is not None and high > dev_max:
+            high = dev_max
+        normalized["target_temp_high"] = high
+    return normalized
+
+
 def clear_command_cache() -> None:
     """Clear the sent-command cache (for tests)."""
     _last_commands.clear()
@@ -1870,75 +1931,8 @@ class MPCController:
                 )
                 data = {**data, "hvac_mode": resolved}
 
-        # Clamp temperature to device min/max range (before redundancy check
-        # so that e.g. 30°C clamped to 25°C is correctly seen as redundant
-        # when the device is already at 25°C)
-        if service == "set_temperature" and state and "temperature" in data:
-            dev_min = state.attributes.get("min_temp")
-            dev_max = state.attributes.get("max_temp")
-            temp = data["temperature"]
-            if dev_max is not None and temp > dev_max:
-                data = {**data, "temperature": dev_max}
-            if dev_min is not None and temp < dev_min:
-                data = {**data, "temperature": dev_min}
-
-        # Adapt for dual-setpoint devices (e.g. Bosch BTH-RM230Z):
-        # when device exposes target_temp_low/high, convert single temperature
-        # to the appropriate range format based on the caller's intent.
-        if (
-            service == "set_temperature"
-            and state
-            and "temperature" in data
-            and temp_intent
-            and state.attributes.get("target_temp_low") is not None
-        ):
-            temp = data["temperature"]
-            dev_max = state.attributes.get("max_temp", temp)
-            dev_min = state.attributes.get("min_temp", temp)
-            if temp_intent == "heat":
-                cur_high = state.attributes.get("target_temp_high", dev_max)
-                data = {k: v for k, v in data.items() if k != "temperature"}
-                data["target_temp_low"] = temp
-                data["target_temp_high"] = max(temp, cur_high)
-            elif temp_intent == "cool":
-                cur_low = state.attributes.get("target_temp_low", dev_min)
-                data = {k: v for k, v in data.items() if k != "temperature"}
-                data["target_temp_low"] = min(temp, cur_low)
-                data["target_temp_high"] = temp
-
-        # Clamp dual-setpoint data to device min/max
-        if service == "set_temperature" and state and "target_temp_low" in data:
-            dev_min = state.attributes.get("min_temp")
-            dev_max = state.attributes.get("max_temp")
-            if dev_min is not None and data["target_temp_low"] < dev_min:
-                data = {**data, "target_temp_low": dev_min}
-            if dev_max is not None and data["target_temp_high"] > dev_max:
-                data = {**data, "target_temp_high": dev_max}
-
-        # Snap to device's target_temp_step (e.g. 1.0 for ACs that only accept integers)
         if service == "set_temperature" and state:
-            step = state.attributes.get("target_temp_step")
-            if step is not None:
-                step = float(step)
-                dev_min = state.attributes.get("min_temp")
-                dev_max = state.attributes.get("max_temp")
-                if "temperature" in data:
-                    t = _snap_to_step(data["temperature"], step)
-                    if dev_max is not None and t > dev_max:
-                        t = dev_max
-                    if dev_min is not None and t < dev_min:
-                        t = dev_min
-                    data = {**data, "temperature": t}
-                if "target_temp_low" in data:
-                    lo = _snap_to_step(data["target_temp_low"], step)
-                    if dev_min is not None and lo < dev_min:
-                        lo = dev_min
-                    data = {**data, "target_temp_low": lo}
-                if "target_temp_high" in data:
-                    hi = _snap_to_step(data["target_temp_high"], step)
-                    if dev_max is not None and hi > dev_max:
-                        hi = dev_max
-                    data = {**data, "target_temp_high": hi}
+            data = _normalize_temperature_payload(state, data, temp_intent)
 
         # --- Redundancy: primary (device state) then fallback (sent cache) ---
         skip = bool(
