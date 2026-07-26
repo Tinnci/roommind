@@ -1065,8 +1065,8 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             current_humidity,
             self.outdoor_temp_effective,
             settings,
-            celsius_delta_to_ha_fn=lambda d: celsius_delta_to_ha(self.hass, d),  # type: ignore[misc]
-            ha_temp_unit_str_fn=lambda: ha_temp_unit_str(self.hass),  # type: ignore[misc]
+            celsius_delta_to_ha_fn=lambda d: celsius_delta_to_ha(self.hass, d),
+            ha_temp_unit_str_fn=lambda: ha_temp_unit_str(self.hass),
         )
         return mold.risk_level, mold.surface_rh, mold.prevention_active, mold.prevention_delta
 

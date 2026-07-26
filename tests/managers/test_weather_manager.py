@@ -130,6 +130,30 @@ async def test_service_response_parsed_and_stored():
 
 
 @pytest.mark.asyncio
+async def test_service_response_filters_malformed_forecast_entries():
+    """One malformed service entry must not discard the remaining forecast."""
+    hass = _make_hass()
+    hass.states.get = MagicMock(return_value=_make_available_state())
+    hass.services.async_call = AsyncMock(
+        return_value={
+            "weather.home": {
+                "forecast": [
+                    {"temperature": 10.0},
+                    None,
+                    "invalid",
+                    {"temperature": 12.0},
+                ]
+            }
+        }
+    )
+
+    mgr = WeatherManager(hass)
+    result = await mgr.async_read_forecast({"weather_entity": "weather.home"})
+
+    assert result == [{"temperature": 10.0}, {"temperature": 12.0}]
+
+
+@pytest.mark.asyncio
 async def test_service_response_converts_fahrenheit():
     """Forecast temperatures are converted from °F to °C when HA uses Fahrenheit."""
     hass = _make_hass(fahrenheit=True)

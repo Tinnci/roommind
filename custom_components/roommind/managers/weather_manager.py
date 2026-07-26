@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import math
+from typing import Any
 
 from homeassistant.core import HomeAssistant
 
@@ -43,17 +44,19 @@ class WeatherManager:
 
         # Modern approach: use weather.get_forecasts service (HA 2024.6+)
         try:
-            response = await self.hass.services.async_call(
+            response: object = await self.hass.services.async_call(
                 "weather",
                 "get_forecasts",
                 {"entity_id": weather_entity, "type": "hourly"},
                 blocking=True,
                 return_response=True,
             )
-            entity_data = response.get(weather_entity, {}) if isinstance(response, dict) else {}  # type: ignore[union-attr]
-            forecasts = entity_data.get("forecast", []) if isinstance(entity_data, dict) else []
-            if isinstance(forecasts, list) and forecasts:
-                result = self._convert_forecast_temps(forecasts)  # type: ignore[arg-type]
+            entity_data: object = response.get(weather_entity) if isinstance(response, dict) else None
+            forecasts = self._normalize_forecast_entries(
+                entity_data.get("forecast") if isinstance(entity_data, dict) else None
+            )
+            if forecasts:
+                result = self._convert_forecast_temps(forecasts)
                 self._outdoor_forecast = result
                 return result
         except Exception:  # noqa: BLE001
@@ -67,15 +70,22 @@ class WeatherManager:
         if state is None:
             self._outdoor_forecast = []
             return []
-        forecast = state.attributes.get("forecast")
-        if isinstance(forecast, list):
+        forecast = self._normalize_forecast_entries(state.attributes.get("forecast"))
+        if forecast:
             result = self._convert_forecast_temps(forecast)
             self._outdoor_forecast = result
             return result
         self._outdoor_forecast = []
         return []
 
-    def _convert_forecast_temps(self, forecasts: list[dict]) -> list[dict]:
+    @staticmethod
+    def _normalize_forecast_entries(value: object) -> list[dict[str, Any]]:
+        """Validate Home Assistant's untyped forecast payload at the boundary."""
+        if not isinstance(value, list):
+            return []
+        return [dict(entry) for entry in value if isinstance(entry, dict)]
+
+    def _convert_forecast_temps(self, forecasts: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Convert forecast temperatures from HA units to Celsius."""
         result = []
         for f in forecasts:
