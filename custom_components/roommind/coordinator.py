@@ -23,7 +23,6 @@ from .const import (
     AC_HEATING_BOOST_TARGET,
     CLIMATE_MODE_COOL_ONLY,
     CLIMATE_MODE_HEAT_ONLY,
-    DEFAULT_OUTDOOR_COOLING_MIN,
     DEFAULT_OUTDOOR_HEATING_MAX,
     DOMAIN,
     HEATING_BOOST_TARGET,
@@ -62,6 +61,7 @@ from .control.mpc_controller import (
     is_mpc_active,
 )
 from .control.perceived_temperature import perceived_temperature
+from .control.rapid_recovery import resolve_rapid_recovery_mode
 from .control.solar import SolarExposure, compute_q_solar_norm
 from .control.thermal_model import (
     RoomModelManager,
@@ -1024,41 +1024,6 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 continue
             room_states[area_id]["coupling_status"] = self._build_coupling_terms(area_id, room)
 
-    def _rapid_recovery_mode(
-        self,
-        room: dict,
-        settings: dict,
-        *,
-        current_temp: float | None,
-        targets: TargetTemps,
-        night_active: bool,
-    ) -> str | None:
-        """Return fast pull-down / warm-up mode when it is safe and allowed."""
-        if current_temp is None:
-            return None
-        if night_active and not room.get("night_allow_rapid_recovery", True):
-            return None
-
-        delta = max(0.5, float(room.get("rapid_recovery_delta_c") or 2.0))
-        climate_mode = room.get("climate_mode", "auto")
-        can_cool = climate_mode != CLIMATE_MODE_HEAT_ONLY and targets.cool is not None
-        can_heat = climate_mode != CLIMATE_MODE_COOL_ONLY and targets.heat is not None
-
-        outdoor_temp = self.outdoor_temp_effective
-        if outdoor_temp is not None:
-            outdoor_cooling_min = float(settings.get("outdoor_cooling_min", DEFAULT_OUTDOOR_COOLING_MIN))
-            outdoor_heating_max = float(settings.get("outdoor_heating_max", DEFAULT_OUTDOOR_HEATING_MAX))
-            if can_cool and outdoor_temp < outdoor_cooling_min:
-                can_cool = False
-            if can_heat and outdoor_temp > outdoor_heating_max:
-                can_heat = False
-
-        if can_cool and targets.cool is not None and current_temp - targets.cool >= delta:
-            return MODE_COOLING
-        if can_heat and targets.heat is not None and targets.heat - current_temp >= delta:
-            return MODE_HEATING
-        return None
-
     async def _evaluate_mold_risk(
         self,
         area_id: str,
@@ -1308,12 +1273,13 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             else:
                 target_temp = targets.heat if targets.heat is not None else targets.cool
 
-        rapid_recovery_mode = self._rapid_recovery_mode(
+        rapid_recovery_mode = resolve_rapid_recovery_mode(
             room,
             settings,
             current_temp=current_temp,
             targets=targets,
             night_active=night_mode_active,
+            outdoor_temp=self.outdoor_temp_effective,
         )
         raw_open = self._is_window_open(room)
         window_open = self._window_manager.update(
