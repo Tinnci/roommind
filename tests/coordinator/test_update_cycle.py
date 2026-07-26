@@ -725,6 +725,33 @@ class TestCoverageGaps:
         assert room_state["mpc_active"] is True
 
     @pytest.mark.asyncio
+    async def test_mpc_active_preserves_zero_temperature(self, hass, mock_config_entry):
+        """MPC activation receives a valid 0°C room reading unchanged."""
+        room = {**SAMPLE_ROOM, "area_id": "mpc_room"}
+        store = _make_store_mock({"mpc_room": room})
+        store.get_settings.return_value = {
+            "control_mode": "mpc",
+            "outdoor_temp_sensor": "sensor.outdoor_temp",
+        }
+        hass.data = {"roommind": {"store": store}}
+        hass.states.get = MagicMock(
+            side_effect=make_mock_states_get(
+                temp="0.0",
+                outdoor_temp="-5.0",
+            )
+        )
+        hass.services.async_call = AsyncMock()
+        coordinator = _create_coordinator(hass, mock_config_entry)
+
+        with patch(
+            "custom_components.roommind.coordinator.is_mpc_active",
+            return_value=False,
+        ) as active_check:
+            await coordinator._async_update_data()
+
+        assert active_check.call_args.args[4] == 0.0
+
+    @pytest.mark.asyncio
     async def test_bangbang_policy_never_reports_mpc_active(self, hass, mock_config_entry):
         """The live state must reflect an explicit bang-bang control policy."""
         room = {**SAMPLE_ROOM, "area_id": "bangbang_room"}

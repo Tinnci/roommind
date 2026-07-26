@@ -843,7 +843,7 @@ class MPCController:
         pred_std = self._model_manager.get_prediction_std(
             self._area_id,
             Q_check,
-            current_temp or 20.0,
+            current_temp if current_temp is not None else 20.0,
             T_out,
             PLAN_DT_MINUTES,
             q_solar=self.q_solar,

@@ -139,6 +139,26 @@ async def test_mpc_path_when_confident():
     model_mgr.get_prediction_std.assert_called_once()
 
 
+@pytest.mark.asyncio
+async def test_mpc_prediction_uncertainty_preserves_zero_temperature():
+    """A valid 0°C reading is not replaced by the missing-value fallback."""
+    hass = build_hass()
+    model_mgr = RoomModelManager()
+    model_mgr.get_prediction_std = MagicMock(return_value=1.0)
+    ctrl = MPCController(
+        hass,
+        make_room(),
+        model_manager=model_mgr,
+        outdoor_temp=5.0,
+        settings={"control_mode": "mpc"},
+        has_external_sensor=True,
+    )
+
+    await ctrl.async_evaluate(current_temp=0.0, targets=TargetTemps(heat=5.0, cool=10.0))
+
+    assert model_mgr.get_prediction_std.call_args.args[2] == 0.0
+
+
 def test_controller_uses_solar_exposure_for_raw_and_shaded_solar():
     hass = build_hass()
     room = make_room()

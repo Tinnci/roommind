@@ -1531,7 +1531,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                     area_id,
                     _ch,
                     _cc,
-                    current_temp or 20.0,
+                    current_temp if current_temp is not None else 20.0,
                     _T_out,
                 )
             except Exception:  # noqa: BLE001
