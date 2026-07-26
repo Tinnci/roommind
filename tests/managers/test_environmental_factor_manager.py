@@ -270,6 +270,28 @@ def test_multiple_circulation_fans_use_saturating_aggregation(hass):
     assert factors.q_fan_mix == 0.75
 
 
+def test_zero_effect_weight_disables_airflow_contribution(hass):
+    """An explicit zero weight is distinct from the default weight."""
+    hass.states.get.side_effect = lambda eid: _state("on", {"percentage": 50, "speed_count": 2})
+    mgr = EnvironmentalFactorManager(hass)
+
+    factors = mgr.read_room_airflow(
+        {
+            "airflow_devices": [
+                {
+                    "entity_id": "fan.ignored",
+                    "role": "circulation",
+                    "effect_weight": 0.0,
+                }
+            ]
+        }
+    )
+
+    assert factors.statuses[0].effect_weight == 0.0
+    assert factors.q_fan_mix == 0.0
+    assert factors.active is False
+
+
 def test_ventilation_devices_sum_and_report_ach_when_physical_flow_is_configured(hass):
     hass.states.get.side_effect = lambda eid: _state("on", {"percentage": 50, "speed_count": 2})
     mgr = EnvironmentalFactorManager(hass)

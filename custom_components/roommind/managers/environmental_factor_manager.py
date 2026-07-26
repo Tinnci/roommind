@@ -164,7 +164,8 @@ class EnvironmentalFactorManager:
             role = AIRFLOW_ROLE_CIRCULATION
         controllable = bool(config.get("controllable", False))
         control_enabled = bool(config.get("control_enabled", False))
-        effect_weight = max(0.0, min(2.0, _safe_float(config.get("effect_weight")) or 1.0))
+        configured_effect_weight = _safe_float(config.get("effect_weight"))
+        effect_weight = max(0.0, min(2.0, configured_effect_weight if configured_effect_weight is not None else 1.0))
         airflow_m3h = _safe_float(config.get("airflow_m3h"))
         domain = entity_id.split(".", 1)[0] if "." in entity_id else ""
         state = self.hass.states.get(entity_id) if entity_id else None
