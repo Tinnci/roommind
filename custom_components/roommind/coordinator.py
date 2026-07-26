@@ -179,6 +179,18 @@ class CoordinatorDiagnosticsRuntimeSnapshot:
     valve_protection: dict[str, dict[str, int]]
 
 
+@dataclass(frozen=True, slots=True)
+class ClimateDeviceSnapshot:
+    """Room climate-device inventory and conservative temperature limits."""
+
+    trv_entity_ids: tuple[str, ...]
+    ac_entity_ids: tuple[str, ...]
+    all_entity_ids: tuple[str, ...]
+    heating_boost_target: float | None
+    ac_heating_boost_target: float | None
+    cooling_boost_target: float | None
+
+
 def _get_area_name(hass: HomeAssistant, area_id: str) -> str:
     """Get human-readable area name from area registry."""
     try:
@@ -1070,6 +1082,38 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         )
         return mold.risk_level, mold.surface_rh, mold.prevention_active, mold.prevention_delta
 
+    def _read_climate_device_snapshot(self, room: dict[str, Any]) -> ClimateDeviceSnapshot:
+        """Capture one consistent climate-device view for the control cycle."""
+        devices = room.get("devices", [])
+        trv_entity_ids = tuple(get_trv_eids(devices))
+        ac_entity_ids = tuple(get_ac_eids(devices))
+
+        def read_limits(entity_ids: tuple[str, ...], attribute: str) -> list[float]:
+            limits: list[float] = []
+            for entity_id in entity_ids:
+                state = self.hass.states.get(entity_id)
+                raw_limit = state.attributes.get(attribute) if state is not None else None
+                if raw_limit is None:
+                    continue
+                try:
+                    limit = float(raw_limit)
+                except TypeError, ValueError:
+                    continue
+                limits.append(ha_temp_to_celsius(self.hass, limit))
+            return limits
+
+        trv_max_temps = read_limits(trv_entity_ids, "max_temp")
+        ac_min_temps = read_limits(ac_entity_ids, "min_temp")
+        ac_max_temps = read_limits(ac_entity_ids, "max_temp")
+        return ClimateDeviceSnapshot(
+            trv_entity_ids=trv_entity_ids,
+            ac_entity_ids=ac_entity_ids,
+            all_entity_ids=tuple(get_all_entity_ids(devices)),
+            heating_boost_target=min(trv_max_temps) if trv_max_temps else None,
+            ac_heating_boost_target=min(ac_max_temps) if ac_max_temps else None,
+            cooling_boost_target=max(ac_min_temps) if ac_min_temps else None,
+        )
+
     async def _async_process_room(self, room: dict, settings: dict, outdoor_forecast: list[dict]) -> dict:
         """Process a single room: read sensor, evaluate schedule, apply control."""
         area_id = room.get("area_id", "unknown")
@@ -1309,29 +1353,11 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             rapid_recovery_active=rapid_recovery_active,
         )
 
-        # Read device temperature limits for dynamic boost targets
-        trv_max_temps: list[float] = []
-        for eid in get_trv_eids(room.get("devices", [])):
-            st = self.hass.states.get(eid)
-            if st and st.attributes.get("max_temp") is not None:
-                trv_max_temps.append(ha_temp_to_celsius(self.hass, st.attributes["max_temp"]))
-        device_max_temp = min(trv_max_temps) if trv_max_temps else None
-
-        ac_min_temps: list[float] = []
-        ac_max_temps: list[float] = []
-        for eid in get_ac_eids(room.get("devices", [])):
-            st = self.hass.states.get(eid)
-            if st:
-                if st.attributes.get("min_temp") is not None:
-                    ac_min_temps.append(ha_temp_to_celsius(self.hass, st.attributes["min_temp"]))
-                if st.attributes.get("max_temp") is not None:
-                    ac_max_temps.append(ha_temp_to_celsius(self.hass, st.attributes["max_temp"]))
-        device_min_temp = max(ac_min_temps) if ac_min_temps else None
-        ac_device_max_temp = min(ac_max_temps) if ac_max_temps else None
+        device_snapshot = self._read_climate_device_snapshot(room)
 
         # Exclude TRVs currently being valve-protection-cycled from normal control
         cycling_eids = {
-            eid for eid in get_trv_eids(room.get("devices", [])) if self._valve_manager.is_entity_cycling(eid)
+            eid for eid in device_snapshot.trv_entity_ids if self._valve_manager.is_entity_cycling(eid)
         }
 
         # Heat source orchestration: smart routing for rooms with both TRVs and ACs
@@ -1340,8 +1366,8 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             room.get("heat_source_orchestration", False)
             and mode == MODE_HEATING
             and has_external_sensor
-            and get_trv_eids(room.get("devices", []))
-            and get_ac_eids(room.get("devices", []))
+            and device_snapshot.trv_entity_ids
+            and device_snapshot.ac_entity_ids
         ):
             heat_source_plan = evaluate_heat_sources(
                 room_config=room,
@@ -1367,10 +1393,9 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             self._heat_source_states.pop(area_id, None)
 
         # Compressor group constraints
-        all_device_eids = get_all_entity_ids(room.get("devices", []))
         compressor_forced_on_f, compressor_forced_off_f = self._constraint_reducer.compressor_constraints(
             manager=self._compressor_manager,
-            all_device_eids=tuple(all_device_eids),
+            all_device_eids=device_snapshot.all_entity_ids,
             mode=mode,
             climate_active=climate_active,
             window_open=window_open,
@@ -1384,7 +1409,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 force_off=force_off,
                 window_open=window_open,
                 rapid_recovery_active=rapid_recovery_active,
-                all_device_eids=tuple(all_device_eids),
+                all_device_eids=device_snapshot.all_entity_ids,
                 compressor_forced_on=compressor_forced_on_f,
                 compressor_forced_off=compressor_forced_off_f,
             )
@@ -1415,9 +1440,9 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                     power_fraction=power_fraction,
                     current_temp=current_temp,
                     exclude_eids=cycling_eids,
-                    heating_boost_target=device_max_temp,
-                    ac_heating_boost_target=ac_device_max_temp,
-                    cooling_boost_target=device_min_temp,
+                    heating_boost_target=device_snapshot.heating_boost_target,
+                    ac_heating_boost_target=device_snapshot.ac_heating_boost_target,
+                    cooling_boost_target=device_snapshot.cooling_boost_target,
                     heat_source_plan=heat_source_plan,
                     compressor_forced_on=compressor_forced_on or None,
                     compressor_forced_off=compressor_forced_off or None,
@@ -1447,7 +1472,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             routed_commands = heat_source_plan.commands if heat_source_plan is not None else ()
             self._compressor_manager.reconcile_command_outcome(
                 CompressorCommandOutcome(
-                    member_entity_ids=tuple(all_device_eids),
+                    member_entity_ids=device_snapshot.all_entity_ids,
                     excluded=frozenset(cycling_eids),
                     forced_on=frozenset(compressor_forced_on),
                     forced_off=frozenset(compressor_forced_off),
@@ -1506,7 +1531,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         # Track valve actuation during normal heating (skip excluded entities)
         if mode == MODE_HEATING:
             excluded = set(room.get("valve_protection_exclude", []))
-            heating_eids = [eid for eid in get_trv_eids(room.get("devices", [])) if eid not in excluded]
+            heating_eids = [eid for eid in device_snapshot.trv_entity_ids if eid not in excluded]
             self._valve_manager.record_heating(heating_eids)
 
         mpc_active = False
@@ -1566,9 +1591,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             display_mode=display_mode,
             display_pf=display_pf,
             heat_source_plan=heat_source_plan,
-            device_max_temp=device_max_temp,
-            ac_device_max_temp=ac_device_max_temp,
-            device_min_temp=device_min_temp,
+            device_snapshot=device_snapshot,
             has_external_sensor=has_external_sensor,
             window_open=window_open,
             presence_away=presence_away,
@@ -1807,9 +1830,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         display_mode: str,
         display_pf: float,
         heat_source_plan: HeatSourcePlan | None,
-        device_max_temp: float | None,
-        ac_device_max_temp: float | None,
-        device_min_temp: float | None,
+        device_snapshot: ClimateDeviceSnapshot,
         has_external_sensor: bool,
         window_open: bool,
         presence_away: bool,
@@ -1874,8 +1895,8 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 heat_source_plan,
                 current_temp,
                 target_temp,
-                device_max_temp,
-                ac_device_max_temp,
+                device_snapshot.heating_boost_target,
+                device_snapshot.ac_heating_boost_target,
                 direct_eids=_direct_eids,
             )
             if heat_source_plan is not None
@@ -1885,10 +1906,10 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 current_temp,
                 target_temp,
                 has_external_sensor,
-                device_max_temp=device_max_temp,
-                device_min_temp=device_min_temp,
-                has_thermostats=bool(get_trv_eids(_room_devices)),
-                has_acs=bool(get_ac_eids(_room_devices)),
+                device_max_temp=device_snapshot.heating_boost_target,
+                device_min_temp=device_snapshot.cooling_boost_target,
+                has_thermostats=bool(device_snapshot.trv_entity_ids),
+                has_acs=bool(device_snapshot.ac_entity_ids),
                 all_direct=_all_direct,
             ),
             "window_open": window_open,

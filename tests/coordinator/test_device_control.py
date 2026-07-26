@@ -16,6 +16,46 @@ from .conftest import (
 )
 
 
+def test_climate_device_snapshot_captures_inventory_and_conservative_limits(hass, mock_config_entry):
+    """One snapshot owns device ordering and the safe shared temperature bounds."""
+    coordinator = _create_coordinator(hass, mock_config_entry)
+    room = {
+        "devices": [
+            {"entity_id": "climate.ac1", "type": "ac"},
+            {"entity_id": "climate.trv1", "type": "trv"},
+            {"entity_id": "climate.ac2", "type": "ac"},
+            {"entity_id": "climate.trv2", "type": "trv"},
+        ]
+    }
+    attributes = {
+        "climate.trv1": {"max_temp": 30.0},
+        "climate.trv2": {"max_temp": 28.0},
+        "climate.ac1": {"min_temp": 16.0, "max_temp": 31.0},
+        "climate.ac2": {"min_temp": 18.0, "max_temp": 29.0},
+    }
+
+    def get_state(entity_id):
+        state = MagicMock()
+        state.attributes = attributes[entity_id]
+        return state
+
+    hass.states.get = MagicMock(side_effect=get_state)
+
+    snapshot = coordinator._read_climate_device_snapshot(room)
+
+    assert snapshot.trv_entity_ids == ("climate.trv1", "climate.trv2")
+    assert snapshot.ac_entity_ids == ("climate.ac1", "climate.ac2")
+    assert snapshot.all_entity_ids == (
+        "climate.trv1",
+        "climate.trv2",
+        "climate.ac1",
+        "climate.ac2",
+    )
+    assert snapshot.heating_boost_target == 28.0
+    assert snapshot.ac_heating_boost_target == 29.0
+    assert snapshot.cooling_boost_target == 18.0
+
+
 class TestComputeDeviceSetpoint:
     """Tests for _compute_device_setpoint static method."""
 
