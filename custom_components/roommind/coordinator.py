@@ -191,6 +191,34 @@ class ClimateDeviceSnapshot:
     cooling_boost_target: float | None
 
 
+@dataclass(frozen=True, slots=True)
+class HumiditySensorSnapshot:
+    """Humidity value and source metadata captured in one read."""
+
+    value: float | None
+    sources: tuple[str, ...] = ()
+    primary_available: bool = False
+
+    def as_live_status(self) -> dict[str, Any]:
+        """Return the stable live-state representation."""
+        return {
+            "humidity_sources": "|".join(self.sources),
+            "humidity_source_count": len(self.sources),
+            "humidity_primary_available": self.primary_available,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class RoomSensorSnapshot:
+    """Temperature and humidity inputs captured for one room cycle."""
+
+    current_temp: float | None
+    current_temp_raw: float | None
+    humidity: HumiditySensorSnapshot
+    has_external_sensor: bool
+    temperature_observations: list[TemperatureObservation]
+
+
 def _get_area_name(hass: HomeAssistant, area_id: str) -> str:
     """Get human-readable area name from area registry."""
     try:
@@ -264,7 +292,6 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         self._mode_on_since: dict[str, float] = {}
         # Sensor dropout fallback: last valid temperature per room
         self._last_valid_temps: dict[str, tuple[float, float]] = {}  # {area_id: (celsius, monotonic_ts)}
-        self._last_humidity_status: dict[str, dict] = {}
         # Per-entity cache of schedule blocks; fallback when schedule.get_schedule fails (#308)
         self._schedule_blocks_cache: dict[str, dict] = {}
 
@@ -649,11 +676,8 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         self,
         room: dict,
         area_id: str,
-    ) -> tuple[float | None, float | None, float | None, bool, list[TemperatureObservation]]:
-        """Read temperature and humidity sensors for a room.
-
-        Returns (current_temp, current_temp_raw, current_humidity, has_external_sensor, observations).
-        """
+    ) -> RoomSensorSnapshot:
+        """Read a complete sensor snapshot for one room control cycle."""
         primary_sensor_id = room.get("temperature_sensor")
         temp_sensor_ids = self._temperature_sensor_ids(room)
         has_external_sensor = bool(temp_sensor_ids)
@@ -707,9 +731,15 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             else:
                 del self._last_valid_temps[area_id]
 
-        current_humidity = self._read_room_humidity(room, area_id, now)
+        humidity = self._read_room_humidity(room, area_id, now)
 
-        return current_temp, current_temp_raw, current_humidity, has_external_sensor, observations
+        return RoomSensorSnapshot(
+            current_temp=current_temp,
+            current_temp_raw=current_temp_raw,
+            humidity=humidity,
+            has_external_sensor=has_external_sensor,
+            temperature_observations=observations,
+        )
 
     def _record_raw_state_observation(
         self,
@@ -779,18 +809,12 @@ class RoomMindCoordinator(DataUpdateCoordinator):
 
         return sensor_ids
 
-    def _read_room_humidity(self, room: dict, area_id: str, now: datetime) -> float | None:
-        """Read configured humidity sources and return a freshness-weighted value."""
+    def _read_room_humidity(self, room: dict, area_id: str, now: datetime) -> HumiditySensorSnapshot:
+        """Read configured humidity sources into an explicit weighted snapshot."""
         sensor_ids = self._humidity_sensor_ids(room)
         weighted_values: list[tuple[float, float, str]] = []
         fallback_values: list[tuple[float, str]] = []
         primary = room.get("humidity_sensor") or ""
-        self._last_humidity_status[area_id] = {
-            "humidity_sources": "",
-            "humidity_source_count": 0,
-            "humidity_primary_available": False,
-        }
-
         for sensor_id in sensor_ids:
             state = self.hass.states.get(sensor_id)
             self._record_raw_state_observation(
@@ -817,23 +841,21 @@ class RoomMindCoordinator(DataUpdateCoordinator):
 
         if weighted_values:
             sources = [sensor_id for _, _, sensor_id in weighted_values]
-            self._last_humidity_status[area_id] = {
-                "humidity_sources": "|".join(sources),
-                "humidity_source_count": len(sources),
-                "humidity_primary_available": primary in sources,
-            }
             total_weight = sum(weight for _, weight, _ in weighted_values)
             if total_weight > 0:
-                return round(sum(value * weight for value, weight, _ in weighted_values) / total_weight, 2)
+                return HumiditySensorSnapshot(
+                    value=round(sum(value * weight for value, weight, _ in weighted_values) / total_weight, 2),
+                    sources=tuple(sources),
+                    primary_available=primary in sources,
+                )
         if fallback_values:
             sources = [sensor_id for _, sensor_id in fallback_values]
-            self._last_humidity_status[area_id] = {
-                "humidity_sources": "|".join(sources),
-                "humidity_source_count": len(sources),
-                "humidity_primary_available": primary in sources,
-            }
-            return round(fallback_values[0][0], 2)
-        return None
+            return HumiditySensorSnapshot(
+                value=round(fallback_values[0][0], 2),
+                sources=tuple(sources),
+                primary_available=primary in sources,
+            )
+        return HumiditySensorSnapshot(value=None)
 
     def _humidity_sensor_ids(self, room: dict) -> list[str]:
         """Return configured humidity sensors with the primary sensor first."""
@@ -1083,13 +1105,12 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         """Process a single room: read sensor, evaluate schedule, apply control."""
         area_id = room.get("area_id", "unknown")
 
-        (
-            current_temp,
-            current_temp_raw,
-            current_humidity,
-            has_external_sensor,
-            temperature_observations,
-        ) = self._read_room_sensors(room, area_id)
+        sensor_snapshot = self._read_room_sensors(room, area_id)
+        current_temp = sensor_snapshot.current_temp
+        current_temp_raw = sensor_snapshot.current_temp_raw
+        current_humidity = sensor_snapshot.humidity.value
+        has_external_sensor = sensor_snapshot.has_external_sensor
+        temperature_observations = sensor_snapshot.temperature_observations
         sensor_conflict = airflow_sensor_conflict(temperature_observations)
 
         # --- Outdoor room: skip all control logic ---
@@ -1102,14 +1123,6 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             temperature_sources = [
                 status.get("entity_id", "") for status in sensor_fusion_status if status.get("entity_id")
             ]
-            humidity_status = self._last_humidity_status.get(
-                area_id,
-                {
-                    "humidity_sources": "",
-                    "humidity_source_count": 0,
-                    "humidity_primary_available": False,
-                },
-            )
             return {
                 "area_id": area_id,
                 "current_temp": current_temp,
@@ -1151,7 +1164,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 "temperature_source": temperature_sources[0] if temperature_sources else "",
                 "temperature_source_count": len(temperature_sources),
                 "temperature_primary_available": any(status.get("is_primary") for status in sensor_fusion_status),
-                **humidity_status,
+                **sensor_snapshot.humidity.as_live_status(),
                 "hvac_output_status": None,
                 "night_mode": {"active": False},
                 "night_control_status": [],
@@ -1584,6 +1597,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 power_fraction=power_fraction,
                 q_fan_mix=airflow.q_fan_mix,
             ),
+            humidity_status=sensor_snapshot.humidity.as_live_status(),
             hvac_output_status=self._observe_hvac_output(room, airflow.as_status_dicts(), current_temp_raw),
             night_mode_active=night_mode_active,
             night_control_status=night_control_status,
@@ -1819,6 +1833,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         airflow_command_status: list[dict],
         sensor_conflict: float,
         sensor_fusion_status: list[dict],
+        humidity_status: dict[str, Any],
         hvac_output_status: dict | None,
         night_mode_active: bool,
         night_control_status: list[dict],
@@ -1837,15 +1852,6 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         temperature_sources = [
             status.get("entity_id", "") for status in sensor_fusion_status if status.get("entity_id")
         ]
-        humidity_status = self._last_humidity_status.get(
-            area_id,
-            {
-                "humidity_sources": "",
-                "humidity_source_count": 0,
-                "humidity_primary_available": False,
-            },
-        )
-
         return {
             "area_id": area_id,
             "current_temp": current_temp,

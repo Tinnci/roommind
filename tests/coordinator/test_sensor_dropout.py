@@ -68,23 +68,23 @@ def test_read_room_sensors_returns_multi_sensor_observations(hass, mock_config_e
     hass.states.get = MagicMock(side_effect=_mock_state)
     coordinator = _create_coordinator(hass, mock_config_entry)
 
-    current_temp, current_temp_raw, current_humidity, has_external_sensor, observations = (
-        coordinator._read_room_sensors(
-            room,
-            "living_room_abc12345",
-        )
+    snapshot = coordinator._read_room_sensors(
+        room,
+        "living_room_abc12345",
     )
 
-    assert current_temp == 20.0
-    assert current_temp_raw == 20.0
-    assert current_humidity == 55.0
-    assert has_external_sensor is True
-    assert [observation.entity_id for observation in observations] == [
+    assert snapshot.current_temp == 20.0
+    assert snapshot.current_temp_raw == 20.0
+    assert snapshot.humidity.value == 55.0
+    assert snapshot.humidity.sources == ("sensor.living_room_humidity",)
+    assert snapshot.humidity.primary_available is True
+    assert snapshot.has_external_sensor is True
+    assert [observation.entity_id for observation in snapshot.temperature_observations] == [
         "sensor.living_room_temp",
         "sensor.living_room_trv",
     ]
-    assert observations[0].is_primary is True
-    assert observations[0].variance < observations[1].variance
+    assert snapshot.temperature_observations[0].is_primary is True
+    assert snapshot.temperature_observations[0].variance < snapshot.temperature_observations[1].variance
 
 
 @pytest.mark.asyncio
