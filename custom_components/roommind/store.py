@@ -49,19 +49,24 @@ class RoomMindStore:
         # One-time migrations (combined into single pass + single save)
         device_migrated = 0
         hp_migrated = 0
+        airflow_ttl_migrated = 0
         for room in self._data.values():
             migration = migrate_persisted_room(room)
             if migration.device_model_added:
                 device_migrated += 1
             if migration.heat_pump_migrated:
                 hp_migrated += 1
+            if migration.airflow_ttl_migrated:
+                airflow_ttl_migrated += 1
         orphan_settings_removed = [k for k in _ORPHAN_SETTINGS_KEYS if self._settings.pop(k, None) is not None]
-        if device_migrated or hp_migrated or orphan_settings_removed:
+        if device_migrated or hp_migrated or airflow_ttl_migrated or orphan_settings_removed:
             await self._async_save()
         if device_migrated:
             _LOGGER.info("Migrated %d room(s) to unified device model", device_migrated)
         if hp_migrated:
             _LOGGER.info("Migrated %d room(s) from heat_pump to ac device type", hp_migrated)
+        if airflow_ttl_migrated:
+            _LOGGER.info("Migrated airflow assumed-state TTL in %d room(s)", airflow_ttl_migrated)
         if orphan_settings_removed:
             _LOGGER.info("Removed orphan setting(s): %s", ", ".join(orphan_settings_removed))
 

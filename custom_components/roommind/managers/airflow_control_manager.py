@@ -223,8 +223,8 @@ class AirflowControlManager:
         command = self._assumed_commands.get(entity_id)
         if not command:
             return {"assumed_state_confidence": "observed", "commanded_level": None, "commanded_at": None}
-        ttl_raw = config.get("assumed_state_ttl", None)
-        ttl = max(0.0, float(ttl_raw if ttl_raw is not None else (config.get("assumed_state_ttl_s") or 120)))
+        ttl_raw = config.get("assumed_state_ttl_s", 120)
+        ttl = max(0.0, float(120 if ttl_raw is None else ttl_raw))
         age = time.time() - float(command["at"])
         if age > ttl:
             confidence = "stale"

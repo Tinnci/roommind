@@ -151,6 +151,30 @@ async def test_create_with_no_devices_or_legacy(store):
     assert room["acs"] == []
 
 
+@pytest.mark.asyncio
+async def test_save_room_prefers_canonical_airflow_ttl(store):
+    """A current UI TTL must override and remove the legacy alias."""
+    await store.async_load()
+
+    room = await store.async_save_room(
+        "airflow_room",
+        {
+            "airflow_devices": [
+                {
+                    "entity_id": "fan.living",
+                    "role": "circulation",
+                    "assumed_state_ttl": 45,
+                    "assumed_state_ttl_s": 90,
+                }
+            ]
+        },
+    )
+
+    airflow = room["airflow_devices"][0]
+    assert airflow["assumed_state_ttl_s"] == 90
+    assert "assumed_state_ttl" not in airflow
+
+
 # ---------------------------------------------------------------------------
 # 4. Update with devices[] — verify legacy updated
 # ---------------------------------------------------------------------------

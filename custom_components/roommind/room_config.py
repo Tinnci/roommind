@@ -260,11 +260,25 @@ class RoomMigrationResult:
 
     device_model_added: bool = False
     heat_pump_migrated: bool = False
+    airflow_ttl_migrated: bool = False
 
     @property
     def changed(self) -> bool:
         """Return whether persistence is required."""
-        return self.device_model_added or self.heat_pump_migrated
+        return self.device_model_added or self.heat_pump_migrated or self.airflow_ttl_migrated
+
+
+def _normalize_airflow_device_ttl(room: dict) -> bool:
+    """Move the legacy airflow TTL alias into the canonical seconds field."""
+    changed = False
+    for device in room.get("airflow_devices", []) or []:
+        if not isinstance(device, dict) or "assumed_state_ttl" not in device:
+            continue
+        legacy_ttl = device.pop("assumed_state_ttl")
+        if "assumed_state_ttl_s" not in device and legacy_ttl is not None:
+            device["assumed_state_ttl_s"] = legacy_ttl
+        changed = True
+    return changed
 
 
 def migrate_persisted_room(room: dict) -> RoomMigrationResult:
@@ -278,10 +292,12 @@ def migrate_persisted_room(room: dict) -> RoomMigrationResult:
         thermostats, acs = devices_to_legacy(room["devices"])
         room["thermostats"] = thermostats
         room["acs"] = acs
+    airflow_ttl_migrated = _normalize_airflow_device_ttl(room)
 
     return RoomMigrationResult(
         device_model_added=device_model_added,
         heat_pump_migrated=heat_pump_migrated,
+        airflow_ttl_migrated=airflow_ttl_migrated,
     )
 
 
@@ -300,6 +316,7 @@ def normalize_room_config(room: dict) -> dict:
             adjacent.setdefault("allow_borrowed_conditioning", True)
 
     normalize_room_sensor_sources(room)
+    _normalize_airflow_device_ttl(room)
     migrate_heat_pump_devices(room.get("devices", []))
     ensure_room_has_devices(room)
     return room
@@ -364,6 +381,7 @@ def _merge_room_config(existing: dict, changes: dict) -> dict:
         existing["eco_heat"] = changes["eco_temp"]
 
     _sync_devices(existing, changes)
+    _normalize_airflow_device_ttl(existing)
     if "temperature_sensor" in changes or "temperature_sensors" in changes:
         _normalize_sensor_sources(
             existing,
@@ -406,4 +424,5 @@ def _create_room_config(area_id: str, config: dict) -> dict:
         )
 
     normalize_room_sensor_sources(room)
+    _normalize_airflow_device_ttl(room)
     return room

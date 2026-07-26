@@ -486,7 +486,7 @@ async def test_stale_command_confidence_still_takes_precedence(hass):
                 "role": "circulation",
                 "controllable": True,
                 "control_enabled": True,
-                "assumed_state_ttl": 0,
+                "assumed_state_ttl_s": 0,
             }
         ]
     }

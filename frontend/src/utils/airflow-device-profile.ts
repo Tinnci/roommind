@@ -21,7 +21,6 @@ export interface AirflowModelingProfile {
   effect_weight?: number;
   airflow_m3h?: number | null;
   power_sensor_entity?: string;
-  assumed_state_ttl?: number | null;
   assumed_state_ttl_s?: number;
   compressor_stage_observer?: "auto" | "power_sensor" | "thermal_slope" | "disabled";
   fan_capacity_curve?: CapacityCurvePoint[];
@@ -58,7 +57,6 @@ export function toAirflowDeviceUiSchema(device: AirflowDeviceConfig): AirflowDev
       effect_weight: device.effect_weight,
       airflow_m3h: device.airflow_m3h,
       power_sensor_entity: device.power_sensor_entity,
-      assumed_state_ttl: device.assumed_state_ttl,
       assumed_state_ttl_s: device.assumed_state_ttl_s,
       compressor_stage_observer: device.compressor_stage_observer,
       fan_capacity_curve: device.fan_capacity_curve,

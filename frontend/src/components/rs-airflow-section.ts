@@ -995,7 +995,7 @@ export class RsAirflowSection extends LitElement {
           type="number"
           min="0"
           max="3600"
-          .value=${String(device.assumed_state_ttl_s ?? device.assumed_state_ttl ?? 120)}
+          .value=${String(device.assumed_state_ttl_s ?? 120)}
           @input=${(e: Event) =>
             this._updateDevice(entityId, {
               assumed_state_ttl_s: Number((e.target as HTMLInputElement).value),
@@ -1091,7 +1091,6 @@ export class RsAirflowSection extends LitElement {
       effect_weight: 1,
       airflow_m3h: null,
       power_sensor_entity: "",
-      assumed_state_ttl: null,
       assumed_state_ttl_s: 120,
       compressor_stage_observer: "auto",
       fan_capacity_curve: [],

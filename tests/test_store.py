@@ -772,3 +772,32 @@ async def test_migration_heat_pump_to_ac(store):
     # heat_pump should be migrated to ac
     assert room["devices"][1]["type"] == "ac"
     assert room["acs"] == ["climate.hp1"]
+
+
+@pytest.mark.asyncio
+async def test_migration_canonicalizes_airflow_assumed_state_ttl(store):
+    """Legacy airflow TTL is persisted once under the canonical seconds key."""
+    stored_data = {
+        "rooms": {
+            "wohnzimmer": {
+                "area_id": "wohnzimmer",
+                "devices": [],
+                "airflow_devices": [
+                    {
+                        "entity_id": "fan.living",
+                        "role": "circulation",
+                        "assumed_state_ttl": 45,
+                    }
+                ],
+            }
+        }
+    }
+    store._store.async_load = AsyncMock(return_value=stored_data)
+
+    await store.async_load()
+
+    assert store._store.async_save.called
+    room = store.get_room("wohnzimmer")
+    airflow = room["airflow_devices"][0]
+    assert airflow["assumed_state_ttl_s"] == 45
+    assert "assumed_state_ttl" not in airflow

@@ -135,7 +135,6 @@ export interface AirflowDeviceConfig {
   effect_weight?: number;
   airflow_m3h?: number | null;
   power_sensor_entity?: string;
-  assumed_state_ttl?: number | null;
   assumed_state_ttl_s?: number;
   compressor_stage_observer?: "auto" | "power_sensor" | "thermal_slope" | "disabled";
   fan_capacity_curve?: CapacityCurvePoint[];
