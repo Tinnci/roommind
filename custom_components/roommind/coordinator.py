@@ -447,110 +447,11 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             except Exception:  # noqa: BLE001
                 _LOGGER.warning("Raw observation record failed")
 
-        # Record to history store (throttled)
-        learning_disabled = set(settings.get("learning_disabled_rooms", []))
-        self._history_write_count += 1
-        if self._history_write_count >= HISTORY_WRITE_CYCLES and self._history_store:
-            self._history_write_count = 0
-            for area_id, rs in room_states.items():
-                if area_id in learning_disabled:
-                    continue
-                current_temp = rs.get("current_temp")
-                mode = rs.get("mode", MODE_IDLE)
-                target_temp = rs.get("target_temp")
-                # Use the prediction made *last* write cycle for the
-                # current timestamp — this compares "what the model
-                # predicted would happen" vs "what actually happened".
-                predicted = self._pending_predictions.pop(area_id, None)
-                try:
-                    await self.hass.async_add_executor_job(
-                        self._history_store.record,
-                        area_id,
-                        {
-                            "room_temp": rs.get("current_temp_raw", current_temp),
-                            "outdoor_temp": self.outdoor_temp_effective,
-                            "target_temp": target_temp,
-                            "mode": mode,
-                            "predicted_temp": predicted,
-                            "window_open": rs.get("window_open", False),
-                            "heating_power": rs.get("heating_power", 0),
-                            "solar_irradiance": round(self._current_q_solar, 3),
-                            "blind_position": rs.get("blind_position"),
-                            "cover_reason": rs.get("cover_reason", ""),
-                            "device_setpoint": rs.get("device_setpoint"),
-                            "occupancy": rs.get("q_occupancy", 0.0) > 0,
-                            "room_humidity": rs.get("current_humidity"),
-                            "outdoor_humidity": self.outdoor_humidity,
-                            "perceived_temp": rs.get("perceived_temp"),
-                            "q_fan_mix": rs.get("q_fan_mix", 0.0),
-                            "q_vent": rs.get("q_vent", 0.0),
-                            "airflow_ach": rs.get("airflow_ach", 0.0),
-                            "airflow_plan_level": rs.get("airflow_plan_level", 0.0),
-                            "airflow_mix_plan_level": rs.get("airflow_mix_plan_level", 0.0),
-                            "airflow_vent_plan_level": rs.get("airflow_vent_plan_level", 0.0),
-                            "night_mode_active": rs.get("night_mode", {}).get("active", False),
-                            "rapid_recovery_active": rs.get("rapid_recovery_active", False),
-                            "hvac_stage": (rs.get("hvac_output_status") or {}).get("stage"),
-                            "sensor_conflict": rs.get("sensor_conflict", 0.0),
-                            "mold_surface_rh": rs.get("mold_surface_rh"),
-                            "mold_risk_level": rs.get("mold_risk_level", ""),
-                            "effective_control_target": rs.get("effective_control_target"),
-                            "heat_target": rs.get("heat_target"),
-                            "cool_target": rs.get("cool_target"),
-                            "override_active": rs.get("override_active", False),
-                            "override_type": rs.get("override_type", ""),
-                            "active_heat_sources": rs.get("active_heat_sources", ""),
-                            "temperature_source": rs.get("temperature_source", ""),
-                            "temperature_source_count": rs.get("temperature_source_count", 0),
-                            "temperature_primary_available": rs.get("temperature_primary_available", False),
-                            "humidity_sources": rs.get("humidity_sources", ""),
-                            "humidity_source_count": rs.get("humidity_source_count", 0),
-                            "humidity_primary_available": rs.get("humidity_primary_available", False),
-                        },
-                    )
-                except Exception:  # noqa: BLE001
-                    _LOGGER.warning("History record failed for '%s'", area_id)
-                # Compute prediction for the *next* write cycle (~3 min ahead)
-                room_config = rooms.get(area_id, {})
-                if (
-                    current_temp is not None
-                    and self.outdoor_temp_effective is not None
-                    and not room_config.get("is_outdoor", False)
-                ):
-                    try:
-                        is_window_open = rs.get("window_open", False)
-                        if is_window_open:
-                            raw_pred = self._model_manager.predict_window_open(
-                                area_id,
-                                current_temp,
-                                self.outdoor_temp_effective,
-                                3.0,
-                            )
-                        else:
-                            model = self._model_manager.get_model(area_id)
-                            hp = rs.get("heating_power", 100) / 100.0
-                            Q = (
-                                hp * model.Q_heat
-                                if mode == "heating"
-                                else (-hp * model.Q_cool if mode == "cooling" else 0.0)
-                            )
-                            raw_pred = model.predict(
-                                current_temp,
-                                self.outdoor_temp_effective,
-                                Q,
-                                3.0,
-                                q_solar=self._current_q_solar * rs.get("shading_factor", 1.0),
-                                q_vent=rs.get("q_vent", 0.0),
-                                q_occupancy=rs.get("q_occupancy", 0.0),
-                                coupling_terms=rs.get("coupling_status", []),
-                            )
-                        # Sanity clamp: prevent unrealistic jumps in one prediction step
-                        clamped = max(
-                            current_temp - MAX_PREDICTION_DELTA, min(current_temp + MAX_PREDICTION_DELTA, raw_pred)
-                        )
-                        self._pending_predictions[area_id] = round(clamped, 2)
-                    except Exception:  # noqa: BLE001
-                        pass
+        await self._async_record_history(
+            rooms,
+            room_states,
+            set(settings.get("learning_disabled_rooms", [])),
+        )
 
         # Save thermal data periodically
         self._thermal_save_count += 1
@@ -605,6 +506,120 @@ class RoomMindCoordinator(DataUpdateCoordinator):
 
         self.rooms = room_states
         return {"rooms": room_states}
+
+    async def _async_record_history(
+        self,
+        rooms: dict[str, dict],
+        room_states: dict[str, dict],
+        learning_disabled: set[str],
+    ) -> None:
+        """Record throttled room snapshots and prepare the next predictions."""
+        self._history_write_count += 1
+        if self._history_write_count < HISTORY_WRITE_CYCLES or not self._history_store:
+            return
+
+        self._history_write_count = 0
+        for area_id, room_state in room_states.items():
+            if area_id in learning_disabled:
+                continue
+            current_temp = room_state.get("current_temp")
+            mode = room_state.get("mode", MODE_IDLE)
+            # A pending prediction describes this snapshot, not the next one.
+            predicted = self._pending_predictions.pop(area_id, None)
+            try:
+                await self.hass.async_add_executor_job(
+                    self._history_store.record,
+                    area_id,
+                    {
+                        "room_temp": room_state.get("current_temp_raw", current_temp),
+                        "outdoor_temp": self.outdoor_temp_effective,
+                        "target_temp": room_state.get("target_temp"),
+                        "mode": mode,
+                        "predicted_temp": predicted,
+                        "window_open": room_state.get("window_open", False),
+                        "heating_power": room_state.get("heating_power", 0),
+                        "solar_irradiance": round(self._current_q_solar, 3),
+                        "blind_position": room_state.get("blind_position"),
+                        "cover_reason": room_state.get("cover_reason", ""),
+                        "device_setpoint": room_state.get("device_setpoint"),
+                        "occupancy": room_state.get("q_occupancy", 0.0) > 0,
+                        "room_humidity": room_state.get("current_humidity"),
+                        "outdoor_humidity": self.outdoor_humidity,
+                        "perceived_temp": room_state.get("perceived_temp"),
+                        "q_fan_mix": room_state.get("q_fan_mix", 0.0),
+                        "q_vent": room_state.get("q_vent", 0.0),
+                        "airflow_ach": room_state.get("airflow_ach", 0.0),
+                        "airflow_plan_level": room_state.get("airflow_plan_level", 0.0),
+                        "airflow_mix_plan_level": room_state.get("airflow_mix_plan_level", 0.0),
+                        "airflow_vent_plan_level": room_state.get("airflow_vent_plan_level", 0.0),
+                        "night_mode_active": room_state.get("night_mode", {}).get("active", False),
+                        "rapid_recovery_active": room_state.get("rapid_recovery_active", False),
+                        "hvac_stage": (room_state.get("hvac_output_status") or {}).get("stage"),
+                        "sensor_conflict": room_state.get("sensor_conflict", 0.0),
+                        "mold_surface_rh": room_state.get("mold_surface_rh"),
+                        "mold_risk_level": room_state.get("mold_risk_level", ""),
+                        "effective_control_target": room_state.get("effective_control_target"),
+                        "heat_target": room_state.get("heat_target"),
+                        "cool_target": room_state.get("cool_target"),
+                        "override_active": room_state.get("override_active", False),
+                        "override_type": room_state.get("override_type", ""),
+                        "active_heat_sources": room_state.get("active_heat_sources", ""),
+                        "temperature_source": room_state.get("temperature_source", ""),
+                        "temperature_source_count": room_state.get("temperature_source_count", 0),
+                        "temperature_primary_available": room_state.get("temperature_primary_available", False),
+                        "humidity_sources": room_state.get("humidity_sources", ""),
+                        "humidity_source_count": room_state.get("humidity_source_count", 0),
+                        "humidity_primary_available": room_state.get("humidity_primary_available", False),
+                    },
+                )
+            except Exception:  # noqa: BLE001
+                _LOGGER.warning("History record failed for '%s'", area_id)
+            self._update_pending_prediction(area_id, rooms.get(area_id, {}), room_state)
+
+    def _update_pending_prediction(
+        self,
+        area_id: str,
+        room: dict,
+        room_state: dict,
+    ) -> None:
+        """Prepare the prediction that will be evaluated at the next history write."""
+        current_temp = room_state.get("current_temp")
+        if current_temp is None or self.outdoor_temp_effective is None or room.get("is_outdoor", False):
+            return
+        try:
+            if room_state.get("window_open", False):
+                raw_prediction = self._model_manager.predict_window_open(
+                    area_id,
+                    current_temp,
+                    self.outdoor_temp_effective,
+                    3.0,
+                )
+            else:
+                model = self._model_manager.get_model(area_id)
+                power_fraction = room_state.get("heating_power", 100) / 100.0
+                mode = room_state.get("mode", MODE_IDLE)
+                q_hvac = (
+                    power_fraction * model.Q_heat
+                    if mode == MODE_HEATING
+                    else (-power_fraction * model.Q_cool if mode == MODE_COOLING else 0.0)
+                )
+                raw_prediction = model.predict(
+                    current_temp,
+                    self.outdoor_temp_effective,
+                    q_hvac,
+                    3.0,
+                    q_solar=self._current_q_solar * room_state.get("shading_factor", 1.0),
+                    q_vent=room_state.get("q_vent", 0.0),
+                    q_occupancy=room_state.get("q_occupancy", 0.0),
+                    coupling_terms=room_state.get("coupling_status", []),
+                )
+            clamped = max(
+                current_temp - MAX_PREDICTION_DELTA,
+                min(current_temp + MAX_PREDICTION_DELTA, raw_prediction),
+            )
+            self._pending_predictions[area_id] = round(clamped, 2)
+        except Exception:  # noqa: BLE001
+            pass
 
     async def _async_store_observed_derivatives(self, area_id: str, *, now_ts: float) -> None:
         """Persist low-frequency observed summaries and thermal episodes."""
