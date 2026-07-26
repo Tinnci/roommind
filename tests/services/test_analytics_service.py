@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import time
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import State
+from homeassistant.util import dt as dt_util
 
 from custom_components.roommind.control.thermal_model import RoomModelManager
 from custom_components.roommind.coordinator import AnalyticsRuntimeSnapshot
@@ -241,12 +243,13 @@ class TestComputeTargetForecast:
     async def test_forecast_uses_same_active_night_ramp_as_control(self):
         hass = MagicMock()
         hass.config.units.temperature_unit = "°C"
+        now = datetime(2026, 7, 27, 23, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE).timestamp()
         room = {
             "comfort_heat": 21.0,
             "comfort_cool": 24.0,
             "climate_mode": "auto",
             "sleep_temp_ramp_c": 1.0,
-            "_night_mode_active": True,
+            "quiet_hours": {"start": "22:00", "end": "07:00"},
         }
 
         result = await _compute_target_forecast(
@@ -255,6 +258,7 @@ class TestComputeTargetForecast:
             {},
             hours=0.0,
             interval_minutes=5,
+            now=now,
         )
 
         assert result == [

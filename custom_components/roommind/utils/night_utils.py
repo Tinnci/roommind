@@ -49,8 +49,6 @@ def is_quiet_hours_now(quiet_hours: dict[str, Any] | None, now: datetime | None 
 
 def is_night_mode_active(config: dict[str, Any], now: datetime | None = None) -> bool:
     """Return whether night-mode rules should currently apply for a room/config."""
-    if "_night_mode_active" in config:
-        return bool(config.get("_night_mode_active"))
     return bool(config.get("night_mode_enabled", True)) and is_quiet_hours_now(config.get("quiet_hours"), now=now)
 
 

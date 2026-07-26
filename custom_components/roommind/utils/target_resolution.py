@@ -9,9 +9,11 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
 from ..const import (
     DEFAULT_COMFORT_COOL,
@@ -113,7 +115,8 @@ async def prepare_control_target_plan(
         block_temp_converter=converter,
     )
 
-    night_active = is_night_mode_active(room)
+    resolved_local_time = datetime.fromtimestamp(resolved_at, tz=dt_util.DEFAULT_TIME_ZONE)
+    night_active = is_night_mode_active(room, now=resolved_local_time)
     sleep_ramp_c = max(0.0, float(room.get("sleep_temp_ramp_c") or 0.0))
     if night_active and sleep_ramp_c > 0:
         targets = apply_sleep_ramp_to_targets(targets, sleep_ramp_c)

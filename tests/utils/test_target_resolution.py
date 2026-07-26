@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from homeassistant.const import UnitOfTemperature
 from homeassistant.core import State
+from homeassistant.util import dt as dt_util
 
 from custom_components.roommind.const import TargetTemps
 from custom_components.roommind.utils.target_resolution import (
@@ -82,13 +83,14 @@ def test_presence_clears_override_suppresses_but_does_not_clear_override() -> No
 async def test_control_target_plan_keeps_current_and_future_mold_night_targets_aligned() -> None:
     """Mold recovery and night ramp are composed identically for now and MPC."""
     hass = _target_plan_hass(person_state="not_home")
+    now = datetime(2026, 7, 27, 23, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE).timestamp()
     room = {
         "comfort_heat": 21.0,
         "comfort_cool": 24.0,
         "eco_heat": 17.0,
         "eco_cool": 27.0,
         "sleep_temp_ramp_c": 1.0,
-        "_night_mode_active": True,
+        "quiet_hours": {"start": "22:00", "end": "07:00"},
     }
     settings = {
         "presence_enabled": True,
@@ -102,11 +104,11 @@ async def test_control_target_plan_keeps_current_and_future_mold_night_targets_a
         settings,
         mold_prevention_active=True,
         mold_prevention_delta=2.0,
-        now=1_000.0,
+        now=now,
     )
 
     assert plan.targets == TargetTemps(heat=18.0, cool=28.0)
-    assert plan.resolver(1_000.0) == plan.targets
+    assert plan.resolver(now) == plan.targets
     assert plan.force_off is False
     assert plan.presence_away is True
     assert plan.night_active is True
@@ -119,7 +121,6 @@ async def test_control_target_plan_ignores_inactive_mold_delta() -> None:
     room = {
         "eco_heat": 17.0,
         "eco_cool": 27.0,
-        "_night_mode_active": False,
     }
     settings = {
         "presence_enabled": True,
@@ -149,7 +150,6 @@ async def test_control_target_plan_preserves_expired_state_cleanup_intents() -> 
         "comfort_cool": 24.0,
         "override_temp": 25.0,
         "override_until": 900.0,
-        "_night_mode_active": False,
     }
     settings = {
         "vacation_temp": 15.0,
@@ -186,7 +186,6 @@ async def test_control_target_plan_converts_current_and_future_schedule_targets(
         "schedules": [{"entity_id": schedule_entity_id}],
         "comfort_heat": 70.0,
         "comfort_cool": 75.0,
-        "_night_mode_active": False,
     }
 
     plan = await prepare_control_target_plan(hass, room, {}, now=now)

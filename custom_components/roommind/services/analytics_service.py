@@ -127,6 +127,7 @@ async def _compute_target_forecast(
     interval_minutes: int = 5,
     schedule_blocks_cache: dict[str, dict] | None = None,
     target_plan: ControlTargetPlan | None = None,
+    now: float | None = None,
 ) -> list[dict]:
     """Compute target temperature forecast for the next N hours.
 
@@ -142,6 +143,7 @@ async def _compute_target_forecast(
             schedule_blocks_cache=schedule_blocks_cache,
             mold_prevention_active=mold_prevention_delta > 0,
             mold_prevention_delta=mold_prevention_delta,
+            now=now,
         )
     target_resolver = target_plan.resolver
 
