@@ -1252,6 +1252,120 @@ class MPCController:
             series.append(q if q >= RESIDUAL_HEAT_CUTOFF else 0.0)
         return series
 
+    async def _async_apply_managed_auto(
+        self,
+        targets: TargetTemps,
+        thermostats: list[str],
+        forced_off: set[str],
+        *,
+        can_heat: bool,
+        can_cool: bool,
+    ) -> AppliedCommandReport:
+        """Let devices self-regulate in managed auto mode.
+
+        Range-capable ACs intentionally receive both targets in ``heat_cool``
+        mode. Devices without range mode fall back to a gated single direction.
+        """
+        report = AppliedCommandReport()
+        ha_heat_target = celsius_to_ha_temp(self.hass, targets.heat) if targets.heat is not None else None
+        ha_cool_target = celsius_to_ha_temp(self.hass, targets.cool) if targets.cool is not None else None
+
+        for eid in thermostats:
+            if eid in forced_off:
+                await async_idle_device(self.hass, eid, self._devices, area_id=self._area_id, targets=targets)
+                report.mark_inactive(eid)
+                continue
+            if can_heat and ha_heat_target is not None:
+                await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "heat"})
+                await self._call(
+                    "set_temperature",
+                    {"entity_id": eid, "temperature": ha_heat_target, "hvac_mode": "heat"},
+                    temp_intent="heat",
+                )
+                report.mark_active(eid)
+            else:
+                await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "off"})
+                report.mark_inactive(eid)
+
+        for eid in self.acs:
+            if eid in forced_off:
+                await async_idle_device(self.hass, eid, self._devices, area_id=self._area_id, targets=targets)
+                report.mark_inactive(eid)
+                continue
+            ac_state = self.hass.states.get(eid)
+            ac_modes = _effective_ac_modes(ac_state)
+            ac_target = ha_cool_target if ha_cool_target is not None else ha_heat_target
+            ac_heat_target = ha_heat_target if ha_heat_target is not None else ha_cool_target
+            if ac_target is None:
+                await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "off"})
+                report.mark_inactive(eid)
+            elif "heat_cool" in ac_modes:
+                await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "heat_cool"})
+                ac_state_now = self.hass.states.get(eid)
+                is_range = ac_state_now and ac_state_now.attributes.get("target_temp_low") is not None
+                if is_range and ha_heat_target is not None and ha_cool_target is not None:
+                    await self._call(
+                        "set_temperature",
+                        {
+                            "entity_id": eid,
+                            "target_temp_low": min(ha_heat_target, ha_cool_target),
+                            "target_temp_high": max(ha_heat_target, ha_cool_target),
+                            "hvac_mode": "heat_cool",
+                        },
+                    )
+                else:
+                    await self._call(
+                        "set_temperature",
+                        {"entity_id": eid, "temperature": ac_target, "hvac_mode": "heat_cool"},
+                    )
+                report.mark_active(eid)
+            elif not thermostats and can_heat and can_cool and "heat" in ac_modes and "cool" in ac_modes:
+                dev_temp = ac_state.attributes.get("current_temperature") if ac_state else None
+                if dev_temp is not None and ha_cool_target is not None and dev_temp > ha_cool_target:
+                    await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "cool"})
+                    await self._call(
+                        "set_temperature",
+                        {"entity_id": eid, "temperature": ha_cool_target, "hvac_mode": "cool"},
+                        temp_intent="cool",
+                    )
+                else:
+                    ac_heat_t = ha_heat_target if ha_heat_target is not None else ha_cool_target
+                    await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "heat"})
+                    await self._call(
+                        "set_temperature",
+                        {"entity_id": eid, "temperature": ac_heat_t, "hvac_mode": "heat"},
+                        temp_intent="heat",
+                    )
+                report.mark_active(eid)
+            elif can_cool and "cool" in ac_modes:
+                await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "cool"})
+                await self._call(
+                    "set_temperature",
+                    {"entity_id": eid, "temperature": ac_target, "hvac_mode": "cool"},
+                    temp_intent="cool",
+                )
+                report.mark_active(eid)
+            elif can_heat and "heat" in ac_modes:
+                await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "heat"})
+                await self._call(
+                    "set_temperature",
+                    {"entity_id": eid, "temperature": ac_heat_target, "hvac_mode": "heat"},
+                    temp_intent="heat",
+                )
+                report.mark_active(eid)
+            elif "auto" in ac_modes:
+                await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "auto"})
+                await self._call(
+                    "set_temperature",
+                    {"entity_id": eid, "temperature": ac_heat_target, "hvac_mode": "auto"},
+                    temp_intent="heat",
+                )
+                report.mark_active(eid)
+            else:
+                await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "off"})
+                report.mark_inactive(eid)
+        return report
+
     async def async_apply(
         self,
         mode: str,
@@ -1268,7 +1382,6 @@ class MPCController:
         compressor_forced_off: set[str] | None = None,
     ) -> AppliedCommandReport:
         """Apply a controller intent and return the actual command report."""
-        report = AppliedCommandReport()
         _forced_on = compressor_forced_on or set()
         _forced_off = compressor_forced_off or set()
 
@@ -1308,110 +1421,15 @@ class MPCController:
             and self.climate_mode not in (CLIMATE_MODE_HEAT_ONLY, CLIMATE_MODE_COOL_ONLY)
             and mode != MODE_IDLE
         ):
-            # In managed auto mode, thermostats get heat target and ACs get cool target
-            ha_heat_target = celsius_to_ha_temp(self.hass, targets.heat) if targets.heat is not None else None
-            ha_cool_target = celsius_to_ha_temp(self.hass, targets.cool) if targets.cool is not None else None
-            for eid in thermostats:
-                if eid in _forced_off:
-                    await async_idle_device(self.hass, eid, self._devices, area_id=self._area_id, targets=targets)
-                    report.mark_inactive(eid)
-                    continue
-                if can_heat and ha_heat_target is not None:
-                    await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "heat"})
-                    await self._call(
-                        "set_temperature",
-                        {"entity_id": eid, "temperature": ha_heat_target, "hvac_mode": "heat"},
-                        temp_intent="heat",
-                    )
-                    report.mark_active(eid)
-                else:
-                    await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "off"})
-                    report.mark_inactive(eid)
-            for eid in self.acs:
-                if eid in _forced_off:
-                    await async_idle_device(self.hass, eid, self._devices, area_id=self._area_id, targets=targets)
-                    report.mark_inactive(eid)
-                    continue
-                ac_state = self.hass.states.get(eid)
-                ac_modes = _effective_ac_modes(ac_state)
-                ac_target = ha_cool_target if ha_cool_target is not None else ha_heat_target
-                ac_heat_target = ha_heat_target if ha_heat_target is not None else ha_cool_target
-                if ac_target is None:
-                    await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "off"})
-                    report.mark_inactive(eid)
-                elif "heat_cool" in ac_modes:
-                    await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "heat_cool"})
-                    # Dual-setpoint: send both targets when device uses range mode
-                    ac_state_now = self.hass.states.get(eid)
-                    is_range = ac_state_now and ac_state_now.attributes.get("target_temp_low") is not None
-                    if is_range and ha_heat_target is not None and ha_cool_target is not None:
-                        low = min(ha_heat_target, ha_cool_target)
-                        high = max(ha_heat_target, ha_cool_target)
-                        await self._call(
-                            "set_temperature",
-                            {
-                                "entity_id": eid,
-                                "target_temp_low": low,
-                                "target_temp_high": high,
-                                "hvac_mode": "heat_cool",
-                            },
-                        )
-                    else:
-                        await self._call(
-                            "set_temperature",
-                            {"entity_id": eid, "temperature": ac_target, "hvac_mode": "heat_cool"},
-                        )
-                    report.mark_active(eid)
-                elif not thermostats and can_heat and can_cool and "heat" in ac_modes and "cool" in ac_modes:
-                    # AC-only room, device supports heat+cool but not heat_cool:
-                    # use device's built-in temperature to pick the right mode.
-                    dev_temp = ac_state.attributes.get("current_temperature") if ac_state else None
-                    if dev_temp is not None and ha_cool_target is not None and dev_temp > ha_cool_target:
-                        await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "cool"})
-                        await self._call(
-                            "set_temperature",
-                            {"entity_id": eid, "temperature": ha_cool_target, "hvac_mode": "cool"},
-                            temp_intent="cool",
-                        )
-                        report.mark_active(eid)
-                    else:
-                        ac_heat_t = ha_heat_target if ha_heat_target is not None else ha_cool_target
-                        await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "heat"})
-                        await self._call(
-                            "set_temperature",
-                            {"entity_id": eid, "temperature": ac_heat_t, "hvac_mode": "heat"},
-                            temp_intent="heat",
-                        )
-                        report.mark_active(eid)
-                elif can_cool and "cool" in ac_modes:
-                    await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "cool"})
-                    await self._call(
-                        "set_temperature",
-                        {"entity_id": eid, "temperature": ac_target, "hvac_mode": "cool"},
-                        temp_intent="cool",
-                    )
-                    report.mark_active(eid)
-                elif can_heat and "heat" in ac_modes:
-                    await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "heat"})
-                    await self._call(
-                        "set_temperature",
-                        {"entity_id": eid, "temperature": ac_heat_target, "hvac_mode": "heat"},
-                        temp_intent="heat",
-                    )
-                    report.mark_active(eid)
-                elif "auto" in ac_modes:
-                    await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "auto"})
-                    await self._call(
-                        "set_temperature",
-                        {"entity_id": eid, "temperature": ac_heat_target, "hvac_mode": "auto"},
-                        temp_intent="heat",
-                    )
-                    report.mark_active(eid)
-                else:
-                    await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "off"})
-                    report.mark_inactive(eid)
-            return report
+            return await self._async_apply_managed_auto(
+                targets,
+                thermostats,
+                _forced_off,
+                can_heat=can_heat,
+                can_cool=can_cool,
+            )
 
+        report = AppliedCommandReport()
         if mode == MODE_HEATING and heat_source_plan is not None:
             # Orchestrated heating: route power to specific devices per plan
             for cmd in heat_source_plan.commands:
