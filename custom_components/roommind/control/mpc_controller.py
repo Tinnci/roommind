@@ -1721,12 +1721,15 @@ class MPCController:
         return report
 
     async def _async_apply_standard(self, context: DeviceApplyContext) -> AppliedCommandReport:
-        """Apply the standard heating, cooling, or idle device strategy."""
+        """Dispatch the standard device strategy for the requested mode."""
         if context.mode == MODE_IDLE:
             return await self._async_apply_idle(context)
         if context.mode == MODE_COOLING:
             return await self._async_apply_cooling(context)
+        return await self._async_apply_heating(context)
 
+    async def _async_apply_heating(self, context: DeviceApplyContext) -> AppliedCommandReport:
+        """Apply standard heating commands to thermostats and capable ACs."""
         report = AppliedCommandReport()
         mode = context.mode
         targets = context.targets
