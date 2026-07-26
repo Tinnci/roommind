@@ -71,3 +71,11 @@ dev = [
     "pytest-xdist>=3.8.0",
     "ruff>=0.15.14",
 ]
+
+[tool.uv]
+# Home Assistant 2026.7.4 pins vulnerable dev-only transitive versions.
+# Keep the development environment on patched releases until upstream catches up.
+override-dependencies = [
+    "pillow>=12.3.0,<13",
+    "pyjwt>=2.13.0,<3",
+]
