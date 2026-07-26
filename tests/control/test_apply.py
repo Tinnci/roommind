@@ -1432,6 +1432,37 @@ async def test_apply_managed_mode_ac_auto_only():
 
 
 @pytest.mark.asyncio
+async def test_apply_managed_mode_ac_auto_only_uses_cool_target():
+    """Managed auto-only AC uses the cool target when cooling is selected."""
+    hass = build_hass()
+    ac_state = MagicMock()
+    ac_state.state = "off"
+    ac_state.attributes = {"hvac_modes": ["off", "auto"], "temperature": None}
+    hass.states.get = MagicMock(return_value=ac_state)
+
+    room = make_room(
+        thermostats=[],
+        acs=["climate.ac1"],
+        climate_mode="auto",
+        temperature_sensor="",
+    )
+    ctrl = MPCController(
+        hass,
+        room,
+        model_manager=RoomModelManager(),
+        outdoor_temp=30.0,
+        settings={},
+        has_external_sensor=False,
+    )
+
+    await ctrl.async_apply("cooling", targets=TargetTemps(heat=21.0, cool=24.0))
+
+    temp_calls = [call for call in hass.services.async_call.call_args_list if call[0][1] == "set_temperature"]
+    assert len(temp_calls) == 1
+    assert temp_calls[0][0][2]["temperature"] == 24.0
+
+
+@pytest.mark.asyncio
 async def test_apply_heating_ac_auto_only():
     """MODE_HEATING: AC with only 'off'+'auto' gets 'auto' via cascade."""
     hass = build_hass()
@@ -1690,8 +1721,9 @@ async def test_managed_auto_heat_cool_dual_setpoint():
 
 
 @pytest.mark.asyncio
-async def test_managed_auto_heat_cool_single_setpoint():
-    """Managed Auto AC in heat_cool + single-setpoint sends 'temperature'."""
+@pytest.mark.parametrize(("mode", "expected_target"), [("heating", 21.0), ("cooling", 25.0)])
+async def test_managed_auto_heat_cool_single_setpoint(mode, expected_target):
+    """Managed Auto AC in heat_cool + single-setpoint uses the selected target."""
     hass = build_hass()
     ac_state = MagicMock()
     ac_state.state = "off"
@@ -1708,16 +1740,17 @@ async def test_managed_auto_heat_cool_single_setpoint():
         hass,
         room,
         model_manager=RoomModelManager(),
-        outdoor_temp=5.0,
+        outdoor_temp=18.0,
         settings={},
         has_external_sensor=False,
     )
-    await ctrl.async_apply("heating", TargetTemps(heat=21.0, cool=25.0), power_fraction=1.0)
+    await ctrl.async_apply(mode, TargetTemps(heat=21.0, cool=25.0), power_fraction=1.0)
 
     temp_calls = [c for c in hass.services.async_call.call_args_list if c[0][1] == "set_temperature"]
     assert temp_calls
     last_data = temp_calls[-1][0][2]
     assert "temperature" in last_data
+    assert last_data["temperature"] == expected_target
     assert "target_temp_low" not in last_data
 
 

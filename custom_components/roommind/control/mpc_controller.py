@@ -1254,6 +1254,7 @@ class MPCController:
 
     async def _async_apply_managed_auto(
         self,
+        mode: str,
         targets: TargetTemps,
         thermostats: list[str],
         forced_off: set[str],
@@ -1269,6 +1270,10 @@ class MPCController:
         report = AppliedCommandReport()
         ha_heat_target = celsius_to_ha_temp(self.hass, targets.heat) if targets.heat is not None else None
         ha_cool_target = celsius_to_ha_temp(self.hass, targets.cool) if targets.cool is not None else None
+        selected_target = ha_cool_target if mode == MODE_COOLING else ha_heat_target
+        selected_intent = "cool" if mode == MODE_COOLING else "heat"
+        if selected_target is None:
+            selected_target = ha_heat_target if ha_heat_target is not None else ha_cool_target
 
         for eid in thermostats:
             if eid in forced_off:
@@ -1294,9 +1299,8 @@ class MPCController:
                 continue
             ac_state = self.hass.states.get(eid)
             ac_modes = _effective_ac_modes(ac_state)
-            ac_target = ha_cool_target if ha_cool_target is not None else ha_heat_target
             ac_heat_target = ha_heat_target if ha_heat_target is not None else ha_cool_target
-            if ac_target is None:
+            if selected_target is None:
                 await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "off"})
                 report.mark_inactive(eid)
             elif "heat_cool" in ac_modes:
@@ -1316,7 +1320,8 @@ class MPCController:
                 else:
                     await self._call(
                         "set_temperature",
-                        {"entity_id": eid, "temperature": ac_target, "hvac_mode": "heat_cool"},
+                        {"entity_id": eid, "temperature": selected_target, "hvac_mode": "heat_cool"},
+                        temp_intent=selected_intent,
                     )
                 report.mark_active(eid)
             elif not thermostats and can_heat and can_cool and "heat" in ac_modes and "cool" in ac_modes:
@@ -1341,7 +1346,7 @@ class MPCController:
                 await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "cool"})
                 await self._call(
                     "set_temperature",
-                    {"entity_id": eid, "temperature": ac_target, "hvac_mode": "cool"},
+                    {"entity_id": eid, "temperature": selected_target, "hvac_mode": "cool"},
                     temp_intent="cool",
                 )
                 report.mark_active(eid)
@@ -1357,8 +1362,8 @@ class MPCController:
                 await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "auto"})
                 await self._call(
                     "set_temperature",
-                    {"entity_id": eid, "temperature": ac_heat_target, "hvac_mode": "auto"},
-                    temp_intent="heat",
+                    {"entity_id": eid, "temperature": selected_target, "hvac_mode": "auto"},
+                    temp_intent=selected_intent,
                 )
                 report.mark_active(eid)
             else:
@@ -1422,6 +1427,7 @@ class MPCController:
             and mode != MODE_IDLE
         ):
             return await self._async_apply_managed_auto(
+                mode,
                 targets,
                 thermostats,
                 _forced_off,
