@@ -5,6 +5,7 @@ from __future__ import annotations
 from custom_components.roommind.managers.airflow_command_plan import (
     AirflowServiceCommand,
     plan_climate_airflow,
+    select_climate_preset,
 )
 
 
@@ -49,3 +50,20 @@ def test_zero_level_user_owned_fan_only_is_blocked() -> None:
     assert plan.skip_reason == "fan_only_not_roommind_owned"
     assert plan.fan_only_ownership is None
     assert plan.assumed_level is None
+
+
+def test_away_climate_preset_takes_priority_over_night_and_thermal() -> None:
+    """Presence-away policy is the most specific climate preset context."""
+    config = {
+        "preferred_preset_mode_away": "eco",
+        "preferred_preset_mode_night": "sleep",
+        "preferred_preset_mode_thermal": "boost",
+        "preferred_preset_mode_idle": "quiet",
+    }
+
+    assert select_climate_preset(
+        config,
+        "heating",
+        night_active=True,
+        away_active=True,
+    ) == "eco"

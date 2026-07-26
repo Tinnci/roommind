@@ -1305,6 +1305,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         airflow_command_status: list[dict[str, Any]] = []
         runtime_room = dict(room)
         runtime_room["_night_mode_active"] = night_mode_active
+        runtime_room["_presence_away"] = presence_away
         runtime_room["_rapid_recovery_active"] = rapid_recovery_active
 
         # Read device temperature limits for dynamic boost targets

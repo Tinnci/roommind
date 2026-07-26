@@ -120,6 +120,7 @@ def plan_climate_airflow(
     mode: str,
     roommind_fan_only_owned: bool,
     night_active: bool = False,
+    away_active: bool = False,
 ) -> AirflowCommandPlan:
     """Plan service calls for a climate airflow entity."""
     fan_modes = [str(item) for item in attrs.get("fan_modes") or []]
@@ -173,7 +174,12 @@ def plan_climate_airflow(
                 AirflowServiceCommand("climate", "set_fan_mode", {"entity_id": entity_id, "fan_mode": fan_mode})
             )
 
-    preset_mode = select_climate_preset(config, mode, night_active=night_active)
+    preset_mode = select_climate_preset(
+        config,
+        mode,
+        night_active=night_active,
+        away_active=away_active,
+    )
     if preset_mode:
         if not supports_feature(attrs, ClimateEntityFeature.PRESET_MODE) or (
             preset_modes and preset_mode not in preset_modes
@@ -277,8 +283,16 @@ def supports_feature(attrs: dict[str, Any], feature: Any) -> bool:
         return True
 
 
-def select_climate_preset(config: dict[str, Any], mode: str, *, night_active: bool = False) -> str:
-    """Select the climate preset for current thermal/night context."""
+def select_climate_preset(
+    config: dict[str, Any],
+    mode: str,
+    *,
+    night_active: bool = False,
+    away_active: bool = False,
+) -> str:
+    """Select the climate preset for current presence/thermal/night context."""
+    if away_active and config.get("preferred_preset_mode_away"):
+        return str(config.get("preferred_preset_mode_away"))
     if night_active and config.get("preferred_preset_mode_night"):
         return str(config.get("preferred_preset_mode_night"))
     if mode in (MODE_HEATING, MODE_COOLING):

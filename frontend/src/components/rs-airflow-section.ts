@@ -862,6 +862,13 @@ export class RsAirflowSection extends LitElement {
               "airflow.preset_mode_night",
               presetModes,
             )}
+            ${this._renderPresetSelect(
+              entityId,
+              device,
+              "preferred_preset_mode_away",
+              "airflow.preset_mode_away",
+              presetModes,
+            )}
           `
         : nothing}
       ${swingModes.length > 0
@@ -919,7 +926,8 @@ export class RsAirflowSection extends LitElement {
     key:
       | "preferred_preset_mode_thermal"
       | "preferred_preset_mode_idle"
-      | "preferred_preset_mode_night",
+      | "preferred_preset_mode_night"
+      | "preferred_preset_mode_away",
     labelKey: TranslationKey,
     presetModes: string[],
   ) {

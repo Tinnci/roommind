@@ -769,6 +769,7 @@
   "airflow.preset_mode_thermal": "制冷/制热预设",
   "airflow.preset_mode_idle": "空闲预设",
   "airflow.preset_mode_night": "夜间预设",
+  "airflow.preset_mode_away": "离家预设",
   "airflow.power_sensor": "功率传感器",
   "airflow.compressor_stage_observer": "压缩机观测器",
   "airflow.observer_auto": "自动",

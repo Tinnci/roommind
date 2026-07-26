@@ -50,6 +50,7 @@ class AirflowControlManager:
         mix_target = _clamp_level(mix_level if mix_level is not None else (legacy_target or 0.0))
         vent_target = _clamp_level(vent_level if vent_level is not None else (legacy_target or 0.0))
         night_active = _is_night_context(room)
+        away_active = bool(room.get("_presence_away", False))
         rapid_recovery = bool(room.get("_rapid_recovery_active", False))
         night_cap = room.get("max_fan_level_night")
         capped_by_night = False
@@ -76,7 +77,17 @@ class AirflowControlManager:
                 if domain == "fan":
                     status.update(await self._apply_fan(area_id, entity_id, config, target))
                 elif domain == "climate":
-                    status.update(await self._apply_climate(area_id, entity_id, config, target, mode, night_active))
+                    status.update(
+                        await self._apply_climate(
+                            area_id,
+                            entity_id,
+                            config,
+                            target,
+                            mode,
+                            night_active,
+                            away_active,
+                        )
+                    )
                 else:
                     status.update({"outcome": OUTCOME_BLOCKED_BY_MODE, "skip_reason": "unsupported_domain"})
             except Exception:  # noqa: BLE001
@@ -101,6 +112,7 @@ class AirflowControlManager:
         level: float,
         mode: str,
         night_active: bool = False,
+        away_active: bool = False,
     ) -> dict[str, Any]:
         state = self.hass.states.get(entity_id)
         attrs = state.attributes if state else {}
@@ -114,6 +126,7 @@ class AirflowControlManager:
             mode=mode,
             roommind_fan_only_owned=entity_id in self._roommind_fan_only,
             night_active=night_active,
+            away_active=away_active,
         )
         return await self._execute_plan(area_id, entity_id, plan)
 

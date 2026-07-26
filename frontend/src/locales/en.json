@@ -769,6 +769,7 @@
   "airflow.preset_mode_thermal": "Thermal preset",
   "airflow.preset_mode_idle": "Idle preset",
   "airflow.preset_mode_night": "Night preset",
+  "airflow.preset_mode_away": "Away preset",
   "airflow.power_sensor": "Power sensor",
   "airflow.compressor_stage_observer": "Compressor observer",
   "airflow.observer_auto": "Auto",

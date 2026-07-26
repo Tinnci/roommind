@@ -575,3 +575,44 @@ async def test_night_climate_uses_night_preset_preference(hass):
         "set_preset_mode",
         {"entity_id": "climate.bedroom_ac", "preset_mode": "sleep"},
     ) in calls
+
+
+@pytest.mark.asyncio
+async def test_away_climate_uses_away_preset_over_night_preference(hass):
+    hass.states.get.return_value = _state(
+        "cool",
+        {
+            "fan_modes": ["low", "high"],
+            "preset_modes": ["eco", "sleep", "boost"],
+            "supported_features": int(ClimateEntityFeature.FAN_MODE | ClimateEntityFeature.PRESET_MODE),
+        },
+    )
+    mgr = AirflowControlManager(hass)
+
+    await mgr.async_apply(
+        "bedroom",
+        {
+            "_presence_away": True,
+            "_night_mode_active": True,
+            "airflow_devices": [
+                {
+                    "entity_id": "climate.bedroom_ac",
+                    "role": "hvac_fan",
+                    "controllable": True,
+                    "control_enabled": True,
+                    "preferred_preset_mode_thermal": "boost",
+                    "preferred_preset_mode_night": "sleep",
+                    "preferred_preset_mode_away": "eco",
+                }
+            ],
+        },
+        mix_level=1.0,
+        mode="cooling",
+    )
+
+    calls = [call.args[:3] for call in hass.services.async_call.call_args_list]
+    assert (
+        "climate",
+        "set_preset_mode",
+        {"entity_id": "climate.bedroom_ac", "preset_mode": "eco"},
+    ) in calls

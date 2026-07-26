@@ -32,11 +32,14 @@ class TestPresenceDetection:
         hass.services.async_call = AsyncMock()
 
         coordinator = _create_coordinator(hass, mock_config_entry)
+        coordinator._airflow_control.async_apply = AsyncMock(return_value=[])
         data = await coordinator._async_update_data()
 
         room = data["rooms"]["living_room_abc12345"]
         assert room["target_temp"] == 17.0  # eco_temp
         assert room["presence_away"] is True
+        airflow_room = coordinator._airflow_control.async_apply.call_args.args[1]
+        assert airflow_room["_presence_away"] is True
 
     @pytest.mark.asyncio
     async def test_someone_home_uses_schedule(self, hass, mock_config_entry):
