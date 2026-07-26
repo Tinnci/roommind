@@ -334,6 +334,150 @@ async def _send_idle_setpoint(
         )
 
 
+async def _async_idle_without_off_mode(
+    hass: HomeAssistant,
+    entity_id: str,
+    state: Any,
+    hvac_modes: list[str],
+    *,
+    area_id: str,
+) -> None:
+    """Neutralize a climate entity that cannot enter an explicit off mode."""
+    if state.state in ("heat", "cool"):
+        is_cooling = state.state == "cool"
+    else:
+        is_cooling = "heat" not in hvac_modes and ("cool" in hvac_modes or "heat_cool" in hvac_modes)
+    fallback_temp = state.attributes.get("max_temp") if is_cooling else state.attributes.get("min_temp")
+    boundary_name = "max_temp" if is_cooling else "min_temp"
+    if fallback_temp is None:
+        _LOGGER.warning(
+            "Area '%s': device '%s' has no 'off' mode and no %s attribute, cannot turn off reliably",
+            area_id,
+            entity_id,
+            boundary_name,
+        )
+        return
+    if float(fallback_temp) <= 0:
+        _LOGGER.warning(
+            "Area '%s': device '%s' reports %s=%s (<= 0), cannot use as fallback setpoint (Z2M/firmware bug?)",
+            area_id,
+            entity_id,
+            boundary_name,
+            fallback_temp,
+        )
+        return
+
+    is_range = state.attributes.get("target_temp_low") is not None
+    if is_range and "heat_cool" in hvac_modes:
+        range_low = state.attributes.get("min_temp")
+        range_high = state.attributes.get("max_temp")
+        if (
+            range_low is None
+            or range_high is None
+            or float(range_low) <= 0
+            or float(range_high) <= 0
+            or float(range_low) > float(range_high)
+        ):
+            _LOGGER.warning(
+                "Area '%s': range device '%s' has invalid min/max fallback bounds (%s, %s)",
+                area_id,
+                entity_id,
+                range_low,
+                range_high,
+            )
+            return
+        current_low = state.attributes.get("target_temp_low")
+        current_high = state.attributes.get("target_temp_high")
+        if (
+            current_low is not None
+            and current_high is not None
+            and round(current_low, 1) == round(range_low, 1)
+            and round(current_high, 1) == round(range_high, 1)
+        ):
+            return
+        if (current_low is None or current_high is None) and _should_use_cache(state):
+            cached = _last_commands.get(entity_id)
+            if cached and cached.get("service") == "set_temperature":
+                cached_low = cached.get("target_temp_low")
+                cached_high = cached.get("target_temp_high")
+                if (
+                    cached_low is not None
+                    and cached_high is not None
+                    and round(cached_low, 1) == round(range_low, 1)
+                    and round(cached_high, 1) == round(range_high, 1)
+                ):
+                    return
+        service_data: dict = {
+            "entity_id": entity_id,
+            "target_temp_low": range_low,
+            "target_temp_high": range_high,
+        }
+        fallback_description: Any = (range_low, range_high)
+    elif is_range:
+        current_boundary = (
+            state.attributes.get("target_temp_high") if is_cooling else state.attributes.get("target_temp_low")
+        )
+        if current_boundary is not None and round(current_boundary, 1) == round(fallback_temp, 1):
+            return
+        if current_boundary is None and _should_use_cache(state):
+            cached = _last_commands.get(entity_id)
+            if cached and cached.get("service") == "set_temperature":
+                cached_low = cached.get("target_temp_low")
+                cached_high = cached.get("target_temp_high")
+                if (
+                    cached_low is not None
+                    and cached_high is not None
+                    and round(cached_low, 1) == round(fallback_temp, 1)
+                    and round(cached_high, 1) == round(fallback_temp, 1)
+                ):
+                    return
+        service_data = {
+            "entity_id": entity_id,
+            "target_temp_low": fallback_temp,
+            "target_temp_high": fallback_temp,
+        }
+        fallback_description = fallback_temp
+    else:
+        current_temp_setting = state.attributes.get("temperature")
+        if current_temp_setting is not None and round(current_temp_setting, 1) == round(fallback_temp, 1):
+            return
+        if current_temp_setting is None and _should_use_cache(state):
+            cached = _last_commands.get(entity_id)
+            if (
+                cached
+                and cached.get("service") == "set_temperature"
+                and cached.get("temperature") is not None
+                and round(cached["temperature"], 1) == round(fallback_temp, 1)
+            ):
+                return
+        service_data = {"entity_id": entity_id, "temperature": fallback_temp}
+        fallback_description = fallback_temp
+
+    _LOGGER.debug(
+        "Area '%s': device '%s' has no 'off' mode, setting temperature to %s as fallback",
+        area_id,
+        entity_id,
+        fallback_description,
+    )
+    try:
+        await hass.services.async_call(
+            "climate",
+            "set_temperature",
+            service_data,
+            blocking=True,
+            context=make_roommind_context(),
+        )
+        _last_commands[entity_id] = _cache_entry("set_temperature", service_data)
+    except Exception:  # noqa: BLE001
+        _LOGGER.warning(
+            "Area '%s': climate.set_temperature(%s) fallback failed on '%s'",
+            area_id,
+            fallback_temp,
+            entity_id,
+            exc_info=True,
+        )
+
+
 async def async_turn_off_climate(
     hass: HomeAssistant,
     entity_id: str,
@@ -407,145 +551,14 @@ async def async_turn_off_climate(
             )
         return
 
-    # Fallback: device does not support "off" → set to min_temp / max_temp
     assert state is not None  # guaranteed: hvac_modes non-empty implies state exists
-    if state.state in ("heat", "cool"):
-        is_cooling = state.state == "cool"
-    else:
-        is_cooling = "heat" not in hvac_modes and ("cool" in hvac_modes or "heat_cool" in hvac_modes)
-    fallback_temp = state.attributes.get("max_temp") if is_cooling else state.attributes.get("min_temp")
-
-    if fallback_temp is None:
-        _LOGGER.warning(
-            "Area '%s': device '%s' has no 'off' mode and no %s attribute, cannot turn off reliably",
-            area_id,
-            entity_id,
-            "max_temp" if is_cooling else "min_temp",
-        )
-        return
-
-    # Same guard as defense-in-depth path above: max_temp <= 0 for cooling devices
-    # is equally implausible and indicates a Z2M/firmware bug.
-    if float(fallback_temp) <= 0:
-        _LOGGER.warning(
-            "Area '%s': device '%s' reports %s=%s (<= 0), cannot use as fallback setpoint (Z2M/firmware bug?)",
-            area_id,
-            entity_id,
-            "max_temp" if is_cooling else "min_temp",
-            fallback_temp,
-        )
-        return
-
-    # Redundancy: skip if already at fallback temp
-    is_range = state.attributes.get("target_temp_low") is not None
-    if is_range and "heat_cool" in hvac_modes:
-        range_low = state.attributes.get("min_temp")
-        range_high = state.attributes.get("max_temp")
-        if (
-            range_low is None
-            or range_high is None
-            or float(range_low) <= 0
-            or float(range_high) <= 0
-            or float(range_low) > float(range_high)
-        ):
-            _LOGGER.warning(
-                "Area '%s': range device '%s' has invalid min/max fallback bounds (%s, %s)",
-                area_id,
-                entity_id,
-                range_low,
-                range_high,
-            )
-            return
-        current_low = state.attributes.get("target_temp_low")
-        current_high = state.attributes.get("target_temp_high")
-        if (
-            current_low is not None
-            and current_high is not None
-            and round(current_low, 1) == round(range_low, 1)
-            and round(current_high, 1) == round(range_high, 1)
-        ):
-            return
-        if (current_low is None or current_high is None) and _should_use_cache(state):
-            cached = _last_commands.get(entity_id)
-            if cached and cached.get("service") == "set_temperature":
-                c_low = cached.get("target_temp_low")
-                c_high = cached.get("target_temp_high")
-                if (
-                    c_low is not None
-                    and c_high is not None
-                    and round(c_low, 1) == round(range_low, 1)
-                    and round(c_high, 1) == round(range_high, 1)
-                ):
-                    return
-        svc_data: dict = {
-            "entity_id": entity_id,
-            "target_temp_low": range_low,
-            "target_temp_high": range_high,
-        }
-        fallback_description: Any = (range_low, range_high)
-    elif is_range:
-        current_boundary = (
-            state.attributes.get("target_temp_high") if is_cooling else state.attributes.get("target_temp_low")
-        )
-        if current_boundary is not None and round(current_boundary, 1) == round(fallback_temp, 1):
-            return
-        if current_boundary is None and _should_use_cache(state):
-            cached = _last_commands.get(entity_id)
-            if cached and cached.get("service") == "set_temperature":
-                cached_low = cached.get("target_temp_low")
-                cached_high = cached.get("target_temp_high")
-                if (
-                    cached_low is not None
-                    and cached_high is not None
-                    and round(cached_low, 1) == round(fallback_temp, 1)
-                    and round(cached_high, 1) == round(fallback_temp, 1)
-                ):
-                    return
-        svc_data = {
-            "entity_id": entity_id,
-            "target_temp_low": fallback_temp,
-            "target_temp_high": fallback_temp,
-        }
-        fallback_description = fallback_temp
-    else:
-        current_temp_setting = state.attributes.get("temperature")
-        if current_temp_setting is not None and round(current_temp_setting, 1) == round(fallback_temp, 1):
-            return
-        if current_temp_setting is None and _should_use_cache(state):
-            cached = _last_commands.get(entity_id)
-            if (
-                cached
-                and cached.get("service") == "set_temperature"
-                and cached.get("temperature") is not None
-                and round(cached["temperature"], 1) == round(fallback_temp, 1)
-            ):
-                return
-        svc_data = {"entity_id": entity_id, "temperature": fallback_temp}
-        fallback_description = fallback_temp
-
-    _LOGGER.debug(
-        "Area '%s': device '%s' has no 'off' mode, setting temperature to %s as fallback",
-        area_id,
+    await _async_idle_without_off_mode(
+        hass,
         entity_id,
-        fallback_description,
+        state,
+        hvac_modes,
+        area_id=area_id,
     )
-    try:
-        await hass.services.async_call(
-            "climate",
-            "set_temperature",
-            svc_data,
-            blocking=True,
-            context=make_roommind_context(),
-        )
-        _last_commands[entity_id] = _cache_entry("set_temperature", svc_data)
-    except Exception:  # noqa: BLE001
-        _LOGGER.warning(
-            "Area '%s': climate.set_temperature(%s) fallback failed on '%s'",
-            area_id,
-            fallback_temp,
-            entity_id,
-            exc_info=True,
-        )
 
 
 async def _async_idle_low(
