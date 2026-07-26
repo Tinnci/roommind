@@ -315,6 +315,41 @@ async def test_turn_off_climate_cool_only_uses_max_temp():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("current_mode", "expected_temp"),
+    [
+        ("heat", 5.0),
+        ("cool", 30.0),
+    ],
+)
+async def test_turn_off_climate_dual_mode_without_off_uses_current_mode_boundary(
+    current_mode,
+    expected_temp,
+):
+    """A dual-mode device must idle the active mode, not its entire capability set."""
+    hass = build_hass()
+    state = MagicMock()
+    state.state = current_mode
+    state.attributes = {
+        "hvac_modes": ["heat", "cool"],
+        "min_temp": 5.0,
+        "max_temp": 30.0,
+        "temperature": 21.0,
+    }
+    hass.states.get = MagicMock(return_value=state)
+
+    await async_turn_off_climate(hass, "climate.dual")
+
+    hass.services.async_call.assert_called_once_with(
+        "climate",
+        "set_temperature",
+        {"entity_id": "climate.dual", "temperature": expected_temp},
+        blocking=True,
+        context=ANY,
+    )
+
+
+@pytest.mark.asyncio
 async def test_turn_off_climate_already_off_skipped():
     """Device already in 'off' state: call is skipped."""
     hass = build_hass()

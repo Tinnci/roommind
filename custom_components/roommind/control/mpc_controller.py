@@ -409,7 +409,10 @@ async def async_turn_off_climate(
 
     # Fallback: device does not support "off" → set to min_temp / max_temp
     assert state is not None  # guaranteed: hvac_modes non-empty implies state exists
-    is_cooling = "cool" in hvac_modes or "heat_cool" in hvac_modes
+    if state.state in ("heat", "cool"):
+        is_cooling = state.state == "cool"
+    else:
+        is_cooling = "heat" not in hvac_modes and ("cool" in hvac_modes or "heat_cool" in hvac_modes)
     fallback_temp = state.attributes.get("max_temp") if is_cooling else state.attributes.get("min_temp")
 
     if fallback_temp is None:
