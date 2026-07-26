@@ -228,7 +228,7 @@ async def test_mpc_apply_idle_respects_fan_only():
         settings={},
         has_external_sensor=True,
     )
-    await ctrl.async_apply("idle", 23.0)
+    await ctrl.async_apply("idle", TargetTemps(heat=23.0, cool=23.0))
 
     calls = hass.services.async_call.call_args_list
     hvac_calls = [c for c in calls if c[0][1] == "set_hvac_mode"]
@@ -274,7 +274,7 @@ async def test_mpc_apply_idle_forced_on_overrides_fan_only():
         settings={},
         has_external_sensor=True,
     )
-    await ctrl.async_apply("idle", 23.0, compressor_forced_on={"climate.ac1"})
+    await ctrl.async_apply("idle", TargetTemps(heat=23.0, cool=23.0), compressor_forced_on={"climate.ac1"})
 
     calls = hass.services.async_call.call_args_list
     # forced_on sets temperature, does NOT switch to fan_only
@@ -319,7 +319,7 @@ async def test_mpc_apply_heating_forced_off_fan_only():
         settings={},
         has_external_sensor=True,
     )
-    await ctrl.async_apply("heating", 21.0, compressor_forced_off={"climate.ac1"})
+    await ctrl.async_apply("heating", TargetTemps(heat=21.0, cool=21.0), compressor_forced_off={"climate.ac1"})
 
     calls = hass.services.async_call.call_args_list
     # Should use fan_only instead of off
@@ -374,7 +374,7 @@ async def test_mpc_apply_call_hvac_off_uses_idle_action():
         has_external_sensor=True,
     )
     # During cooling, TRVs are set to "off" via _call -> async_idle_device
-    await ctrl.async_apply("cooling", 23.0)
+    await ctrl.async_apply("cooling", TargetTemps(heat=23.0, cool=23.0))
 
     calls = hass.services.async_call.call_args_list
     # TRV should get fan_only (not off) via the _call delegation to async_idle_device
@@ -581,7 +581,7 @@ async def test_mpc_apply_heating_forced_off_trv_low():
         settings={},
         has_external_sensor=True,
     )
-    await ctrl.async_apply("heating", 21.0, compressor_forced_off={"climate.trv_low"})
+    await ctrl.async_apply("heating", TargetTemps(heat=21.0, cool=21.0), compressor_forced_off={"climate.trv_low"})
 
     calls = hass.services.async_call.call_args_list
     # Setpoint must be lowered to min_temp
@@ -644,7 +644,7 @@ async def test_mpc_apply_call_hvac_off_delegates_low():
         settings={},
         has_external_sensor=True,
     )
-    await ctrl.async_apply("cooling", 23.0)
+    await ctrl.async_apply("cooling", TargetTemps(heat=23.0, cool=23.0))
 
     calls = hass.services.async_call.call_args_list
     # TRV should receive min_temp setpoint, NOT set_hvac_mode(off)
@@ -751,7 +751,7 @@ async def test_mpc_apply_heat_source_inactive_trv_low():
         settings={},
         has_external_sensor=True,
     )
-    await ctrl.async_apply("heating", 20.0, heat_source_plan=plan)
+    await ctrl.async_apply("heating", TargetTemps(heat=20.0, cool=20.0), heat_source_plan=plan)
 
     calls = hass.services.async_call.call_args_list
     trv_temp = [c for c in calls if c[0][2].get("entity_id") == "climate.trv_low" and c[0][1] == "set_temperature"]

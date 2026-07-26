@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from custom_components.roommind.const import TargetTemps
 from custom_components.roommind.control.mpc_controller import (
     MPCController,
 )
@@ -35,7 +36,7 @@ async def test_proportional_power_far_from_target():
         settings={"control_mode": "mpc"},
         has_external_sensor=True,
     )
-    mode, pf = await ctrl.async_evaluate(current_temp=15.0, target_temp=21.0)
+    mode, pf = await ctrl.async_evaluate(current_temp=15.0, targets=TargetTemps(heat=21.0, cool=21.0))
     assert mode == "heating"
     assert pf >= 0.7  # large error → high power
 
@@ -59,7 +60,7 @@ async def test_proportional_power_near_target():
         settings={"control_mode": "mpc"},
         has_external_sensor=True,
     )
-    mode, pf = await ctrl.async_evaluate(current_temp=20.7, target_temp=21.0)
+    mode, pf = await ctrl.async_evaluate(current_temp=20.7, targets=TargetTemps(heat=21.0, cool=21.0))
     assert mode is not None
     assert mode == "heating"
     assert pf < 1.0  # near target → less than full power
@@ -80,7 +81,7 @@ async def test_proportional_trv_setpoint():
         has_external_sensor=True,
     )
     # 50% power at 20°C → TRV = 20 + 0.5*(30-20) = 25°C
-    await ctrl.async_apply("heating", 21.0, power_fraction=0.5, current_temp=20.0)
+    await ctrl.async_apply("heating", TargetTemps(heat=21.0, cool=21.0), power_fraction=0.5, current_temp=20.0)
     calls = hass.services.async_call.call_args_list
     set_temp_calls = [c for c in calls if c[0][1] == "set_temperature"]
     assert set_temp_calls
@@ -124,7 +125,7 @@ async def test_proportional_mixed_trv_ac_half_power():
         settings={},
         has_external_sensor=True,
     )
-    await ctrl.async_apply("heating", 21.0, power_fraction=0.5, current_temp=18.0)
+    await ctrl.async_apply("heating", TargetTemps(heat=21.0, cool=21.0), power_fraction=0.5, current_temp=18.0)
 
     calls = hass.services.async_call.call_args_list
     # TRV: 18 + 0.5*(30-18) = 24.0
@@ -153,7 +154,7 @@ async def test_proportional_ac_heating_half_power():
         settings={},
         has_external_sensor=True,
     )
-    await ctrl.async_apply("heating", 21.0, power_fraction=0.5, current_temp=20.0)
+    await ctrl.async_apply("heating", TargetTemps(heat=21.0, cool=21.0), power_fraction=0.5, current_temp=20.0)
 
     calls = hass.services.async_call.call_args_list
     temp_calls = [c for c in calls if c[0][1] == "set_temperature"]
@@ -179,7 +180,7 @@ async def test_proportional_ac_cooling_half_power():
         settings={},
         has_external_sensor=True,
     )
-    await ctrl.async_apply("cooling", 23.0, power_fraction=0.5, current_temp=26.0)
+    await ctrl.async_apply("cooling", TargetTemps(heat=23.0, cool=23.0), power_fraction=0.5, current_temp=26.0)
 
     calls = hass.services.async_call.call_args_list
     temp_calls = [c for c in calls if c[0][1] == "set_temperature"]
@@ -206,7 +207,7 @@ async def test_proportional_ac_heating_clamped_floor():
         has_external_sensor=True,
     )
     # Raw: 20.5 + 0.01*(30-20.5) = 20.595 → clamped to max(21.0, 20.6) = 21.0
-    await ctrl.async_apply("heating", 21.0, power_fraction=0.01, current_temp=20.5)
+    await ctrl.async_apply("heating", TargetTemps(heat=21.0, cool=21.0), power_fraction=0.01, current_temp=20.5)
 
     calls = hass.services.async_call.call_args_list
     temp_calls = [c for c in calls if c[0][1] == "set_temperature"]
@@ -232,7 +233,7 @@ async def test_proportional_ac_cooling_clamped_ceiling():
         has_external_sensor=True,
     )
     # Raw: 23.5 - 0.01*(23.5-16) = 23.425 → clamped to min(23.0, 23.4) = 23.0
-    await ctrl.async_apply("cooling", 23.0, power_fraction=0.01, current_temp=23.5)
+    await ctrl.async_apply("cooling", TargetTemps(heat=23.0, cool=23.0), power_fraction=0.01, current_temp=23.5)
 
     calls = hass.services.async_call.call_args_list
     temp_calls = [c for c in calls if c[0][1] == "set_temperature"]
@@ -257,7 +258,7 @@ async def test_proportional_ac_heating_no_current_temp():
         settings={},
         has_external_sensor=True,
     )
-    await ctrl.async_apply("heating", 21.0, power_fraction=0.8)
+    await ctrl.async_apply("heating", TargetTemps(heat=21.0, cool=21.0), power_fraction=0.8)
 
     calls = hass.services.async_call.call_args_list
     temp_calls = [c for c in calls if c[0][1] == "set_temperature"]
@@ -282,7 +283,7 @@ async def test_proportional_ac_cooling_no_current_temp():
         settings={},
         has_external_sensor=True,
     )
-    await ctrl.async_apply("cooling", 23.0, power_fraction=0.8)
+    await ctrl.async_apply("cooling", TargetTemps(heat=23.0, cool=23.0), power_fraction=0.8)
 
     calls = hass.services.async_call.call_args_list
     temp_calls = [c for c in calls if c[0][1] == "set_temperature"]
@@ -312,7 +313,7 @@ async def test_proportional_ac_managed_mode_unchanged():
         settings={},
         has_external_sensor=False,
     )
-    await ctrl.async_apply("heating", 21.0, power_fraction=0.5, current_temp=18.0)
+    await ctrl.async_apply("heating", TargetTemps(heat=21.0, cool=21.0), power_fraction=0.5, current_temp=18.0)
 
     calls = hass.services.async_call.call_args_list
     temp_calls = [c for c in calls if c[0][1] == "set_temperature"]
@@ -343,7 +344,9 @@ async def test_dynamic_heating_boost_trv_full_power():
         settings={},
         has_external_sensor=True,
     )
-    await ctrl.async_apply("heating", 21.0, power_fraction=1.0, current_temp=20.0, heating_boost_target=35.0)
+    await ctrl.async_apply(
+        "heating", TargetTemps(heat=21.0, cool=21.0), power_fraction=1.0, current_temp=20.0, heating_boost_target=35.0
+    )
 
     temp_calls = [c for c in hass.services.async_call.call_args_list if c[0][1] == "set_temperature"]
     assert any(c[0][2]["temperature"] == 35.0 for c in temp_calls)
@@ -367,7 +370,9 @@ async def test_dynamic_heating_boost_none_fallback():
         settings={},
         has_external_sensor=True,
     )
-    await ctrl.async_apply("heating", 21.0, power_fraction=1.0, current_temp=20.0, heating_boost_target=None)
+    await ctrl.async_apply(
+        "heating", TargetTemps(heat=21.0, cool=21.0), power_fraction=1.0, current_temp=20.0, heating_boost_target=None
+    )
 
     temp_calls = [c for c in hass.services.async_call.call_args_list if c[0][1] == "set_temperature"]
     assert any(c[0][2]["temperature"] == 30.0 for c in temp_calls)
@@ -391,7 +396,9 @@ async def test_dynamic_heating_boost_proportional():
         settings={},
         has_external_sensor=True,
     )
-    await ctrl.async_apply("heating", 21.0, power_fraction=0.5, current_temp=20.0, heating_boost_target=35.0)
+    await ctrl.async_apply(
+        "heating", TargetTemps(heat=21.0, cool=21.0), power_fraction=0.5, current_temp=20.0, heating_boost_target=35.0
+    )
 
     temp_calls = [c for c in hass.services.async_call.call_args_list if c[0][1] == "set_temperature"]
     assert any(c[0][2]["temperature"] == 27.5 for c in temp_calls)
@@ -415,7 +422,9 @@ async def test_dynamic_cooling_boost_full_power():
         settings={},
         has_external_sensor=True,
     )
-    await ctrl.async_apply("cooling", 23.0, power_fraction=1.0, current_temp=26.0, cooling_boost_target=18.0)
+    await ctrl.async_apply(
+        "cooling", TargetTemps(heat=23.0, cool=23.0), power_fraction=1.0, current_temp=26.0, cooling_boost_target=18.0
+    )
 
     temp_calls = [c for c in hass.services.async_call.call_args_list if c[0][1] == "set_temperature"]
     assert any(c[0][2]["temperature"] == 18.0 for c in temp_calls)
@@ -439,7 +448,9 @@ async def test_dynamic_cooling_boost_none_fallback():
         settings={},
         has_external_sensor=True,
     )
-    await ctrl.async_apply("cooling", 23.0, power_fraction=1.0, current_temp=26.0, cooling_boost_target=None)
+    await ctrl.async_apply(
+        "cooling", TargetTemps(heat=23.0, cool=23.0), power_fraction=1.0, current_temp=26.0, cooling_boost_target=None
+    )
 
     temp_calls = [c for c in hass.services.async_call.call_args_list if c[0][1] == "set_temperature"]
     # 26 - 1.0*(26-16) = 16.0
@@ -464,7 +475,13 @@ async def test_dynamic_ac_heating_boost():
         settings={},
         has_external_sensor=True,
     )
-    await ctrl.async_apply("heating", 21.0, power_fraction=1.0, current_temp=20.0, ac_heating_boost_target=28.0)
+    await ctrl.async_apply(
+        "heating",
+        TargetTemps(heat=21.0, cool=21.0),
+        power_fraction=1.0,
+        current_temp=20.0,
+        ac_heating_boost_target=28.0,
+    )
 
     temp_calls = [c for c in hass.services.async_call.call_args_list if c[0][1] == "set_temperature"]
     assert any(c[0][2]["temperature"] == 28.0 for c in temp_calls)

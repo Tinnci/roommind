@@ -53,8 +53,6 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-_SENTINEL: object = object()  # default marker for backward-compat keyword detection
-
 # Cache of last successfully sent command per climate entity.
 # Fallback for IR devices that don't report temperature attributes.
 # Persists across MPCController instances (created fresh each 30s cycle),
@@ -822,24 +820,9 @@ class MPCController:
     async def async_evaluate(
         self,
         current_temp: float | None,
-        targets: TargetTemps | float | None = None,
-        *,
-        target_temp: float | None | object = _SENTINEL,
+        targets: TargetTemps,
     ) -> tuple[str, float]:
-        """Evaluate what action to take. Returns (mode, power_fraction).
-
-        Accepts TargetTemps for dual heat/cool targets or a single float
-        for backward compatibility. ``target_temp`` keyword kept for callers
-        that haven't migrated yet.
-        """
-        # Backward compat: accept legacy keyword
-        if target_temp is not _SENTINEL:
-            targets = target_temp  # type: ignore[assignment]
-
-        # Backward compat: single float → TargetTemps(heat=val, cool=val)
-        if not isinstance(targets, TargetTemps):
-            t = targets
-            targets = TargetTemps(heat=t, cool=t) if t is not None else TargetTemps(heat=None, cool=None)
+        """Evaluate dual-target control intent as ``(mode, power_fraction)``."""
 
         if not self.has_external_sensor:
             self.last_airflow_level = 0.0
@@ -1272,12 +1255,11 @@ class MPCController:
     async def async_apply(
         self,
         mode: str,
-        targets: TargetTemps | float | None = None,
+        targets: TargetTemps,
         power_fraction: float = 1.0,
         current_temp: float | None = None,
         exclude_eids: set[str] | None = None,
         *,
-        target_temp: float | None | object = _SENTINEL,
         heating_boost_target: float | None = None,
         ac_heating_boost_target: float | None = None,
         cooling_boost_target: float | None = None,
@@ -1290,17 +1272,7 @@ class MPCController:
         _forced_on = compressor_forced_on or set()
         _forced_off = compressor_forced_off or set()
 
-        # Backward compat: accept legacy keyword
-        if target_temp is not _SENTINEL:
-            targets = target_temp  # type: ignore[assignment]
-
-        # Backward compat: single float → TargetTemps
-        if not isinstance(targets, TargetTemps):
-            t = targets
-            targets = TargetTemps(heat=t, cool=t) if t is not None else TargetTemps(heat=None, cool=None)
-
-        # Store targets for _call delegation (setback idle_action) — must be
-        # after backward-compat conversion so legacy callers get a TargetTemps.
+        # Store targets for _call delegation (setback idle_action).
         self._idle_targets = targets
 
         # Resolve effective target_temp for the current mode

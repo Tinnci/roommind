@@ -35,7 +35,7 @@ async def test_mpc_fallback_to_bangbang():
         settings={},
         has_external_sensor=True,
     )
-    mode, pf = await ctrl.async_evaluate(current_temp=20.9, target_temp=21.0)
+    mode, pf = await ctrl.async_evaluate(current_temp=20.9, targets=TargetTemps(heat=21.0, cool=21.0))
     assert mode == "idle"
     assert pf == 0.0
 
@@ -55,7 +55,7 @@ async def test_bangbang_returns_full_power():
         has_external_sensor=True,
     )
     # Large error in bang-bang mode (low confidence)
-    mode, pf = await ctrl.async_evaluate(current_temp=17.0, target_temp=21.0)
+    mode, pf = await ctrl.async_evaluate(current_temp=17.0, targets=TargetTemps(heat=21.0, cool=21.0))
     assert mode == "heating"
     assert pf == 1.0  # bang-bang: always full power
 

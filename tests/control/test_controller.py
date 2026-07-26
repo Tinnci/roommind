@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from custom_components.roommind.const import TargetTemps
 from custom_components.roommind.control.mpc_controller import (
     MPCController,
 )
@@ -29,7 +30,7 @@ async def test_mpc_evaluate_heats_when_cold():
         settings={"control_mode": "mpc"},
         has_external_sensor=True,
     )
-    mode, pf = await ctrl.async_evaluate(current_temp=17.0, target_temp=21.0)
+    mode, pf = await ctrl.async_evaluate(current_temp=17.0, targets=TargetTemps(heat=21.0, cool=21.0))
     assert mode == "heating"
     assert 0.0 < pf <= 1.0
 
@@ -48,7 +49,7 @@ async def test_mpc_evaluate_idle_at_target():
         settings={"control_mode": "mpc"},
         has_external_sensor=True,
     )
-    mode, pf = await ctrl.async_evaluate(current_temp=21.0, target_temp=21.0)
+    mode, pf = await ctrl.async_evaluate(current_temp=21.0, targets=TargetTemps(heat=21.0, cool=21.0))
     assert mode == "idle"
     assert pf == 0.0
 
@@ -67,7 +68,7 @@ async def test_mpc_managed_mode():
         settings={"control_mode": "mpc"},
         has_external_sensor=False,
     )
-    mode, pf = await ctrl.async_evaluate(current_temp=None, target_temp=21.0)
+    mode, pf = await ctrl.async_evaluate(current_temp=None, targets=TargetTemps(heat=21.0, cool=21.0))
     assert mode == "heating"
     assert pf == 1.0  # managed mode: device self-regulates
 
@@ -86,7 +87,7 @@ async def test_mpc_outdoor_gating():
         settings={"outdoor_cooling_min": 16.0},
         has_external_sensor=True,
     )
-    mode, pf = await ctrl.async_evaluate(current_temp=25.0, target_temp=22.0)
+    mode, pf = await ctrl.async_evaluate(current_temp=25.0, targets=TargetTemps(heat=22.0, cool=22.0))
     assert mode == "idle"
     assert pf == 0.0
 
@@ -105,7 +106,7 @@ async def test_mpc_outdoor_gating_bypassed_by_override():
         settings={"outdoor_cooling_min": 16.0},
         has_external_sensor=True,
     )
-    mode, pf = await ctrl.async_evaluate(current_temp=25.0, target_temp=22.0)
+    mode, pf = await ctrl.async_evaluate(current_temp=25.0, targets=TargetTemps(heat=22.0, cool=22.0))
     assert mode == "cooling"
 
 
@@ -132,7 +133,7 @@ async def test_mpc_path_when_confident():
         settings={"control_mode": "mpc"},
         has_external_sensor=True,
     )
-    mode, pf = await ctrl.async_evaluate(current_temp=17.0, target_temp=21.0)
+    mode, pf = await ctrl.async_evaluate(current_temp=17.0, targets=TargetTemps(heat=21.0, cool=21.0))
     assert mode == "heating"
     assert 0.0 < pf <= 1.0
     model_mgr.get_prediction_std.assert_called_once()
@@ -187,7 +188,7 @@ async def test_mpc_requires_min_updates():
         settings={"control_mode": "mpc"},
         has_external_sensor=True,
     )
-    mode, pf = await ctrl.async_evaluate(current_temp=20.9, target_temp=21.0)
+    mode, pf = await ctrl.async_evaluate(current_temp=20.9, targets=TargetTemps(heat=21.0, cool=21.0))
     assert mode == "idle"  # bang-bang: within hysteresis
     assert pf == 0.0
 
@@ -201,7 +202,7 @@ async def test_mpc_requires_min_updates():
         settings={"control_mode": "mpc"},
         has_external_sensor=True,
     )
-    mode2, pf2 = await ctrl2.async_evaluate(current_temp=20.9, target_temp=21.0)
+    mode2, pf2 = await ctrl2.async_evaluate(current_temp=20.9, targets=TargetTemps(heat=21.0, cool=21.0))
     assert mode2 == "idle"  # still bang-bang
     assert pf2 == 0.0
 
@@ -215,7 +216,7 @@ async def test_mpc_requires_min_updates():
         settings={"control_mode": "mpc"},
         has_external_sensor=True,
     )
-    mode3, pf3 = await ctrl3.async_evaluate(current_temp=20.9, target_temp=21.0)
+    mode3, pf3 = await ctrl3.async_evaluate(current_temp=20.9, targets=TargetTemps(heat=21.0, cool=21.0))
     assert mode3 == "heating"  # MPC: optimizer decides to heat proactively
     assert 0.0 < pf3 <= 1.0
 
