@@ -350,6 +350,36 @@ async def test_turn_off_climate_dual_mode_without_off_uses_current_mode_boundary
 
 
 @pytest.mark.asyncio
+async def test_turn_off_climate_range_without_off_uses_widest_neutral_band():
+    """A heat-cool range idles by widening the band instead of collapsing it."""
+    hass = build_hass()
+    state = MagicMock()
+    state.state = "heat_cool"
+    state.attributes = {
+        "hvac_modes": ["heat_cool"],
+        "min_temp": 5.0,
+        "max_temp": 30.0,
+        "target_temp_low": 20.0,
+        "target_temp_high": 24.0,
+    }
+    hass.states.get = MagicMock(return_value=state)
+
+    await async_turn_off_climate(hass, "climate.range")
+
+    hass.services.async_call.assert_called_once_with(
+        "climate",
+        "set_temperature",
+        {
+            "entity_id": "climate.range",
+            "target_temp_low": 5.0,
+            "target_temp_high": 30.0,
+        },
+        blocking=True,
+        context=ANY,
+    )
+
+
+@pytest.mark.asyncio
 async def test_turn_off_climate_already_off_skipped():
     """Device already in 'off' state: call is skipped."""
     hass = build_hass()
