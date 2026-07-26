@@ -9,7 +9,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from custom_components.roommind.const import MAX_SENSOR_STALENESS, MODE_IDLE
+from custom_components.roommind.control.solar import SolarExposure
 from custom_components.roommind.control.thermal_model import TemperatureObservation
+from custom_components.roommind.coordinator import HumiditySensorSnapshot, RoomSensorSnapshot
+from custom_components.roommind.managers.environmental_factor_manager import AirflowFactors
 
 from .conftest import (
     MANAGED_ROOM,
@@ -108,16 +111,21 @@ async def test_observe_and_train_uses_calibrated_temperature_observations(hass, 
         area_id="living_room_abc12345",
         room=SAMPLE_ROOM,
         settings={},
-        current_temp_raw=20.0,
-        temperature_observations=raw_observations,
+        sensor_snapshot=RoomSensorSnapshot(
+            current_temp=20.0,
+            current_temp_raw=20.0,
+            humidity=HumiditySensorSnapshot(value=None),
+            has_external_sensor=True,
+            temperature_observations=raw_observations,
+        ),
+        airflow=AirflowFactors(),
+        solar_exposure=SolarExposure(raw_solar=0.0),
         mode="heating",
         power_fraction=0.5,
         window_open=False,
         raw_open=False,
         q_residual=0.0,
-        shading_factor=1.0,
         q_occupancy=0.0,
-        has_external_sensor=True,
         heat_source_plan=None,
         climate_active=True,
     )

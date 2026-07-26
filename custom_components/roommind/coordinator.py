@@ -1541,18 +1541,15 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             area_id=area_id,
             room=room,
             settings=settings,
-            current_temp_raw=current_temp_raw,
-            temperature_observations=temperature_observations,
+            sensor_snapshot=sensor_snapshot,
+            airflow=airflow,
+            solar_exposure=solar_exposure,
             mode=mode,
             power_fraction=power_fraction,
             window_open=window_open,
             raw_open=raw_open,
             q_residual=q_residual,
-            shading_factor=shading_factor,
             q_occupancy=q_occupancy,
-            q_fan_mix=airflow.q_fan_mix,
-            q_vent=airflow.q_vent,
-            has_external_sensor=has_external_sensor,
             heat_source_plan=heat_source_plan,
             climate_active=climate_active,
         )
@@ -1602,18 +1599,15 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         area_id: str,
         room: dict,
         settings: dict,
-        current_temp_raw: float | None,
-        temperature_observations: list[TemperatureObservation],
+        sensor_snapshot: RoomSensorSnapshot,
+        airflow: AirflowFactors,
+        solar_exposure: SolarExposure,
         mode: str,
         power_fraction: float,
         window_open: bool,
         raw_open: bool,
         q_residual: float,
-        shading_factor: float | None,
         q_occupancy: float,
-        q_fan_mix: float = 0.0,
-        q_vent: float = 0.0,
-        has_external_sensor: bool,
         heat_source_plan: Any | None,
         climate_active: bool,
     ) -> tuple[str, float]:
@@ -1621,6 +1615,10 @@ class RoomMindCoordinator(DataUpdateCoordinator):
 
         Returns (display_mode, display_pf).
         """
+        current_temp_raw = sensor_snapshot.current_temp_raw
+        temperature_observations = sensor_snapshot.temperature_observations
+        has_external_sensor = sensor_snapshot.has_external_sensor
+
         # observed_mode/observed_pf: only populated when climate control is off
         observed_mode: str | None = None
         observed_pf = 0.0
@@ -1727,7 +1725,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 temperature_observations,
                 mode=ekf_mode or MODE_IDLE,
                 power_fraction=ekf_pf,
-                q_fan_mix=q_fan_mix,
+                q_fan_mix=airflow.q_fan_mix,
             )
             self._ekf_training.process(
                 area_id=area_id,
@@ -1739,13 +1737,13 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 window_open=window_open,
                 raw_open=raw_open,
                 q_residual=q_residual_training,
-                shading_factor=shading_factor if shading_factor is not None else 0.0,
+                shading_factor=solar_exposure.shading_factor,
                 q_solar=self._current_q_solar,
                 can_heat=can_heat,
                 can_cool=can_cool,
                 dt_minutes=UPDATE_INTERVAL / 60.0,
                 q_occupancy=q_occupancy,
-                q_vent=q_vent,
+                q_vent=airflow.q_vent,
             )
         else:
             self._ekf_training.clear(area_id)
