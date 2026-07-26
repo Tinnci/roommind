@@ -122,6 +122,34 @@ def _should_use_cache(state: Any) -> bool:
     return state.state in ("unavailable", "unknown")
 
 
+def _command_payload_matches(observed: dict[str, Any], service: str, desired: dict[str, Any]) -> bool:
+    """Return whether observed state already represents a desired command."""
+    if service == "set_hvac_mode":
+        return observed.get("hvac_mode") == desired.get("hvac_mode")
+    if service != "set_temperature":
+        return False
+    if "target_temp_low" in desired:
+        observed_low = observed.get("target_temp_low")
+        observed_high = observed.get("target_temp_high")
+        desired_low = desired.get("target_temp_low")
+        desired_high = desired.get("target_temp_high")
+        return (
+            observed_low is not None
+            and desired_low is not None
+            and observed_high is not None
+            and desired_high is not None
+            and round(observed_low, 1) == round(desired_low, 1)
+            and round(observed_high, 1) == round(desired_high, 1)
+        )
+    observed_temp = observed.get("temperature")
+    desired_temp = desired.get("temperature")
+    return (
+        observed_temp is not None
+        and desired_temp is not None
+        and round(observed_temp, 1) == round(desired_temp, 1)
+    )
+
+
 def _snap_to_step(value: float, step: float | None) -> float:
     if step is None or step <= 0:
         return value
@@ -1913,58 +1941,23 @@ class MPCController:
                     data = {**data, "target_temp_high": hi}
 
         # --- Redundancy: primary (device state) then fallback (sent cache) ---
-        skip = False
-        if state:
-            if service == "set_hvac_mode" and state.state == data.get("hvac_mode"):
-                skip = True
-            elif service == "set_temperature":
-                if "target_temp_low" in data:
-                    cur_low = state.attributes.get("target_temp_low")
-                    cur_high = state.attributes.get("target_temp_high")
-                    des_low = data.get("target_temp_low")
-                    des_high = data.get("target_temp_high")
-                    if (
-                        cur_low is not None
-                        and des_low is not None
-                        and cur_high is not None
-                        and des_high is not None
-                        and round(cur_low, 1) == round(des_low, 1)
-                        and round(cur_high, 1) == round(des_high, 1)
-                    ):
-                        skip = True
-                else:
-                    current = state.attributes.get("temperature")
-                    desired = data.get("temperature")
-                    if current is not None and desired is not None and round(current, 1) == round(desired, 1):
-                        skip = True
+        skip = bool(
+            state
+            and _command_payload_matches(
+                {**state.attributes, "hvac_mode": state.state},
+                service,
+                data,
+            )
+        )
 
         # Fallback: check sent-command cache (for IR devices without state feedback)
         if not skip and eid and _should_use_cache(state):
             cached = _last_commands.get(eid)
-            if cached is not None and cached.get("service") == service:
-                if service == "set_hvac_mode":
-                    if cached.get("hvac_mode") == data.get("hvac_mode"):
-                        skip = True
-                elif service == "set_temperature":
-                    if "target_temp_low" in data:
-                        c_low = cached.get("target_temp_low")
-                        c_high = cached.get("target_temp_high")
-                        d_low = data.get("target_temp_low")
-                        d_high = data.get("target_temp_high")
-                        if (
-                            c_low is not None
-                            and d_low is not None
-                            and c_high is not None
-                            and d_high is not None
-                            and round(c_low, 1) == round(d_low, 1)
-                            and round(c_high, 1) == round(d_high, 1)
-                        ):
-                            skip = True
-                    else:
-                        c_temp = cached.get("temperature")
-                        d_temp = data.get("temperature")
-                        if c_temp is not None and d_temp is not None and round(c_temp, 1) == round(d_temp, 1):
-                            skip = True
+            skip = bool(
+                cached
+                and cached.get("service") == service
+                and _command_payload_matches(cached, service, data)
+            )
 
         if skip:
             return
