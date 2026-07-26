@@ -80,17 +80,21 @@ class AppliedCommandReport:
 
 
 @dataclass(frozen=True, slots=True)
-class HeatSourceApplyContext:
-    """Resolved controller inputs consumed by heat-source command routing."""
+class DeviceApplyContext:
+    """Resolved controller inputs shared by climate-device strategies."""
 
+    mode: str
     targets: TargetTemps
     current_temp: float | None
     effective_target: float
+    power_fraction: float
+    thermostats: tuple[str, ...]
     excluded: frozenset[str]
     forced_on: frozenset[str]
     forced_off: frozenset[str]
     trv_heat_boost: float
     ac_heat_boost: float
+    ac_cool_boost: float
 
 
 def _cache_entry(service: str, data: dict) -> dict[str, Any]:
@@ -1268,10 +1272,7 @@ class MPCController:
 
     async def _async_apply_managed_auto(
         self,
-        mode: str,
-        targets: TargetTemps,
-        thermostats: list[str],
-        forced_off: set[str],
+        context: DeviceApplyContext,
         *,
         can_heat: bool,
         can_cool: bool,
@@ -1282,6 +1283,10 @@ class MPCController:
         mode. Devices without range mode fall back to a gated single direction.
         """
         report = AppliedCommandReport()
+        mode = context.mode
+        targets = context.targets
+        thermostats = context.thermostats
+        forced_off = context.forced_off
         ha_heat_target = celsius_to_ha_temp(self.hass, targets.heat) if targets.heat is not None else None
         ha_cool_target = celsius_to_ha_temp(self.hass, targets.cool) if targets.cool is not None else None
         selected_target = ha_cool_target if mode == MODE_COOLING else ha_heat_target
@@ -1388,7 +1393,7 @@ class MPCController:
     async def _async_apply_heat_source_plan(
         self,
         plan: HeatSourcePlan,
-        context: HeatSourceApplyContext,
+        context: DeviceApplyContext,
     ) -> AppliedCommandReport:
         """Route heating commands through an explicit heat-source plan."""
         report = AppliedCommandReport()
@@ -1523,6 +1528,188 @@ class MPCController:
                 report.mark_inactive(cmd.entity_id)
         return report
 
+    async def _async_apply_standard(self, context: DeviceApplyContext) -> AppliedCommandReport:
+        """Apply the standard heating, cooling, or idle device strategy."""
+        report = AppliedCommandReport()
+        mode = context.mode
+        targets = context.targets
+
+        if mode == MODE_HEATING:
+            if self.has_external_sensor and context.current_temp is not None:
+                trv_target = round(
+                    context.current_temp
+                    + context.power_fraction * (context.trv_heat_boost - context.current_temp),
+                    1,
+                )
+                trv_target = max(context.effective_target, trv_target)
+                trv_target = min(context.trv_heat_boost, trv_target)
+            else:
+                trv_target = (
+                    context.trv_heat_boost if self.has_external_sensor else context.effective_target
+                )
+            ha_trv = celsius_to_ha_temp(self.hass, trv_target)
+            ha_trv_direct = celsius_to_ha_temp(self.hass, context.effective_target)
+            for eid in context.thermostats:
+                if eid in context.forced_off:
+                    await async_idle_device(
+                        self.hass,
+                        eid,
+                        self._devices,
+                        area_id=self._area_id,
+                        targets=targets,
+                    )
+                    report.mark_inactive(eid)
+                    continue
+                ha_t = ha_trv_direct if eid in self._direct_eids else ha_trv
+                await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "heat"})
+                await self._call(
+                    "set_temperature",
+                    {"entity_id": eid, "temperature": ha_t, "hvac_mode": "heat"},
+                    temp_intent="heat",
+                )
+                report.mark_active(eid)
+
+            if self.has_external_sensor and context.current_temp is not None:
+                ac_heat_target = round(
+                    context.current_temp
+                    + context.power_fraction * (context.ac_heat_boost - context.current_temp),
+                    1,
+                )
+                ac_heat_target = max(context.effective_target, ac_heat_target)
+                ac_heat_target = min(context.ac_heat_boost, ac_heat_target)
+            else:
+                ac_heat_target = context.effective_target
+            ha_ac_target = celsius_to_ha_temp(self.hass, ac_heat_target)
+            ha_ac_direct = celsius_to_ha_temp(self.hass, context.effective_target)
+            for eid in self.acs:
+                if eid in context.forced_off:
+                    await async_idle_device(
+                        self.hass,
+                        eid,
+                        self._devices,
+                        area_id=self._area_id,
+                        targets=targets,
+                    )
+                    report.mark_inactive(eid)
+                    continue
+                ha_t = ha_ac_direct if eid in self._direct_eids else ha_ac_target
+                ac_state = self.hass.states.get(eid)
+                ac_modes = _effective_ac_modes(ac_state)
+                if "heat" in ac_modes:
+                    ac_mode = "heat"
+                elif "heat_cool" in ac_modes:
+                    ac_mode = "heat_cool"
+                elif "auto" in ac_modes:
+                    ac_mode = "auto"
+                else:
+                    ac_mode = ""
+                if ac_mode:
+                    await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": ac_mode})
+                    await self._call(
+                        "set_temperature",
+                        {"entity_id": eid, "temperature": ha_t, "hvac_mode": ac_mode},
+                        temp_intent="heat",
+                    )
+                    report.mark_active(eid)
+                else:
+                    await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "off"})
+                    report.mark_inactive(eid)
+        elif mode == MODE_COOLING:
+            if self.has_external_sensor and context.current_temp is not None:
+                ac_cool_target = round(
+                    context.current_temp
+                    - context.power_fraction * (context.current_temp - context.ac_cool_boost),
+                    1,
+                )
+                ac_cool_target = max(context.ac_cool_boost, ac_cool_target)
+                ac_cool_target = min(context.effective_target, ac_cool_target)
+            else:
+                ac_cool_target = context.effective_target
+            ha_target = celsius_to_ha_temp(self.hass, ac_cool_target)
+            ha_cool_direct = celsius_to_ha_temp(self.hass, context.effective_target)
+            for eid in self.acs:
+                if eid in context.forced_off:
+                    await async_idle_device(
+                        self.hass,
+                        eid,
+                        self._devices,
+                        area_id=self._area_id,
+                        targets=targets,
+                    )
+                    report.mark_inactive(eid)
+                    continue
+                ha_t = ha_cool_direct if eid in self._direct_eids else ha_target
+                await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "cool"})
+                await self._call(
+                    "set_temperature",
+                    {"entity_id": eid, "temperature": ha_t, "hvac_mode": "cool"},
+                    temp_intent="cool",
+                )
+                report.mark_active(eid)
+            for eid in context.thermostats:
+                if eid in context.forced_off:
+                    await async_idle_device(
+                        self.hass,
+                        eid,
+                        self._devices,
+                        area_id=self._area_id,
+                        targets=targets,
+                    )
+                    report.mark_inactive(eid)
+                    continue
+                await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "off"})
+                report.mark_inactive(eid)
+        elif mode == MODE_IDLE:
+            for eid in (*context.thermostats, *self.acs):
+                if eid in context.forced_on:
+                    dev_state = self.hass.states.get(eid)
+                    current_hvac = dev_state.state if dev_state else None
+                    if current_hvac == "heat" and targets.heat is not None:
+                        ha_t = celsius_to_ha_temp(self.hass, targets.heat)
+                        await self._call(
+                            "set_temperature",
+                            {"entity_id": eid, "temperature": ha_t, "hvac_mode": "heat"},
+                            temp_intent="heat",
+                        )
+                    elif current_hvac == "cool" and targets.cool is not None:
+                        ha_t = celsius_to_ha_temp(self.hass, targets.cool)
+                        await self._call(
+                            "set_temperature",
+                            {"entity_id": eid, "temperature": ha_t, "hvac_mode": "cool"},
+                            temp_intent="cool",
+                        )
+                    elif current_hvac in ("heat_cool", "auto"):
+                        if targets.heat is not None:
+                            ha_t = celsius_to_ha_temp(self.hass, targets.heat)
+                            await self._call(
+                                "set_temperature",
+                                {"entity_id": eid, "temperature": ha_t, "hvac_mode": current_hvac},
+                                temp_intent="heat",
+                            )
+                        elif targets.cool is not None:
+                            ha_t = celsius_to_ha_temp(self.hass, targets.cool)
+                            await self._call(
+                                "set_temperature",
+                                {"entity_id": eid, "temperature": ha_t, "hvac_mode": current_hvac},
+                                temp_intent="cool",
+                            )
+                    _LOGGER.debug(
+                        "Area '%s': keeping '%s' active (compressor min-run protection)",
+                        self._area_id,
+                        eid,
+                    )
+                    report.mark_active(eid)
+                    continue
+                await async_idle_device(
+                    self.hass,
+                    eid,
+                    self._devices,
+                    area_id=self._area_id,
+                    targets=targets,
+                )
+                report.mark_inactive(eid)
+        return report
+
     async def async_apply(
         self,
         mode: str,
@@ -1569,6 +1756,20 @@ class MPCController:
 
         _exclude = exclude_eids or set()
         thermostats = [e for e in self.thermostats if e not in _exclude]
+        apply_context = DeviceApplyContext(
+            mode=mode,
+            targets=targets,
+            current_temp=current_temp,
+            effective_target=effective_target,
+            power_fraction=power_fraction,
+            thermostats=tuple(thermostats),
+            excluded=frozenset(_exclude),
+            forced_on=frozenset(_forced_on),
+            forced_off=frozenset(_forced_off),
+            trv_heat_boost=trv_heat_boost,
+            ac_heat_boost=ac_heat_boost,
+            ac_cool_boost=ac_cool_boost,
+        )
 
         # Managed mode (no external sensor) with auto climate mode and
         # both device types: activate each device in its natural mode so
@@ -1579,175 +1780,15 @@ class MPCController:
             and mode != MODE_IDLE
         ):
             return await self._async_apply_managed_auto(
-                mode,
-                targets,
-                thermostats,
-                _forced_off,
+                apply_context,
                 can_heat=can_heat,
                 can_cool=can_cool,
             )
 
         if mode == MODE_HEATING and heat_source_plan is not None:
-            return await self._async_apply_heat_source_plan(
-                heat_source_plan,
-                HeatSourceApplyContext(
-                    targets=targets,
-                    current_temp=current_temp,
-                    effective_target=effective_target,
-                    excluded=frozenset(_exclude),
-                    forced_on=frozenset(_forced_on),
-                    forced_off=frozenset(_forced_off),
-                    trv_heat_boost=trv_heat_boost,
-                    ac_heat_boost=ac_heat_boost,
-                ),
-            )
+            return await self._async_apply_heat_source_plan(heat_source_plan, apply_context)
 
-        report = AppliedCommandReport()
-        if mode == MODE_HEATING:
-            # Proportional TRV setpoint for Full Control mode
-            if self.has_external_sensor and current_temp is not None:
-                trv_target = round(
-                    current_temp + power_fraction * (trv_heat_boost - current_temp),
-                    1,
-                )
-                # Floor: never below target (TRV must always aim to heat toward target)
-                trv_target = max(effective_target, trv_target)
-                # Ceiling: never above boost target
-                trv_target = min(trv_heat_boost, trv_target)
-            else:
-                trv_target = trv_heat_boost if self.has_external_sensor else effective_target
-            ha_trv = celsius_to_ha_temp(self.hass, trv_target)
-            ha_trv_direct = celsius_to_ha_temp(self.hass, effective_target)
-            for eid in thermostats:
-                if eid in _forced_off:
-                    await async_idle_device(self.hass, eid, self._devices, area_id=self._area_id, targets=targets)
-                    report.mark_inactive(eid)
-                    continue
-                ha_t = ha_trv_direct if eid in self._direct_eids else ha_trv
-                await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "heat"})
-                await self._call(
-                    "set_temperature",
-                    {"entity_id": eid, "temperature": ha_t, "hvac_mode": "heat"},
-                    temp_intent="heat",
-                )
-                report.mark_active(eid)
-            # ACs: proportional setpoint in Full Control, actual target otherwise
-            if self.has_external_sensor and current_temp is not None:
-                ac_heat_target = round(
-                    current_temp + power_fraction * (ac_heat_boost - current_temp),
-                    1,
-                )
-                ac_heat_target = max(effective_target, ac_heat_target)
-                ac_heat_target = min(ac_heat_boost, ac_heat_target)
-            else:
-                ac_heat_target = effective_target
-            ha_ac_target = celsius_to_ha_temp(self.hass, ac_heat_target)
-            ha_ac_direct = celsius_to_ha_temp(self.hass, effective_target)
-            for eid in self.acs:
-                if eid in _forced_off:
-                    await async_idle_device(self.hass, eid, self._devices, area_id=self._area_id, targets=targets)
-                    report.mark_inactive(eid)
-                    continue
-                ha_t = ha_ac_direct if eid in self._direct_eids else ha_ac_target
-                ac_state = self.hass.states.get(eid)
-                ac_modes = _effective_ac_modes(ac_state)
-                if "heat" in ac_modes:
-                    ac_mode = "heat"
-                elif "heat_cool" in ac_modes:
-                    ac_mode = "heat_cool"
-                elif "auto" in ac_modes:
-                    ac_mode = "auto"
-                else:
-                    ac_mode = ""
-                if ac_mode:
-                    await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": ac_mode})
-                    await self._call(
-                        "set_temperature",
-                        {"entity_id": eid, "temperature": ha_t, "hvac_mode": ac_mode},
-                        temp_intent="heat",
-                    )
-                    report.mark_active(eid)
-                else:
-                    await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "off"})
-                    report.mark_inactive(eid)
-        elif mode == MODE_COOLING:
-            if self.has_external_sensor and current_temp is not None:
-                ac_cool_target = round(
-                    current_temp - power_fraction * (current_temp - ac_cool_boost),
-                    1,
-                )
-                ac_cool_target = max(ac_cool_boost, ac_cool_target)
-                ac_cool_target = min(effective_target, ac_cool_target)
-            else:
-                ac_cool_target = effective_target
-            ha_target = celsius_to_ha_temp(self.hass, ac_cool_target)
-            ha_cool_direct = celsius_to_ha_temp(self.hass, effective_target)
-            for eid in self.acs:
-                if eid in _forced_off:
-                    await async_idle_device(self.hass, eid, self._devices, area_id=self._area_id, targets=targets)
-                    report.mark_inactive(eid)
-                    continue
-                ha_t = ha_cool_direct if eid in self._direct_eids else ha_target
-                await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "cool"})
-                await self._call(
-                    "set_temperature",
-                    {"entity_id": eid, "temperature": ha_t, "hvac_mode": "cool"},
-                    temp_intent="cool",
-                )
-                report.mark_active(eid)
-            for eid in thermostats:
-                if eid in _forced_off:
-                    await async_idle_device(self.hass, eid, self._devices, area_id=self._area_id, targets=targets)
-                    report.mark_inactive(eid)
-                    continue
-                await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "off"})
-                report.mark_inactive(eid)
-        elif mode == MODE_IDLE:
-            for eid in thermostats + self.acs:
-                if eid in _forced_on:
-                    # Compressor min-run: set target temp so device self-regulates
-                    # instead of overshooting at the old boost setpoint.
-                    dev_state = self.hass.states.get(eid)
-                    current_hvac = dev_state.state if dev_state else None
-                    if current_hvac == "heat" and targets.heat is not None:
-                        ha_t = celsius_to_ha_temp(self.hass, targets.heat)
-                        await self._call(
-                            "set_temperature",
-                            {"entity_id": eid, "temperature": ha_t, "hvac_mode": "heat"},
-                            temp_intent="heat",
-                        )
-                    elif current_hvac == "cool" and targets.cool is not None:
-                        ha_t = celsius_to_ha_temp(self.hass, targets.cool)
-                        await self._call(
-                            "set_temperature",
-                            {"entity_id": eid, "temperature": ha_t, "hvac_mode": "cool"},
-                            temp_intent="cool",
-                        )
-                    elif current_hvac in ("heat_cool", "auto"):
-                        if targets.heat is not None:
-                            ha_t = celsius_to_ha_temp(self.hass, targets.heat)
-                            await self._call(
-                                "set_temperature",
-                                {"entity_id": eid, "temperature": ha_t, "hvac_mode": current_hvac},
-                                temp_intent="heat",
-                            )
-                        elif targets.cool is not None:
-                            ha_t = celsius_to_ha_temp(self.hass, targets.cool)
-                            await self._call(
-                                "set_temperature",
-                                {"entity_id": eid, "temperature": ha_t, "hvac_mode": current_hvac},
-                                temp_intent="cool",
-                            )
-                    _LOGGER.debug(
-                        "Area '%s': keeping '%s' active (compressor min-run protection)",
-                        self._area_id,
-                        eid,
-                    )
-                    report.mark_active(eid)
-                    continue
-                await async_idle_device(self.hass, eid, self._devices, area_id=self._area_id, targets=targets)
-                report.mark_inactive(eid)
-        return report
+        return await self._async_apply_standard(apply_context)
 
     async def _call(self, service: str, data: dict, *, temp_intent: str = "") -> None:
         eid = data.get("entity_id")
