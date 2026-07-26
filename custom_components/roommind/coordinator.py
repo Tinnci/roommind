@@ -343,90 +343,14 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         store = self.hass.data[DOMAIN]["store"]
         rooms = store.get_rooms()
 
-        # Read outdoor sensors from global settings
         settings = store.get_settings()
-        outdoor_sensor_id = settings.get("outdoor_temp_sensor")
-        raw_outdoor = read_sensor_value(self.hass, outdoor_sensor_id, "global", "outdoor temperature")
-        self.outdoor_temp = (
-            ha_temp_to_celsius(self.hass, raw_outdoor, entity_id=outdoor_sensor_id) if raw_outdoor is not None else None
-        )
-        self.outdoor_humidity = read_sensor_value(
-            self.hass, settings.get("outdoor_humidity_sensor"), "global", "outdoor humidity"
-        )
-
-        # Effective outdoor temperature: sensor → weather entity → none.
-        # The EKF must not train with a degenerate fallback (e.g. room temp);
-        # see _async_process_room where this gates EKF updates.
-        self.outdoor_temp_effective, self.outdoor_temp_source = self._resolve_outdoor_temp(settings)
-        self._update_outdoor_unavailable_notification(settings)
-
-        # Load compressor groups from settings (every cycle, cheap)
+        self._read_outdoor_environment(settings)
         self._compressor_manager.load_groups(settings.get("compressor_groups", []))
+        self._ensure_runtime_state(store, settings)
+        self._begin_observation_cycle(settings)
 
-        # Load thermal model and valve actuation data from store (once)
-        if not self._model_loaded:
-            thermal_data = store.get_thermal_data()
-            if thermal_data:
-                model_data = thermal_data.get("models", thermal_data) if isinstance(thermal_data, dict) else {}
-                if isinstance(model_data, dict):
-                    self._model_manager = RoomModelManager.from_dict(model_data)
-                self._ekf_training.set_model_manager(self._model_manager)
-                self._cover_orchestrator.set_model_manager(self._model_manager)
-                if isinstance(thermal_data, dict):
-                    self._sensor_fusion = SensorFusionManager.from_dict(thermal_data.get("sensor_biases", {}))
-            self._valve_manager.load_actuation_data(settings.get("valve_last_actuation", {}))
-            self._model_loaded = True
-
-        # Initialize history store (once)
-        if self._history_store is None:
-            self._history_store = HistoryStore(self.hass.config.path(".storage/roommind_history"))
-        if self._observation_store is None:
-            self._observation_store = ObservationStore(
-                self.hass.config.path(".storage/roommind_observations.sqlite"),
-                raw_retention_days=RAW_OBSERVATION_RETENTION_DAYS,
-                interval_retention_days=OBSERVATION_INTERVAL_RETENTION_DAYS,
-                summary_retention_days=OBSERVED_SUMMARY_RETENTION_DAYS,
-                episode_retention_days=THERMAL_EPISODE_RETENTION_DAYS,
-            )
-        self._raw_observation_buffer = []
-        self._record_raw_state_observation(
-            "global",
-            outdoor_sensor_id,
-            "outdoor_temperature",
-            self.hass.states.get(outdoor_sensor_id) if outdoor_sensor_id else None,
-            is_primary=True,
-        )
-        outdoor_humidity_sensor_id = settings.get("outdoor_humidity_sensor")
-        self._record_raw_state_observation(
-            "global",
-            outdoor_humidity_sensor_id,
-            "outdoor_humidity",
-            self.hass.states.get(outdoor_humidity_sensor_id) if outdoor_humidity_sensor_id else None,
-            is_primary=True,
-        )
-
+        outdoor_forecast = await self._async_update_weather_environment(settings)
         room_states: dict[str, dict] = {}
-
-        # Read weather forecast once for all rooms
-        outdoor_forecast = await self._weather_manager.async_read_forecast(settings)
-
-        # Update cover orchestrator with cloud forecast for solar trajectory prediction
-        self._cover_orchestrator.set_cloud_series(WeatherManager.extract_cloud_series(outdoor_forecast))
-
-        # Compute solar irradiance once per cycle
-        cloud_coverage = None
-        weather_entity = settings.get("weather_entity")
-        if weather_entity:
-            ws = self.hass.states.get(weather_entity)
-            if ws:
-                cloud_coverage = ws.attributes.get("cloud_coverage")
-        self._current_q_solar = compute_q_solar_norm(
-            self.hass.config.latitude,
-            self.hass.config.longitude,
-            time.time(),
-            cloud_coverage,
-        )
-
         for area_id, room in rooms.items():
             try:
                 room_state = await self._async_process_room(room, settings, outdoor_forecast)
@@ -435,8 +359,6 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 _LOGGER.exception("Room '%s': processing failed, skipping", area_id)
 
         self._update_room_couplings(rooms, room_states)
-
-        # Control master devices based on aggregate room demand
         await self._async_control_master_devices(room_states, rooms, settings)
 
         if self._observation_store and self._raw_observation_buffer:
@@ -465,6 +387,88 @@ class RoomMindCoordinator(DataUpdateCoordinator):
 
         self.rooms = room_states
         return {"rooms": room_states}
+
+    def _read_outdoor_environment(self, settings: dict) -> None:
+        """Read configured outdoor sensors and resolve the effective temperature."""
+        outdoor_sensor_id = settings.get("outdoor_temp_sensor")
+        raw_outdoor = read_sensor_value(self.hass, outdoor_sensor_id, "global", "outdoor temperature")
+        self.outdoor_temp = (
+            ha_temp_to_celsius(self.hass, raw_outdoor, entity_id=outdoor_sensor_id) if raw_outdoor is not None else None
+        )
+        self.outdoor_humidity = read_sensor_value(
+            self.hass,
+            settings.get("outdoor_humidity_sensor"),
+            "global",
+            "outdoor humidity",
+        )
+        # Do not train the EKF with a degenerate fallback such as room temperature.
+        self.outdoor_temp_effective, self.outdoor_temp_source = self._resolve_outdoor_temp(settings)
+        self._update_outdoor_unavailable_notification(settings)
+
+    def _ensure_runtime_state(self, store: RoomMindStore, settings: dict) -> None:
+        """Restore learned state and initialize local persistence once."""
+        if not self._model_loaded:
+            thermal_data = store.get_thermal_data()
+            if thermal_data:
+                model_data = thermal_data.get("models", thermal_data) if isinstance(thermal_data, dict) else {}
+                if isinstance(model_data, dict):
+                    self._model_manager = RoomModelManager.from_dict(model_data)
+                self._ekf_training.set_model_manager(self._model_manager)
+                self._cover_orchestrator.set_model_manager(self._model_manager)
+                if isinstance(thermal_data, dict):
+                    self._sensor_fusion = SensorFusionManager.from_dict(thermal_data.get("sensor_biases", {}))
+            self._valve_manager.load_actuation_data(settings.get("valve_last_actuation", {}))
+            self._model_loaded = True
+
+        if self._history_store is None:
+            self._history_store = HistoryStore(self.hass.config.path(".storage/roommind_history"))
+        if self._observation_store is None:
+            self._observation_store = ObservationStore(
+                self.hass.config.path(".storage/roommind_observations.sqlite"),
+                raw_retention_days=RAW_OBSERVATION_RETENTION_DAYS,
+                interval_retention_days=OBSERVATION_INTERVAL_RETENTION_DAYS,
+                summary_retention_days=OBSERVED_SUMMARY_RETENTION_DAYS,
+                episode_retention_days=THERMAL_EPISODE_RETENTION_DAYS,
+            )
+
+    def _begin_observation_cycle(self, settings: dict) -> None:
+        """Reset the raw buffer and capture global sensor observations."""
+        self._raw_observation_buffer = []
+        outdoor_sensor_id = settings.get("outdoor_temp_sensor")
+        self._record_raw_state_observation(
+            "global",
+            outdoor_sensor_id,
+            "outdoor_temperature",
+            self.hass.states.get(outdoor_sensor_id) if outdoor_sensor_id else None,
+            is_primary=True,
+        )
+        outdoor_humidity_sensor_id = settings.get("outdoor_humidity_sensor")
+        self._record_raw_state_observation(
+            "global",
+            outdoor_humidity_sensor_id,
+            "outdoor_humidity",
+            self.hass.states.get(outdoor_humidity_sensor_id) if outdoor_humidity_sensor_id else None,
+            is_primary=True,
+        )
+
+    async def _async_update_weather_environment(self, settings: dict) -> list[dict]:
+        """Refresh forecast, cover cloud inputs, and current solar irradiance."""
+        outdoor_forecast = await self._weather_manager.async_read_forecast(settings)
+        self._cover_orchestrator.set_cloud_series(WeatherManager.extract_cloud_series(outdoor_forecast))
+
+        cloud_coverage = None
+        weather_entity = settings.get("weather_entity")
+        if weather_entity:
+            ws = self.hass.states.get(weather_entity)
+            if ws:
+                cloud_coverage = ws.attributes.get("cloud_coverage")
+        self._current_q_solar = compute_q_solar_norm(
+            self.hass.config.latitude,
+            self.hass.config.longitude,
+            time.time(),
+            cloud_coverage,
+        )
+        return outdoor_forecast
 
     async def _async_record_history(
         self,
