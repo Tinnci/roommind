@@ -18,15 +18,15 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.14"
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v9
         with:
           enable-cache: true
 
@@ -34,7 +34,7 @@ jobs:
         run: uv sync --locked --group dev
 
       - name: Restore mutmut cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: mutants/
           key: mutmut-${{ hashFiles('custom_components/**/*.py') }}
