@@ -143,11 +143,7 @@ def _command_payload_matches(observed: dict[str, Any], service: str, desired: di
         )
     observed_temp = observed.get("temperature")
     desired_temp = desired.get("temperature")
-    return (
-        observed_temp is not None
-        and desired_temp is not None
-        and round(observed_temp, 1) == round(desired_temp, 1)
-    )
+    return observed_temp is not None and desired_temp is not None and round(observed_temp, 1) == round(desired_temp, 1)
 
 
 def _snap_to_step(value: float, step: float | None) -> float:
@@ -170,11 +166,7 @@ def _normalize_temperature_payload(state: Any, data: dict[str, Any], temp_intent
         if dev_min is not None and normalized["temperature"] < dev_min:
             normalized["temperature"] = dev_min
 
-    if (
-        "temperature" in normalized
-        and temp_intent in ("heat", "cool")
-        and attrs.get("target_temp_low") is not None
-    ):
+    if "temperature" in normalized and temp_intent in ("heat", "cool") and attrs.get("target_temp_low") is not None:
         temperature = normalized.pop("temperature")
         if temp_intent == "heat":
             range_max = attrs.get("max_temp", temperature)
@@ -1646,19 +1638,14 @@ class MPCController:
                 if cmd.device_type == "thermostat":
                     if self.has_external_sensor and context.current_temp is not None:
                         target = round(
-                            context.current_temp
-                            + cmd.power_fraction * (context.trv_heat_boost - context.current_temp),
+                            context.current_temp + cmd.power_fraction * (context.trv_heat_boost - context.current_temp),
                             1,
                         )
                         target = max(context.effective_target, target)
                         target = min(context.trv_heat_boost, target)
                     else:
-                        target = (
-                            context.trv_heat_boost if self.has_external_sensor else context.effective_target
-                        )
-                    final_target = (
-                        context.effective_target if cmd.entity_id in self._direct_eids else target
-                    )
+                        target = context.trv_heat_boost if self.has_external_sensor else context.effective_target
+                    final_target = context.effective_target if cmd.entity_id in self._direct_eids else target
                     ha_t = celsius_to_ha_temp(self.hass, final_target)
                     await self._call("set_hvac_mode", {"entity_id": cmd.entity_id, "hvac_mode": "heat"})
                     await self._call(
@@ -1670,17 +1657,14 @@ class MPCController:
                 else:  # ac
                     if self.has_external_sensor and context.current_temp is not None:
                         target = round(
-                            context.current_temp
-                            + cmd.power_fraction * (context.ac_heat_boost - context.current_temp),
+                            context.current_temp + cmd.power_fraction * (context.ac_heat_boost - context.current_temp),
                             1,
                         )
                         target = max(context.effective_target, target)
                         target = min(context.ac_heat_boost, target)
                     else:
                         target = context.effective_target
-                    final_target = (
-                        context.effective_target if cmd.entity_id in self._direct_eids else target
-                    )
+                    final_target = context.effective_target if cmd.entity_id in self._direct_eids else target
                     ha_t = celsius_to_ha_temp(self.hass, final_target)
                     ac_state = self.hass.states.get(cmd.entity_id)
                     ac_modes = _effective_ac_modes(ac_state)
@@ -1737,16 +1721,13 @@ class MPCController:
         if mode == MODE_HEATING:
             if self.has_external_sensor and context.current_temp is not None:
                 trv_target = round(
-                    context.current_temp
-                    + context.power_fraction * (context.trv_heat_boost - context.current_temp),
+                    context.current_temp + context.power_fraction * (context.trv_heat_boost - context.current_temp),
                     1,
                 )
                 trv_target = max(context.effective_target, trv_target)
                 trv_target = min(context.trv_heat_boost, trv_target)
             else:
-                trv_target = (
-                    context.trv_heat_boost if self.has_external_sensor else context.effective_target
-                )
+                trv_target = context.trv_heat_boost if self.has_external_sensor else context.effective_target
             ha_trv = celsius_to_ha_temp(self.hass, trv_target)
             ha_trv_direct = celsius_to_ha_temp(self.hass, context.effective_target)
             for eid in context.thermostats:
@@ -1771,8 +1752,7 @@ class MPCController:
 
             if self.has_external_sensor and context.current_temp is not None:
                 ac_heat_target = round(
-                    context.current_temp
-                    + context.power_fraction * (context.ac_heat_boost - context.current_temp),
+                    context.current_temp + context.power_fraction * (context.ac_heat_boost - context.current_temp),
                     1,
                 )
                 ac_heat_target = max(context.effective_target, ac_heat_target)
@@ -1821,8 +1801,7 @@ class MPCController:
         report = AppliedCommandReport()
         if self.has_external_sensor and context.current_temp is not None:
             ac_cool_target = round(
-                context.current_temp
-                - context.power_fraction * (context.current_temp - context.ac_cool_boost),
+                context.current_temp - context.power_fraction * (context.current_temp - context.ac_cool_boost),
                 1,
             )
             ac_cool_target = max(context.ac_cool_boost, ac_cool_target)
@@ -2067,11 +2046,7 @@ class MPCController:
         # Fallback: check sent-command cache (for IR devices without state feedback)
         if not skip and eid and _should_use_cache(state):
             cached = _last_commands.get(eid)
-            skip = bool(
-                cached
-                and cached.get("service") == service
-                and _command_payload_matches(cached, service, data)
-            )
+            skip = bool(cached and cached.get("service") == service and _command_payload_matches(cached, service, data))
 
         if skip:
             return

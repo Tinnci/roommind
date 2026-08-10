@@ -61,9 +61,12 @@ def test_away_climate_preset_takes_priority_over_night_and_thermal() -> None:
         "preferred_preset_mode_idle": "quiet",
     }
 
-    assert select_climate_preset(
-        config,
-        "heating",
-        night_active=True,
-        away_active=True,
-    ) == "eco"
+    assert (
+        select_climate_preset(
+            config,
+            "heating",
+            night_active=True,
+            away_active=True,
+        )
+        == "eco"
+    )
