@@ -17,7 +17,7 @@ jobs:
       issues: write
     steps:
       - name: Process stale issues
-        uses: actions/github-script@v9
+        uses: actions/github-script@v9.0.0
         with:
           script: |
             const STALE_DAYS = 5;
@@ -94,7 +94,7 @@ jobs:
       issues: write
     steps:
       - name: Remove stale label on comment
-        uses: actions/github-script@v9
+        uses: actions/github-script@v9.0.0
         with:
           script: |
             const issue = context.payload.issue;
