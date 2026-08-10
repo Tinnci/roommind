@@ -10,8 +10,9 @@ from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from homeassistant.util import dt as dt_util
 
-from custom_components.roommind.utils import night_utils
+from custom_components.roommind.utils import target_resolution
 
 from .conftest import (
     MANAGED_ROOM,
@@ -227,7 +228,11 @@ class TestProcessRoomSnapshot:
             mock_config_entry,
             {"living_room_abc12345": room},
         )
-        monkeypatch.setattr(night_utils.dt_util, "now", lambda: datetime(2026, 5, 25, 23, 15))
+        monkeypatch.setattr(
+            target_resolution.time,
+            "time",
+            lambda: datetime(2026, 5, 25, 23, 15, tzinfo=dt_util.DEFAULT_TIME_ZONE).timestamp(),
+        )
         hass.states.get = MagicMock(
             side_effect=make_mock_states_get(temp="21.0", humidity="55.0"),
         )
