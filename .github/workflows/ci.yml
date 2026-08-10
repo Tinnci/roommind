@@ -138,6 +138,19 @@ jobs:
       - name: mypy
         run: uv run mypy --explicit-package-bases custom_components/roommind
 
+  workflow-lint:
+    name: Workflow lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Validate GitHub Actions
+        uses: reviewdog/action-actionlint@v1.73.1
+        with:
+          reporter: local
+          fail_level: error
+
   hacs:
     name: HACS validation
     runs-on: ubuntu-latest
