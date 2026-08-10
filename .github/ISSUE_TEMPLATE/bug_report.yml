@@ -7,7 +7,7 @@ body:
     attributes:
       label: RoomMind version
       description: Found in Settings → Devices & Services → RoomMind
-      placeholder: "1.7.16"
+      placeholder: "1.7.17"
     validations:
       required: true
 

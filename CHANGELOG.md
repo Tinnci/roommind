@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.17 - 2026-08-11
+
+### Fixed
+
+- Resolved a high-severity Dependabot advisory by overriding the dev-only transitive `cryptography` dependency to 50.0.0.
+- Upgraded GitHub Actions to current Node 24 runtimes and removed the Node.js 20 deprecation warning.
+
 ## 1.7.16 - 2026-07-07
 
 ### Added

@@ -45,7 +45,7 @@ cd frontend
 bun install --frozen-lockfile
 bun run build
 cd ..
-uv run --locked python scripts/build_release_package.py --output dist/roommind.zip --tag v1.7.16
+uv run --locked python scripts/build_release_package.py --output dist/roommind.zip --tag v1.7.17
 ```
 
 The package script validates:
