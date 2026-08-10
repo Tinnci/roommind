@@ -67,7 +67,7 @@ def read_sensor_value(
         return float(state.state)
     except ValueError, TypeError:
         _LOGGER.warning(
-            "Room '%s': could not parse %s from '%s'",
+            "Room '%s': cannot parse %s from '%s'",
             area_id,
             value_name,
             state.state,

@@ -210,9 +210,9 @@ class CoverOrchestrator:
                 _surface_azimuths = _az_list
 
         # Orientation gate: if covers have orientation configured and the sun is not
-        # hitting that side, suppress solar deployment. Covers can't help against heat
-        # coming through other windows. Uses the current oriented q_solar, not the
-        # lookahead prediction — if the sun isn't on this side NOW, covers stay open.
+        # hitting that side, suppress solar deployment. Covers cannot help against
+        # heat coming through other windows. Uses the current oriented q_solar, not
+        # the lookahead prediction — if the sun is not on this side now, covers stay open.
         _oriented_q_solar = raw_solar
         if _surface_azimuths and raw_solar > 0:
             _now = time.time()
@@ -302,8 +302,8 @@ class CoverOrchestrator:
 
         *surface_azimuths*: list of cover surface azimuths (degrees, 0=N).
             When provided, solar series are scaled by the per-step averaged
-            orientation factor so that north-facing covers don't trigger
-            deployment for southern sunlight.
+            orientation factor. North-facing covers do not trigger deployment
+            for southern sunlight.
         """
         base_temp = current_temp if current_temp is not None else target_temp
         lat = self.hass.config.latitude
@@ -346,8 +346,9 @@ class CoverOrchestrator:
             pass
 
         # Tier 2: Linear fallback using daily solar peak + cloud forecast.
-        # Using the daily peak (instead of current q_solar) means the initial position is computed
-        # from the afternoon maximum — one decisive deployment rather than incremental steps as q_solar rises.
+        # Using the daily peak (instead of current q_solar) computes the initial position
+        # from the afternoon maximum. This gives one decisive deployment instead of
+        # incremental steps as q_solar rises.
         n_daily = int(COVER_DAILY_LOOKAHEAD_H * 60 / COVER_PREDICTION_DT_MINUTES)
         daily_series = _solar_series(n_daily)
         q_solar_peak = max(daily_series) if daily_series else q_solar
@@ -357,8 +358,8 @@ class CoverOrchestrator:
         """Check if idle model with solar is confident enough for trajectory prediction.
 
         Uses a reference q_solar to include beta_s uncertainty (P[4][4]) in the check.
-        When beta_s hasn't learned from solar data yet, P[4][4] remains high,
-        making prediction_std exceed the threshold -> falls back to linear.
+        When beta_s has not learned from solar data yet, P[4][4] remains high.
+        prediction_std then exceeds the threshold and the estimate falls back to linear.
         """
         try:
             pred_std = self._model_manager.get_prediction_std(

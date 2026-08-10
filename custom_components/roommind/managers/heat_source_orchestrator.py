@@ -2,12 +2,12 @@
 
 When a room has both thermostats (e.g. radiator TRVs connected to a gas boiler)
 and ACs with heating capability (heat pumps), this module decides which devices
-to activate based on temperature gap (delta-T) and outdoor temperature.
+to activate. It uses the temperature gap (delta-T) and outdoor temperature.
 
 Roles are fixed: thermostats are always primary, ACs are always secondary.
 
 The orchestrator sits between the MPC optimizer output (abstract mode + power_fraction)
-and the device command layer (async_apply). It does NOT modify the thermal model or
+and the device command layer (async_apply). It does not modify the thermal model or
 optimizer. It only filters and distributes the power decision across devices.
 """
 
@@ -154,7 +154,7 @@ def evaluate_heat_sources(
         primary_devices = [(eid, dt) for eid, dt in primary_devices if dt != "ac"]
         secondary_devices = [(eid, dt) for eid, dt in secondary_devices if dt != "ac"]
 
-    # Filter ACs that don't support heating or are unavailable
+    # Filter ACs that do not support heating or are unavailable
     primary_devices = [(eid, dt) for eid, dt in primary_devices if dt != "ac" or _ac_can_heat(hass, eid)]
     secondary_devices = [(eid, dt) for eid, dt in secondary_devices if dt != "ac" or _ac_can_heat(hass, eid)]
 

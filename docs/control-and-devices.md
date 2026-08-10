@@ -1,8 +1,8 @@
-# Control And Device Guide
+# Control and Device Guide
 
-This page explains RoomMind's control settings and related device options.
+This page explains the RoomMind control settings and the related device options.
 
-## What Priority Does
+## What the Priority Slider Does
 
 In `Settings -> Control -> Priority`, the slider balances comfort against runtime/energy use for MPC.
 
@@ -44,12 +44,12 @@ Example:
 
 - room target is `21°C`
 - more heat is needed
-- RoomMind may send `26-28°C` to the TRV to force the valve open harder
+- RoomMind can send `26-28°C` to the TRV to force the valve open harder
 
 Best for:
 
 - radiator valves / TRVs
-- devices that need an exaggerated setpoint to actually deliver heat
+- devices that need an exaggerated setpoint to deliver heat
 
 ### Direct
 
@@ -59,7 +59,7 @@ Best for:
 
 - space heaters
 - pellet stoves
-- devices with their own thermostat logic that should stay in control internally
+- devices with their own thermostat logic that stays in control internally
 
 ## Idle Behavior: Off, Fan Only, Setback
 
@@ -67,7 +67,7 @@ Best for:
 
 ### Turn off
 
-RoomMind turns the device off, or falls back to the device's minimum/off-like behavior if true off is not supported.
+RoomMind turns the device off. If the device does not support a true off state, RoomMind uses the device's minimum or off-like behavior.
 
 ### Fan only
 
@@ -89,7 +89,7 @@ This lets the device back off instead of shutting off completely.
 
 Important:
 
-- the setback offset is currently fixed at `2°C`
+- the setback offset is fixed at `2°C`
 - it is **not configurable** in the current UI
 
 ## Idle Behavior for Thermostats: Off, Low

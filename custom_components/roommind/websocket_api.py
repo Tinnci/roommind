@@ -50,9 +50,9 @@ def _get_coordinator(hass: HomeAssistant) -> RoomMindCoordinator | None:
     return coordinator
 
 
-# _safe_float, _csv_to_points and _compute_target_forecast are imported from
-# .services.analytics_service (see imports above) and re-exported so that
-# existing callers (incl. tests) keep working.
+# _safe_float, _csv_to_points and _compute_target_forecast come from
+# .services.analytics_service (see imports above). The module re-exports
+# them so existing callers (incl. tests) keep working.
 
 
 def _compute_anyone_home(hass: HomeAssistant, settings: dict) -> bool:
@@ -63,7 +63,7 @@ def _compute_anyone_home(hass: HomeAssistant, settings: dict) -> bool:
 
 
 def _validate_no_own_entities(config: dict, own_prefix: str) -> str | None:
-    """Check that no RoomMind-owned entities are assigned. Returns error message or None."""
+    """Verify that no RoomMind-owned entity is assigned to a room. Returns an error message or None."""
     for field in (
         "thermostats",
         "acs",
@@ -139,7 +139,7 @@ async def websocket_list_rooms(
     learning_disabled = set(settings.get("learning_disabled_rooms", []))
 
     # Build response: config + live state per room
-    # Override fields are computed from the store (always up-to-date) rather
+    # Compute override fields from the store (always up-to-date) rather
     # than from the coordinator (which refreshes on a 10s cycle).
     result = {}
     for area_id, room_config in rooms.items():
@@ -282,7 +282,7 @@ async def websocket_save_room(
     if ("thermostats" in config or "acs" in config) and "devices" not in config:
         _LOGGER.warning(
             "Room save for '%s' uses legacy thermostats/acs fields without devices. "
-            "This is deprecated and will be removed in a future version.",
+            "These fields are deprecated and a future version removes them.",
             area_id,
         )
 

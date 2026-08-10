@@ -14,7 +14,7 @@ def is_presence_away(hass: HomeAssistant, room: dict, settings: dict) -> bool:
     """Return True if presence detection says all relevant persons are away.
 
     Per-room persons take precedence over global persons.
-    Fail-safe: unavailable/unknown entities are treated as "home".
+    Fail-safe: unavailable/unknown entities count as "home".
     """
     if not settings.get("presence_enabled", False):
         return False

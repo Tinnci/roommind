@@ -5,11 +5,11 @@ from homeassistant.core import HomeAssistant
 
 
 def _is_fahrenheit(hass: HomeAssistant, entity_id: str | None = None) -> bool:
-    """Check if the value is in Fahrenheit.
+    """Check whether the value is in Fahrenheit.
 
-    When *entity_id* is provided the entity's own ``unit_of_measurement``
-    attribute is used.  This is race-condition-safe during HA unit-system
-    changes because entity state + attributes are always updated atomically.
+    When *entity_id* is provided, use the entity's own ``unit_of_measurement``
+    attribute. This is race-condition-safe during HA unit-system changes
+    because HA updates entity state and attributes atomically.
     Falls back to the global HA config when no entity is given.
     """
     if entity_id:

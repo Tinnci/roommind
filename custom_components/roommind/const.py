@@ -57,15 +57,15 @@ def make_roommind_context() -> Context:
 class TargetTemps(NamedTuple):
     """Dual-target temperatures for heating and cooling."""
 
-    heat: float | None = None  # None = don't heat / force off
-    cool: float | None = None  # None = don't cool / force off
+    heat: float | None = None  # None = do not heat / force off
+    cool: float | None = None  # None = do not cool / force off
 
 
 # Smart control defaults
 BANGBANG_HEAT_HYSTERESIS = 0.2  # °C below target → start heating (bang-bang fallback)
 BANGBANG_COOL_HYSTERESIS = 0.2  # °C above target → start cooling (bang-bang fallback)
 DEFAULT_OUTDOOR_COOLING_MIN = 16  # Hard block: NEVER cool if outdoor < this
-DEFAULT_OUTDOOR_HEATING_MAX = 22  # Don't heat if outdoor > this
+DEFAULT_OUTDOOR_HEATING_MAX = 22  # Do not heat if outdoor > this
 HEATING_BOOST_TARGET = 30  # Fallback TRV heating boost (used when entity max_temp unavailable)
 AC_HEATING_BOOST_TARGET = 30  # Fallback AC heating boost (used when entity max_temp unavailable)
 AC_COOLING_BOOST_TARGET = 16  # Fallback AC cooling boost (used when entity min_temp unavailable)
@@ -139,7 +139,7 @@ HEATING_SYSTEM_PROFILES: dict[str, dict[str, float]] = {
         "min_run_minutes": 30.0,
     },
 }
-RESIDUAL_HEAT_CUTOFF = 0.02  # below this q_residual is treated as zero
+RESIDUAL_HEAT_CUTOFF = 0.02  # below this q_residual counts as zero
 
 # Blind/cover control
 COVER_SOLAR_MIN: float = 0.15
@@ -199,7 +199,7 @@ def is_override_active(room: dict) -> bool:
 
 
 def is_override_suppressed(room: dict, settings: dict, presence_away: bool) -> bool:
-    """Return True when an active override should be ignored due to presence."""
+    """Return True when presence suppresses an active override."""
     if not presence_away:
         return False
     if room.get("ignore_presence", False):
@@ -210,9 +210,9 @@ def is_override_suppressed(room: dict, settings: dict, presence_away: bool) -> b
 def build_override_live(room: dict, suppressed: bool = False) -> dict:
     """Build override fields for live data from a room config dict.
 
-    When *suppressed* is True the override is held in the store but currently
-    has no effect (e.g. presence-away with presence_clears_override enabled).
-    Live data still reports the underlying intent so the UI can render a
+    When *suppressed* is True, the store holds the override but it has no
+    effect (e.g. presence-away with presence_clears_override enabled).
+    Live data still reports the underlying intent. The UI can then render a
     "paused" indicator.
     """
     active = is_override_active(room)

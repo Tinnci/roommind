@@ -36,9 +36,9 @@ _ACTIVE_HVAC_MODES = {"heat", "cool", "heat_cool", "auto"}
 
 
 def has_reliable_hvac_modes(state: Any) -> bool:
-    """Check if a device's hvac_modes attribute is trustworthy.
+    """Check whether a device's hvac_modes attribute is trustworthy.
 
-    Some integrations report only limited modes like ``["off", "fan_only"]``
+    Certain integrations report only limited modes like ``["off", "fan_only"]``
     regardless of device state, hiding actual capabilities (see #100).
     Returns *False* when modes are likely incomplete.
     """
@@ -55,7 +55,7 @@ def legacy_to_devices(
 ) -> list[dict]:
     """Create devices[] from legacy thermostats/acs lists.
 
-    heating_system_type is transferred to TRV devices (was previously room-level).
+    Transfer heating_system_type to TRV devices (previously room-level).
     ACs get "" (no heating system profile).
     """
     devices: list[dict] = []
@@ -90,7 +90,7 @@ def devices_to_legacy(devices: list[dict]) -> tuple[list[str], list[str]]:
     """Extract thermostats/acs lists from devices[].
 
     TRV -> thermostats, AC -> acs.
-    Devices with unknown types or missing entity_id are logged and skipped.
+    Log and skip devices with unknown types or missing entity_id.
     """
     thermostats: list[str] = []
     acs: list[str] = []
@@ -125,7 +125,7 @@ def ensure_room_has_devices(room: dict) -> dict:
         )
     else:
         # Downgrade recovery: if legacy fields were edited while devices was stale,
-        # the legacy entity sets won't match devices. Prefer legacy in that case.
+        # the legacy entity sets do not match devices. Prefer legacy in that case.
         expected_t, expected_a = devices_to_legacy(room["devices"])
         actual_t = room.get("thermostats", [])
         actual_a = room.get("acs", [])
@@ -144,7 +144,7 @@ def ensure_room_has_devices(room: dict) -> dict:
     thermostats, acs = devices_to_legacy(room["devices"])
     room["thermostats"] = thermostats
     room["acs"] = acs
-    # Room-level heating_system_type derived from devices for backend compat
+    # Derive room-level heating_system_type from devices for backend compat
     room["heating_system_type"] = get_room_heating_system_type(room["devices"])
     return room
 
@@ -155,7 +155,7 @@ def get_room_heating_system_type(devices: list[dict]) -> str:
     With mixed types (e.g., radiator TRV + underfloor TRV), the one with the
     longest residual heat tau wins:
     underfloor (tau=90min) > radiator (tau=10min) > "" (no residual heat).
-    Only TRV devices are considered (ACs/HPs have no heating system profile).
+    Consider only TRV devices (ACs/HPs have no heating system profile).
     """
     best = ""
     for d in devices:
@@ -231,7 +231,7 @@ def get_direct_setpoint_eids(devices: list[dict]) -> set[str]:
 def build_rooms_devices_map(rooms: dict) -> dict[str, list[dict]]:
     """Return {entity_id: devices[]} map across all rooms.
 
-    Used by managers that need to resolve a device's configuration (e.g.
+    Managers use this to resolve a device's configuration (e.g.
     idle_action) by entity_id without carrying the full rooms dict.
     """
     return {
@@ -259,15 +259,15 @@ def room_contributes_to_group(
 ) -> bool:
     """Whether a room's group members are heating-active per orchestration.
 
-    Used by coordinator._collect_member_room_modes to decide whether a
+    coordinator._collect_member_room_modes uses this to decide whether a
     heating room contributes heating demand to a compressor group's
     master device.
 
     - ``None``       -> no orchestration data (disabled, missing temp,
                         no TRV+AC, or popped state). Preserve legacy
                         behavior: count the room.
-    - ``"none"``     -> orchestration chose nothing (delta_t <= 0) ->
-                        False (all devices idled by orchestrator).
+    - ``"none"``     -> orchestration chooses nothing (delta_t <= 0) ->
+                        False (orchestrator idles all devices).
     - ``"both"``     -> TRV + AC both active -> True.
     - ``"primary"``  -> only TRVs active -> True iff any group member
                         in this room is a TRV.

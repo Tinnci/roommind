@@ -1,6 +1,6 @@
 # Contributing to RoomMind
 
-Thanks for your interest in contributing! Here's how to get started.
+Thank you for your interest in contributing. Use this guide to get started.
 
 ## Development Setup
 
@@ -54,7 +54,7 @@ tests/
 
 ## Test Coverage
 
-Coverage must stay ≥ 90% (enforced in CI). Check locally:
+Coverage must stay at 90% or higher (enforced in CI). Check locally:
 
 ```bash
 uv run pytest tests/ --cov=custom_components/roommind --cov-report=term-missing

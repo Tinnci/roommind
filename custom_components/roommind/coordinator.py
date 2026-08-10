@@ -545,7 +545,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         room: dict,
         room_state: dict,
     ) -> None:
-        """Prepare the prediction that will be evaluated at the next history write."""
+        """Prepare the prediction to evaluate at the next history write."""
         current_temp = room_state.get("current_temp")
         if current_temp is None or self.outdoor_temp_effective is None or room.get("is_outdoor", False):
             return
@@ -915,17 +915,17 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         """Return (temp, source) for the current cycle.
 
         Source is one of:
-          - "sensor": primary outdoor_temp_sensor delivered a value
-          - "weather": weather_entity attribute "temperature" delivered a value
+          - "sensor": primary outdoor_temp_sensor delivers a value
+          - "weather": weather_entity attribute "temperature" delivers a value
           - "none": neither source available
 
-        ``self.outdoor_temp`` remains the raw sensor reading for diagnostics;
-        the result of this method is stored in ``self.outdoor_temp_effective``
-        and is the canonical value all consumers (EKF, MPC, cover, heat-source,
+        ``self.outdoor_temp`` remains the raw sensor reading for diagnostics.
+        The result of this method is stored in ``self.outdoor_temp_effective``.
+        It is the canonical value all consumers (EKF, MPC, cover, heat-source,
         analytics, mold) use. EKF training is gated on a non-None effective
-        temperature so the filter never trains with a degenerate fallback
-        (e.g. room temp), which would cause the alpha state to drift to the
-        upper bound — see #301.
+        temperature. The filter never trains with a degenerate fallback
+        (e.g. room temp). Such a fallback causes the alpha state to drift to
+        the upper bound — see #301.
         """
         if self.outdoor_temp is not None:
             return self.outdoor_temp, "sensor"
@@ -946,10 +946,10 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         """Track consecutive cycles without a valid outdoor temperature.
 
         After OUTDOOR_UNAVAILABLE_NOTIFY_CYCLES (default 60 ≈ 30 min) raise a
-        single HA persistent notification informing the user that EKF training
-        is paused. The notification clears as soon as a valid outdoor source
-        returns. Suppressed entirely when the user disables it via the
-        ``outdoor_unavailable_notify`` global setting.
+        single HA persistent notification. The notification informs the user
+        that EKF training is paused. It clears as soon as a valid outdoor
+        source returns. Do not raise the notification when the user disables
+        it via the ``outdoor_unavailable_notify`` global setting.
         """
         if self.outdoor_temp_effective is not None:
             self._outdoor_unavailable_cycles = 0
@@ -1371,9 +1371,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         device_snapshot = self._read_climate_device_snapshot(room)
 
         # Exclude TRVs currently being valve-protection-cycled from normal control
-        cycling_eids = {
-            eid for eid in device_snapshot.trv_entity_ids if self._valve_manager.is_entity_cycling(eid)
-        }
+        cycling_eids = {eid for eid in device_snapshot.trv_entity_ids if self._valve_manager.is_entity_cycling(eid)}
 
         # Heat source orchestration: smart routing for rooms with both TRVs and ACs
         heat_source_plan = None
@@ -1398,8 +1396,8 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 self._heat_source_states[area_id] = heat_source_plan.active_sources
             else:
                 # Orchestrator returned None (e.g. missing current/target temp).
-                # The non-orchestrated async_apply path commands all devices,
-                # so clear stale state to prevent the master-demand filter
+                # The non-orchestrated async_apply path commands all devices.
+                # Clear stale state to prevent the master-demand filter
                 # from acting on a previous orchestration decision.
                 self._heat_source_states.pop(area_id, None)
         else:
@@ -1436,7 +1434,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         compressor_forced_off = set(compressor_constraint_result.compressor_forced_off)
 
         # --- Residual heat transition tracking ---
-        # After compressor constraints may have changed mode to IDLE.
+        # After compressor constraints change the mode to IDLE.
         if climate_active and system_type:
             self._residual_tracker.update(
                 area_id,
@@ -1667,7 +1665,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             if observed_mode is None and self._devices_lack_hvac_action(room):
                 # No hvac_action on any device — fall back to temp-vs-setpoint
                 # inference for approximate training (better than skipping).
-                # Don't infer for other None reasons (conflicts, unavailable).
+                # Do not infer for other None reasons (conflicts, unavailable).
                 inferred = self._infer_device_mode(room)
                 observed_mode = inferred
                 observed_pf = 1.0 if inferred != MODE_IDLE else 0.0
@@ -1679,8 +1677,8 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 )
 
         # For Managed Mode rooms, observe actual device state for display + training.
-        # The controller's mode is "intent" (device told to heat), but the device
-        # self-regulates and may be idle at setpoint.  See #69.
+        # The controller's mode is "intent" (the controller tells the device to
+        # heat), but the device self-regulates and may be idle at setpoint. See #69.
         managed_display_mode: str | None = None
         managed_display_pf = 0.0
         if climate_active and not has_external_sensor:
@@ -1693,16 +1691,16 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 managed_display_pf = 1.0 if managed_display_mode != MODE_IDLE else 0.0
 
         # Determine mode for EKF training: use observed device state when
-        # RoomMind doesn't directly control the device (see #36, #69).
+        # RoomMind does not directly control the device (see #36, #69).
         if climate_active:
             if has_external_sensor:
                 # Full Control: controller's commanded mode is truth
                 ekf_mode: str | None = mode
                 ekf_pf = power_fraction
                 # When heat source orchestration is active, adjust ekf_pf to
-                # reflect the actual power delivered (not all devices may be
-                # heating).  Use the mean of per-device power_fractions so the
-                # EKF learns an accurate aggregated beta_h.
+                # reflect the actual power delivered. Not all devices may be
+                # heating. Use the mean of per-device power_fractions. The
+                # EKF then learns an accurate aggregated beta_h.
                 if heat_source_plan is not None and heat_source_plan.commands:
                     ekf_pf = sum(c.power_fraction for c in heat_source_plan.commands) / len(heat_source_plan.commands)
             else:
@@ -1716,14 +1714,14 @@ class RoomMindCoordinator(DataUpdateCoordinator):
 
         # --- Observation-based corrections on the training mode (#150, #241) ---
         # Ghost-heating guard: in Full Control the controller's commanded mode
-        # can diverge from what the device actually does.  Near target with
+        # can diverge from what the device actually does. Near target with
         # setpoint_mode="direct" a device's internal hysteresis can block
-        # firing even while RoomMind commands heating/cooling.  Without this
-        # guard the EKF receives a heating/cooling label for a period where no
-        # energy actually entered the room, which drives alpha toward its
-        # upper bound via cross-covariance with a negative innovation.
+        # firing even while RoomMind commands heating/cooling. Without this
+        # guard the EKF receives a heating/cooling label for a period where
+        # no energy enters the room. This drives alpha toward its upper
+        # bound via cross-covariance with a negative innovation.
         # We only override to idle when all active devices unambiguously
-        # report idle/off — heating/cooling observations keep the commanded
+        # report idle/off. Heating/cooling observations keep the commanded
         # power_fraction so MPC throttling (e.g. pf=0.3) is preserved.
         q_residual_training = q_residual
         if climate_active and has_external_sensor and ekf_mode in (MODE_HEATING, MODE_COOLING):
@@ -1741,19 +1739,19 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         # Zero-power normalization: heat source orchestration may yield
         # mean(pf)=0 while the commanded mode is still heating/cooling.
         # Without this the predict step inflates Q_BETA_H through a zero
-        # Jacobian (F[0][2]=pf=0) — variance grows without an observable
-        # signal and destabilises the alpha↔beta coupling.  Downgrade to idle
-        # for a consistent training batch.
+        # Jacobian (F[0][2]=pf=0). Variance grows without an observable
+        # signal and destabilises the alpha↔beta coupling. Downgrade to
+        # idle for a consistent training batch.
         if ekf_mode in (MODE_HEATING, MODE_COOLING) and ekf_pf == 0.0:
             ekf_mode = MODE_IDLE
             q_residual_training = 0.0
 
         # Update thermal model with observation (EKF online learning).
         # The filter must NOT train with a degenerate outdoor fallback (e.g.
-        # using room temp when the sensor is unavailable): F[0][1] collapses
-        # toward 0, alpha drifts under process noise and eventually pegs at
-        # the upper bound (see #301).  Skip the update — and flush any
-        # accumulated batch — when no real outdoor source is available.
+        # using room temp when the sensor is unavailable). F[0][1] collapses
+        # toward 0 and alpha drifts under process noise. Alpha eventually
+        # pegs at the upper bound (see #301). Skip the update and flush any
+        # accumulated batch when no real outdoor source is available.
         learning_disabled = settings.get("learning_disabled_rooms", [])
         learning_active = area_id not in learning_disabled
         if learning_active and current_temp_raw is not None and self.outdoor_temp_effective is not None:
@@ -1793,9 +1791,9 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             self._mode_on_since.pop(area_id, None)
         self._previous_modes[area_id] = mode
 
-        # Compute display mode: show actual device state when RoomMind doesn't
-        # directly control the device, without affecting internal tracking
-        # (residual heat, valve actuation, _previous_modes).  See #36, #69.
+        # Compute display mode: show actual device state when RoomMind does
+        # not directly control the device. Do not affect internal tracking
+        # (residual heat, valve actuation, _previous_modes). See #36, #69.
         if climate_active:
             if has_external_sensor:
                 # Full Control: controller's mode is authoritative
@@ -2105,7 +2103,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             # Device in an active hvac_mode → need hvac_action to determine firing
             action = state.attributes.get("hvac_action")
             if action is None:
-                # No hvac_action attribute → can't tell if firing → unobservable
+                # No hvac_action attribute → cannot tell if firing → unobservable
                 return (None, 0.0)
 
             if action in ("heating", "preheating"):
@@ -2132,7 +2130,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
     def _devices_lack_hvac_action(self, room: dict) -> bool:
         """Return True if at least one active device lacks hvac_action.
 
-        Used to distinguish 'missing attribute' from other reasons
+        Distinguishes 'missing attribute' from other reasons
         _observe_device_action returns None (conflicts, unavailable, etc.).
         """
         for eid in get_all_entity_ids(room.get("devices", [])):
@@ -2148,8 +2146,8 @@ class RoomMindCoordinator(DataUpdateCoordinator):
 
         Compares current_temperature to the device setpoint to avoid showing
         'Heating' when the thermostat is in heat mode but already at target.
-        Used for display and as a fallback for EKF training when hvac_action
-        is missing (Managed Mode and learn-only mode).  See #69.
+        Serves display and as a fallback for EKF training when hvac_action
+        is missing (Managed Mode and learn-only mode). See #69.
         """
         for eid in get_all_entity_ids(room.get("devices", [])):
             state = self.hass.states.get(eid)
@@ -2217,8 +2215,8 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         self._add_entity_platform_room(EntityPlatform.CLIMATE_CONTROL_SWITCH, area_id)
 
         # Cover entities: only create when covers are configured.
-        # Not removed on save — cleanup_orphaned_entities() handles that at startup
-        # so brief config changes don't break user automations.
+        # Do not remove them on save. cleanup_orphaned_entities() handles that
+        # at startup so brief config changes do not break user automations.
         if has_covers:
             self._add_entity_platform_room(EntityPlatform.COVER_SWITCH, area_id)
             self._add_entity_platform_room(EntityPlatform.COVER_BINARY_SENSOR, area_id)
@@ -2262,7 +2260,8 @@ class RoomMindCoordinator(DataUpdateCoordinator):
     def cleanup_orphaned_entities(self) -> None:
         """Remove entities that no longer match any registered entity type.
 
-        Called at startup to clean up entities from removed features.
+        The coordinator calls this at startup to clean up entities from
+        removed features.
         """
         from homeassistant.helpers import entity_registry as er
 
@@ -2306,7 +2305,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             if suffix in cover_only and room.get("covers"):
                 continue
 
-            # Entity doesn't match any valid type — orphaned
+            # Entity does not match any valid type — orphaned
             to_remove.append(entity_entry.entity_id)
 
         for eid in to_remove:
@@ -2465,10 +2464,10 @@ class RoomMindCoordinator(DataUpdateCoordinator):
     ) -> list[str]:
         """Collect room modes for rooms containing group member devices.
 
-        When heat-source orchestration is active for a room, the room is
-        only counted if the orchestration decision includes this group's
-        device types.  Prevents a boiler master from activating when only
-        the AC (secondary) is heating, and vice versa. (#168)
+        When heat-source orchestration is active for a room, count the room
+        only when the orchestration decision includes this group's device
+        types. This prevents a boiler master from activating when only the
+        AC (secondary) is heating, and vice versa. (#168)
         """
         if not settings.get("climate_control_active", True):
             return []
@@ -2488,7 +2487,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             commanded = rs.get("commanded_mode", rs.get("mode", MODE_IDLE))
 
             # Orchestration filter (heating only): skip this room when its
-            # active heat sources don't include this group's device types.
+            # active heat sources do not include this group's device types.
             if (
                 commanded == MODE_HEATING
                 and room.get("heat_source_orchestration", False)
@@ -2718,7 +2717,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                             resolved_mode,
                             exc_info=True,
                         )
-                        continue  # don't update state on failed command
+                        continue  # do not update state on failed command
 
                 # 6. Call action script on transition
                 if new_action != prev_action and group.action_script:

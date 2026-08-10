@@ -86,7 +86,7 @@ Manual Override > Vacation > Presence Away > Schedule Block > Comfort / Eco  (+M
 
 ### Full Control vs. Managed Mode
 
-An external temperature sensor is really where RoomMind starts to shine. It is the single most impactful addition for any room, unlocking the full potential of the thermal model, MPC optimization, and proportional device control.
+An external temperature sensor unlocks the full potential of the thermal model, MPC optimization, and proportional device control. It is the single most impactful addition for any room.
 
 | | Full Control | Managed Mode |
 |---|---|---|
@@ -95,7 +95,7 @@ An external temperature sensor is really where RoomMind starts to shine. It is t
 | **Setpoints** | Proportional boost (e.g. 28°C to force heating at 80% power) | Exact target sent to device |
 | **Thermal model** | EKF learns room behavior, MPC optimizes | No learning, no optimization |
 
-In **Full Control**, RoomMind dynamically calculates device setpoints based on MPC power output. Instead of sending 22°C to a TRV or AC, it might send 28°C to force the device to heat at full capacity. This solves common issues where devices with inaccurate internal sensors or built-in deadbands refuse to turn on. Each room shows its current mode ("Full Control" or "Managed") in the detail view.
+In **Full Control**, RoomMind dynamically calculates device setpoints based on MPC power output. Instead of sending 22°C to a TRV or AC, it can send 28°C to force the device to heat at full capacity. This solves common issues where devices with inaccurate internal sensors or built-in deadbands do not turn on. Each room shows its current mode ("Full Control" or "Managed") in the detail view.
 
 ### MPC Climate Control
 
@@ -126,7 +126,7 @@ These can be used in HA automations, dashboards, or other integrations.
 
 **Room not heating/cooling when expected** - Check outdoor gating thresholds in Settings > Control. Default: no cooling below 16 C, no heating above 22 C.
 
-**Thermal model seems wrong after room changes** - If you've changed insulation, radiators, or moved sensors, reset the model in Settings > Reset Thermal Data.
+**Thermal model seems wrong after room changes** - If you have changed insulation, radiators, or moved sensors, reset the model in Settings > Reset Thermal Data.
 
 **Frontend not updating after update** - Hard-refresh: **Cmd+Shift+R** (Mac) or **Ctrl+Shift+R** (Windows/Linux).
 
@@ -137,7 +137,7 @@ These can be used in HA automations, dashboards, or other integrations.
 - At least one HA area with a `climate.*` entity
 - Optional: temperature sensor, humidity sensor, window sensors, weather entity, schedule helpers, person entities
 
-No cloud services required - everything runs locally.
+No cloud service is required. Everything runs locally.
 
 ## Feedback & Contributing
 

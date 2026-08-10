@@ -17,9 +17,9 @@ from .thermal_analysis import build_observed_windows, build_thermal_episodes
 class ObservationStore:
     """Append-only raw observation store with bounded retention.
 
-    Raw observations preserve source values as received. Numeric values are
-    duplicated into ``value_real`` only for efficient range queries; the source
-    string remains in ``value_text``.
+    Raw observations preserve source values as received. The store duplicates
+    numeric values into ``value_real`` only for efficient range queries; the
+    source string remains in ``value_text``.
     """
 
     def __init__(
@@ -41,7 +41,7 @@ class ObservationStore:
         self._schema_ready = False
 
     def record(self, observation: dict[str, Any]) -> bool:
-        """Insert one observation, returning True when a new row was stored."""
+        """Insert one observation, returning True when it stores a new row."""
         return self.record_many([observation]) == 1
 
     def record_many(self, observations: Iterable[dict[str, Any]]) -> int:

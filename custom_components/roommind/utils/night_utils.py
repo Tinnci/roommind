@@ -32,7 +32,7 @@ def is_quiet_hours_now(quiet_hours: dict[str, Any] | None, now: datetime | None 
     """Return whether the current local time falls inside quiet hours.
 
     Supports regular windows (21:00 -> 23:00) and cross-midnight windows
-    (22:00 -> 07:00). Invalid or empty windows are treated as disabled.
+    (22:00 -> 07:00). Invalid or empty windows count as disabled.
     """
     if not quiet_hours:
         return False

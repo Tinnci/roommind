@@ -51,7 +51,7 @@ class TargetResolutionResult:
 
 @dataclass(frozen=True, slots=True)
 class ControlTargetPlan:
-    """Effective current and future targets produced by one policy chain."""
+    """Effective Target Plan with current and future targets from one policy chain."""
 
     targets: TargetTemps
     resolver: Callable[[float], TargetTemps]
@@ -75,8 +75,8 @@ async def prepare_control_target_plan(
 ) -> ControlTargetPlan:
     """Resolve effective current and future targets through one policy chain.
 
-    Home Assistant state and schedule data are captured before target policy is
-    composed, so immediate control and the MPC horizon share mold, presence,
+    Capture Home Assistant state and schedule data before composing target
+    policy. Immediate control and the MPC horizon then share mold, presence,
     unit-conversion, and night-ramp semantics.
     """
     schedule_entity_id = get_active_schedule_entity(hass, room)

@@ -129,7 +129,7 @@ async def _compute_target_forecast(
     target_plan: ControlTargetPlan | None = None,
     now: float | None = None,
 ) -> list[dict]:
-    """Compute target temperature forecast for the next N hours.
+    """Compute the Target Forecast for the next N hours.
 
     Each point contains ``target_temp`` (chart display, mode-aware),
     ``heat_target`` and ``cool_target`` (for MPC simulator).

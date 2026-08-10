@@ -1,6 +1,6 @@
 """Compressor group manager for short-cycle protection.
 
-Prevents outdoor compressor units from short-cycling by enforcing
+Prevents outdoor compressor units from short-cycling. Enforces
 minimum run and off times across all indoor units sharing a compressor.
 """
 
@@ -103,8 +103,8 @@ class CompressorGroupManager:
     def check_can_activate(self, entity_id: str) -> bool:
         """Can this entity be turned on?
 
-        Returns False if the entity's compressor group is in min-off phase
-        (compressor recently turned off and hasn't waited long enough).
+        Returns False if the entity's compressor group is in min-off phase.
+        The compressor turned off recently and has not waited long enough.
         Returns True if entity is not in any group.
         """
         group_id = self._entity_to_group.get(entity_id)
@@ -121,8 +121,8 @@ class CompressorGroupManager:
     def check_must_stay_active(self, entity_id: str) -> bool:
         """Must this entity stay active?
 
-        Returns True if this is the last active member in its group
-        AND the compressor hasn't run long enough (min-run not reached).
+        Returns True when this is the last active member in its group and
+        the compressor has not run long enough.
         Returns False if entity is not in any group.
         """
         group_id = self._entity_to_group.get(entity_id)
@@ -130,7 +130,7 @@ class CompressorGroupManager:
             return False
         state = self._states[group_id]
         if entity_id not in state.active_members:
-            return False  # Not active, doesn't need to stay active
+            return False  # Not active, does not need to stay active
         if len(state.active_members) > 1:
             return False  # Other members still active, this one can turn off
         if state.compressor_on_since is None:
@@ -244,8 +244,8 @@ class CompressorGroupManager:
     def check_master_can_switch(self, group_id: str, new_action: str) -> bool:
         """Check if the master device is allowed to switch to *new_action*.
 
-        Enforces min-run (must stay active long enough) and min-off (must stay
-        off long enough) timing constraints, mirroring the member-level guards.
+        Enforces min-run and min-off timing constraints. The master must stay
+        active or off long enough. Mirrors the member-level guards.
         """
         state = self._states.get(group_id)
         if state is None:
@@ -257,14 +257,14 @@ class CompressorGroupManager:
         if prev == new_action:
             return True  # no transition
 
-        # Min-run: master is active and hasn't run long enough
+        # Min-run: master is active and has not run long enough
         if prev is not None and prev != "idle" and new_action == "idle":
             if state.master_on_since is not None:
                 elapsed = monotonic() - state.master_on_since
                 if elapsed < group.min_run_seconds:
                     return False
 
-        # Min-off: master is idle and hasn't been off long enough
+        # Min-off: master is idle and has not been off long enough
         if (prev is None or prev == "idle") and new_action != "idle":
             if state.master_off_since is not None:
                 elapsed = monotonic() - state.master_off_since

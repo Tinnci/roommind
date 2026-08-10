@@ -33,7 +33,8 @@ def compute_shading_factor(
     """Compute solar shading factor [0..1] from cover positions.
 
     HA convention: position 0 = fully closed, 100 = fully open.
-    Returns 1.0 when fully open (no shading), (1-max_effectiveness) when fully closed.
+    Returns 1.0 when fully open (no shading).
+    Returns (1-max_effectiveness) when fully closed.
     """
     if not positions:
         return 1.0
@@ -75,13 +76,13 @@ class CoverManager:
     def update_position(self, area_id: str, position: int, override_minutes: int = COVER_USER_OVERRIDE_MINUTES) -> None:
         """Update the tracked position from HA state. Call before evaluate().
 
-        Detects user manual override: if the cover position differs significantly
+        Detects user manual override. If the cover position differs significantly
         from the last position RoomMind commanded (in either direction), the user
         moved it manually. In that case, auto control pauses for
         ``override_minutes``.
 
         Compares against ``last_commanded_position`` (stable across cycles) rather
-        than ``current_position`` so that detection survives the 90 s settling
+        than ``current_position``. Detection then survives the 90 s settling
         window even when the HA-reported position is read repeatedly.
         """
         state = self._get_state(area_id)
@@ -155,7 +156,7 @@ class CoverManager:
     ) -> CoverDecision:
         """Evaluate whether to change cover positions this cycle.
 
-        Does NOT call HA services — caller handles that.
+        Does not call HA services. The caller handles that.
         Returns CoverDecision(changed=False) to hold current state.
         """
         state = self._get_state(area_id)
@@ -166,7 +167,7 @@ class CoverManager:
             return CoverDecision(target_position=current, changed=False, reason="disabled")
 
         # Gate 1: Forced position (schedule or night close) — immediate, no rate limit.
-        # Note: the orchestrator returns early when covers_auto_enabled=False, so this gate
+        # Note: the orchestrator returns early when covers_auto_enabled=False. This gate
         # is only reached when auto control is on (or when evaluate() is called directly).
         # Only user manual override (Gate 1b) can block a forced position.
         if forced_position is not None:

@@ -21,10 +21,10 @@ class HVACOutputObservation:
 class HVACOutputObserver:
     """Classify coarse compressor stage and capacity multiplier.
 
-    The observer prefers a configured power sensor when available, then falls
+    The observer prefers a configured power sensor when available. It then falls
     back to HA's hvac_action and an optional temperature slope. Fan curves let a
-    user calibrate how much indoor fan speed changes delivered capacity and fan
-    power for a specific AC.
+    user calibrate how indoor fan speed changes delivered capacity. They also
+    let a user calibrate the fan power for a specific AC.
     """
 
     def __init__(self, hass: HomeAssistant) -> None:

@@ -46,9 +46,8 @@ class WindowManager:
             if not was_paused:
                 if first_observation:
                     # Window already open on first observation (e.g. after HA
-                    # restart).  Skip open_delay — the window has been open for
-                    # an unknown duration that certainly exceeds any configured
-                    # delay.
+                    # restart). Skip open_delay. The window has been open for an
+                    # unknown duration that certainly exceeds any configured delay.
                     self._paused[area_id] = True
                 else:
                     if area_id not in self._open_since:

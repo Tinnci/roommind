@@ -4,9 +4,9 @@ Calculates mold risk based on indoor temperature, humidity, and outdoor
 temperature using building-physics methods (DIN 4108-2, ISO 13788).
 
 The core approach: estimate the coldest wall surface temperature using the
-temperature factor f_Rsi (default 0.80 for standard existing buildings), then compute
-the relative humidity at that surface from the dew point.  Mold growth becomes
-likely when surface RH exceeds ~80 %.
+temperature factor f_Rsi (default 0.80 for standard existing buildings).
+Then compute the relative humidity at that surface from the dew point.
+Mold growth becomes likely when surface RH exceeds ~80 %.
 """
 
 from __future__ import annotations
@@ -65,7 +65,7 @@ def estimate_surface_temp(
 ) -> float:
     """Estimate coldest wall surface temperature using temperature factor.
 
-    Based on DIN 4108-2.  f_Rsi = 0.80 is a realistic value for standard
+    Follows DIN 4108-2.  f_Rsi = 0.80 is a realistic value for standard
     existing buildings (DIN minimum is 0.70, modern buildings 0.85+).
 
     Args:

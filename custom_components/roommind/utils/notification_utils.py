@@ -62,10 +62,10 @@ async def async_send_mold_notification(
 
     For each target dict ``{entity_id, person_entity, notify_when}``:
     - If ``notify_when == "home_only"`` and *person_entity* is set and the
-      person is not home, the target is skipped.
-    - Otherwise the notification is sent via ``notify.send_message``.
+      person is not home, skip the target.
+    - Otherwise send the notification via ``notify.send_message``.
 
-    If *targets* is empty, a persistent HA notification is created as fallback.
+    If *targets* is empty, create a persistent HA notification as fallback.
 
     Args:
         hass: Home Assistant instance.
@@ -121,7 +121,7 @@ async def async_send_mold_notification(
             _LOGGER.warning("Failed to send mold notification to %s", entity_id)
 
     if not sent_any:
-        # All targets were skipped or failed → persistent fallback
+        # All targets skipped or failed → persistent fallback
         async_create(hass, message, title=title, notification_id=notification_id)
 
 

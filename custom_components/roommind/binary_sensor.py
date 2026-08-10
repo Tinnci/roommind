@@ -45,7 +45,7 @@ async def async_setup_entry(
 
 
 class RoomMindCoverPausedSensor(CoordinatorEntity, BinarySensorEntity):
-    """Binary sensor indicating if cover auto-control is paused by user override."""
+    """Binary sensor indicating whether cover auto-control is paused by a user override."""
 
     _attr_has_entity_name = True
 

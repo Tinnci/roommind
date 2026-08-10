@@ -57,9 +57,9 @@ def resolve_target_at_time(
     presence_away_action: str = "eco",
     schedule_off_action: str = "eco",
 ) -> float | None:
-    """Resolve what the target temp would be at a specific timestamp.
+    """Resolve the target temp at a specific timestamp.
 
-    Returns None when the action is "off" (devices should be turned off).
+    Returns None when the action is "off" (turn devices off).
     """
     # 1. Override
     if override_temp is not None and (override_until is None or ts < override_until):
@@ -185,8 +185,8 @@ def resolve_schedule_index(
 ) -> int:
     """Return the 0-based index of the active schedule, or -1 if none.
 
-    This is the single source of truth for schedule selector resolution,
-    used by both the coordinator and schedule_utils helpers.
+    This is the single source of truth for schedule selector resolution.
+    Both the coordinator and schedule_utils helpers use it.
 
     Supports custom key names for reuse with different schedule types
     (e.g. cover schedules).
@@ -238,10 +238,10 @@ async def read_schedule_blocks(
 ) -> dict | None:
     """Read weekly schedule blocks via schedule.get_schedule service.
 
-    When ``cache`` is provided, successful reads are stored under the entity ID
-    so subsequent failures fall back to the last good blocks. Without a cache,
-    transient service failures cause the caller's target resolution to silently
-    revert to comfort_temp (see #308).
+    When ``cache`` is provided, store successful reads under the entity ID.
+    Subsequent failures then fall back to the last good blocks. Without a
+    cache, transient service failures cause the caller's target resolution
+    to silently revert to comfort_temp (see #308).
     """
     if not schedule_entity_id or not schedule_entity_id.startswith("schedule."):
         return None
@@ -278,8 +278,7 @@ async def read_schedule_blocks(
         return cached
 
     _LOGGER.warning(
-        "schedule.get_schedule unavailable for %s and no cached blocks; "
-        "target will fall back to comfort/eco (error=%r)",
+        "schedule.get_schedule unavailable for %s and no cached blocks; target falls back to comfort/eco (error=%r)",
         schedule_entity_id,
         error,
     )
@@ -297,8 +296,7 @@ def make_target_resolver(
 ) -> Callable[[float], TargetTemps]:
     """Create a sync target resolver function (schedule blocks pre-fetched).
 
-    Returns TargetTemps with None values for timestamps where devices should
-    be turned off.
+    Returns TargetTemps. None values mean "force off".
     """
     comfort_heat = room.get("comfort_heat", room.get("comfort_temp", DEFAULT_COMFORT_HEAT))
     comfort_cool = room.get("comfort_cool", DEFAULT_COMFORT_COOL)
@@ -351,7 +349,7 @@ def apply_mold_prevention_to_targets(
     room: dict,
     mold_prevention_delta: float,
 ) -> TargetTemps:
-    """Raise heating targets, restoring eco targets when control was off."""
+    """Raise heating targets; restore eco targets when control is off."""
     if mold_prevention_delta <= 0:
         return targets
     eco_heat = room.get("eco_heat", room.get("eco_temp", DEFAULT_ECO_HEAT))

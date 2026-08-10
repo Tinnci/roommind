@@ -1,4 +1,4 @@
-# Observer And Airflow Guide
+# Observer and Airflow Guide
 
 This guide documents the Home Assistant state metadata and airflow signals that RoomMind uses for room observation and comfort control.
 
@@ -12,7 +12,7 @@ For observation age, prefer timestamps in this order:
 2. `State.last_updated`: state attributes or the state value changed.
 3. `State.last_changed`: only the state value changed.
 
-This matters for stable temperature sensors. A sensor can keep reporting `20.5 C` for a long time; `last_changed` may look old even though the sensor is healthy. `last_reported` is therefore the best freshness signal on current Home Assistant releases.
+This matters for stable temperature sensors. A sensor can keep reporting `20.5 C` for a long time; `last_changed` can look old even though the sensor is healthy. `last_reported` is therefore the best freshness signal on current Home Assistant releases.
 
 RoomMind exposes the selected source as `freshness_source` and the computed age as `age_s` in live diagnostics.
 

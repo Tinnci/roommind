@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "RoomMind",
-        "description": "Set up RoomMind to manage room climate. Rooms are configured in the RoomMind panel after setup."
+        "description": "Configure RoomMind to manage room climate. Configure rooms in the RoomMind panel after setup."
       }
     },
     "abort": {
