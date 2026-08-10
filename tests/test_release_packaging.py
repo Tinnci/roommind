@@ -192,7 +192,9 @@ def test_release_workflow_validates_manual_tag_input_before_checkout():
 
     validation_index = release_workflow.index('case "$tag" in')
     output_index = release_workflow.index('echo "tag=$tag" >> "$GITHUB_OUTPUT"')
-    checkout_index = release_workflow.index("actions/checkout@v6")
+    checkout_match = re.search(r"actions/checkout@v\d+(?:\.\d+)*", release_workflow)
+    assert checkout_match is not None
+    checkout_index = checkout_match.start()
 
     assert "Release tag must start with v" in release_workflow
     assert "Release tag must not contain whitespace" in release_workflow
