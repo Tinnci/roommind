@@ -179,7 +179,7 @@ def test_release_workflow_runs_backend_gates_before_packaging():
 def test_release_workflow_runs_hacs_and_hassfest_before_packaging():
     release_workflow = (REPO_ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
 
-    hacs_index = release_workflow.index("uses: hacs/action@main")
+    hacs_index = release_workflow.index("uses: hacs/action@")
     hassfest_index = release_workflow.index("uses: home-assistant/actions/hassfest@master")
     package_index = release_workflow.index("scripts/build_release_package.py")
 

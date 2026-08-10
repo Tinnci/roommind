@@ -57,7 +57,7 @@ jobs:
           ref: ${{ steps.release.outputs.tag }}
 
       - name: HACS validation
-        uses: hacs/action@main
+        uses: hacs/action@22.5.0
         with:
           category: integration
 
@@ -82,6 +82,9 @@ jobs:
 
       - name: Install Python dependencies
         run: uv sync --locked --group dev
+
+      - name: Audit Python dependencies
+        run: uv audit --locked --preview-features audit-command
 
       - name: Run backend tests with coverage
         run: uv run pytest tests/ -v --cov=custom_components/roommind --cov-report=term --cov-fail-under=90
