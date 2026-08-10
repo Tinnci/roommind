@@ -128,16 +128,33 @@ jobs:
           path: dist/roommind.zip
           if-no-files-found: error
 
+      - name: Prepare release notes
+        id: notes
+        run: |
+          tag="${{ steps.release.outputs.tag }}"
+          version="${tag#v}"
+          notes_file="$(mktemp)"
+          awk -v version="$version" '
+            $0 ~ "^## " version " " { capture=1; print; next }
+            capture && /^## / { exit }
+            capture { print }
+          ' CHANGELOG.md > "$notes_file"
+          if [ ! -s "$notes_file" ]; then
+            printf 'Release asset for RoomMind %s is attached below.\n' "$tag" > "$notes_file"
+          fi
+          echo "notes_file=$notes_file" >> "$GITHUB_OUTPUT"
+
       - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="${{ steps.release.outputs.tag }}"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$tag" --notes-file "${{ steps.notes.outputs.notes_file }}" --repo "$GITHUB_REPOSITORY"
             gh release upload "$tag" dist/roommind.zip --repo "$GITHUB_REPOSITORY" --clobber
           else
             gh release create "$tag" dist/roommind.zip \
               --repo "$GITHUB_REPOSITORY" \
               --title "RoomMind $tag" \
-              --generate-notes
+              --notes-file "${{ steps.notes.outputs.notes_file }}"
           fi
