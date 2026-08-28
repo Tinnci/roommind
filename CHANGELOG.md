@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.19 - 2026-08-28
+
+### Fixed
+
+- Updated the development lockfile to patched pip 26.2.1 so release dependency auditing can complete.
+
 ## 1.7.18 - 2026-08-28
 
 ### Added
