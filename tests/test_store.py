@@ -3,11 +3,22 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
 
 from custom_components.roommind.const import DEFAULT_COMFORT_TEMP, DEFAULT_ECO_TEMP
+
+
+def test_runtime_version_matches_manifest() -> None:
+    """Runtime diagnostics and release metadata must identify one build."""
+    from custom_components.roommind.const import VERSION
+
+    manifest = json.loads((Path(__file__).parents[1] / "custom_components/roommind/manifest.json").read_text())
+
+    assert VERSION == manifest["version"]
 
 
 @pytest.mark.asyncio

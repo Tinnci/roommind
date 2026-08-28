@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.20 - 2026-08-28
+
+### Fixed
+
+- Keep the runtime and manifest versions synchronized so a fresh installation does not raise a false restart-required repair.
+
 ## 1.7.19 - 2026-08-28
 
 ### Fixed
