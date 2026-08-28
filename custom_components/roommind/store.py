@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import logging
 
@@ -34,6 +35,15 @@ class RoomMindStore:
         self._data: dict[str, dict] = {}
         self._settings: dict = {}
         self._thermal_data: dict = {}
+        self._write_lock = asyncio.Lock()
+
+    @property
+    def _write_transaction(self) -> asyncio.Lock:
+        """Return the write lock, tolerating legacy test/store construction."""
+        lock = getattr(self, "_write_lock", None)
+        if lock is None:
+            lock = self._write_lock = asyncio.Lock()
+        return lock
 
     async def async_load(self) -> None:
         """Load room data from the HA store."""
@@ -72,8 +82,13 @@ class RoomMindStore:
 
     async def _async_save(self) -> None:
         """Persist current room data to the HA store."""
+        async with self._write_transaction:
+            await self._async_save_locked()
+
+    async def _async_save_locked(self) -> None:
+        """Persist one immutable snapshot while holding the write transaction."""
         await self._store.async_save(
-            {"rooms": self._data, "settings": self._settings, "thermal_data": self._thermal_data}
+            copy.deepcopy({"rooms": self._data, "settings": self._settings, "thermal_data": self._thermal_data})
         )
 
     def get_rooms(self) -> dict[str, dict]:
@@ -98,9 +113,10 @@ class RoomMindStore:
 
     async def async_save_settings(self, changes: dict) -> dict:
         """Merge changes into global settings and persist."""
-        self._settings.update(changes)
-        await self._async_save()
-        return dict(self._settings)
+        async with self._write_transaction:
+            self._settings.update(changes)
+            await self._async_save_locked()
+            return dict(self._settings)
 
     def get_thermal_data(self) -> dict:
         """Return a deep copy of thermal learning data."""
@@ -108,25 +124,29 @@ class RoomMindStore:
 
     async def async_save_thermal_data(self, data: dict) -> None:
         """Replace thermal learning data and persist."""
-        self._thermal_data = data
-        await self._async_save()
+        async with self._write_transaction:
+            self._thermal_data = copy.deepcopy(data)
+            await self._async_save_locked()
 
     async def async_clear_thermal_data_room(self, area_id: str) -> None:
         """Clear thermal learning data for a single room."""
-        self._thermal_data.pop(area_id, None)
-        await self._async_save()
+        async with self._write_transaction:
+            self._thermal_data.pop(area_id, None)
+            await self._async_save_locked()
 
     async def async_clear_all_thermal_data(self) -> None:
         """Clear all thermal learning data."""
-        self._thermal_data = {}
-        await self._async_save()
+        async with self._write_transaction:
+            self._thermal_data = {}
+            await self._async_save_locked()
 
     async def async_save_room(self, area_id: str, config: dict) -> dict:
         """Create or update room configuration for an area."""
-        room = upsert_room_config(area_id, self._data.get(area_id), config)
-        self._data[area_id] = room
-        await self._async_save()
-        return room
+        async with self._write_transaction:
+            room = upsert_room_config(area_id, self._data.get(area_id), config)
+            self._data[area_id] = room
+            await self._async_save_locked()
+            return copy.deepcopy(room)
 
     async def async_update_room(self, area_id: str, changes: dict) -> dict:
         """Merge changes into an existing room. Raises KeyError if not found.
@@ -134,27 +154,29 @@ class RoomMindStore:
         Note: Does NOT perform device sync (devices <-> thermostats/acs).
         Use async_save_room() for changes involving device fields.
         """
-        if area_id not in self._data:
-            raise KeyError(f"Room '{area_id}' not found")
+        async with self._write_transaction:
+            if area_id not in self._data:
+                raise KeyError(f"Room '{area_id}' not found")
 
-        # Prevent overriding the area_id
-        changes.pop("area_id", None)
+            # Prevent overriding the area_id
+            changes = {key: value for key, value in changes.items() if key != "area_id"}
 
-        self._data[area_id].update(changes)
-        if {
-            "temperature_sensor",
-            "temperature_sensors",
-            "humidity_sensor",
-            "humidity_sensors",
-        }.intersection(changes):
-            normalize_room_sensor_sources(self._data[area_id])
-        await self._async_save()
-        return self._data[area_id]
+            self._data[area_id].update(changes)
+            if {
+                "temperature_sensor",
+                "temperature_sensors",
+                "humidity_sensor",
+                "humidity_sensors",
+            }.intersection(changes):
+                normalize_room_sensor_sources(self._data[area_id])
+            await self._async_save_locked()
+            return copy.deepcopy(self._data[area_id])
 
     async def async_delete_room(self, area_id: str) -> None:
         """Delete a room. Raises KeyError if not found."""
-        if area_id not in self._data:
-            raise KeyError(f"Room '{area_id}' not found")
+        async with self._write_transaction:
+            if area_id not in self._data:
+                raise KeyError(f"Room '{area_id}' not found")
 
-        del self._data[area_id]
-        await self._async_save()
+            del self._data[area_id]
+            await self._async_save_locked()

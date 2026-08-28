@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.7.18 - 2026-08-28
+
+### Added
+
+- Added explicit actuation evidence that distinguishes dispatch, acceptance, application, and confirmation outcomes.
+- Added TCL command-result correlation through Home Assistant context IDs, including evidence that arrives before dispatch bookkeeping.
+
+### Changed
+
+- Freeze each room's primary sensor and climate-device observations before any room actuation begins.
+- Serialize RoomMind storage mutations with immutable persistence snapshots.
+
+### Fixed
+
+- Prevent failed or unsupported service operations from being reported as active climate devices.
+
 ## 1.7.17 - 2026-08-11
 
 ### Fixed

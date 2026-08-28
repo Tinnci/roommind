@@ -115,6 +115,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a RoomMind config entry."""
     unload_ok: bool = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
+        coordinator = hass.data[DOMAIN].get(entry.entry_id)
+        if coordinator is not None:
+            await coordinator.async_shutdown()
         hass.data[DOMAIN].pop(entry.entry_id)
         hass.data[DOMAIN].pop("coordinator", None)
 

@@ -42,6 +42,7 @@ from ..utils.device_utils import (
     has_reliable_hvac_modes,
 )
 from ..utils.temp_utils import celsius_to_ha_temp
+from .actuation import ActuationLedger, DeviceActuationResult, DispatchStatus
 from .forecast_series import build_outdoor_temperature_series
 from .mpc_optimizer import MPCOptimizer, MPCPlan
 from .residual_heat import get_min_run_blocks
@@ -67,6 +68,9 @@ class AppliedCommandReport:
 
     active_eids: set[str] = field(default_factory=set)
     inactive_eids: set[str] = field(default_factory=set)
+    failed_eids: set[str] = field(default_factory=set)
+    results: dict[str, DeviceActuationResult] = field(default_factory=dict)
+    operation_results: dict[str, tuple[DeviceActuationResult, ...]] = field(default_factory=dict)
 
     def mark_active(self, entity_id: str) -> None:
         """Record an entity as commanded active."""
@@ -77,6 +81,28 @@ class AppliedCommandReport:
         """Record an entity as commanded inactive/idle."""
         self.inactive_eids.add(entity_id)
         self.active_eids.discard(entity_id)
+
+    def record(
+        self,
+        entity_id: str,
+        *,
+        active: bool,
+        operations: tuple[DeviceActuationResult, ...],
+    ) -> None:
+        """Record activity only when every required operation was effective."""
+        result = DeviceActuationResult.combine(entity_id, operations)
+        self.results[entity_id] = result
+        self.operation_results[entity_id] = operations
+        if not result.effective:
+            self.failed_eids.add(entity_id)
+            self.active_eids.discard(entity_id)
+            self.inactive_eids.discard(entity_id)
+            return
+        self.failed_eids.discard(entity_id)
+        if active:
+            self.mark_active(entity_id)
+        else:
+            self.mark_inactive(entity_id)
 
 
 @dataclass(frozen=True, slots=True)
@@ -931,6 +957,7 @@ class MPCController:
         room_config: dict,
         *,
         model_manager: RoomModelManager,
+        actuation_ledger: ActuationLedger | None = None,
         outdoor_temp: float | None = None,
         outdoor_forecast: list[dict] | None = None,
         settings: dict | None = None,
@@ -974,7 +1001,9 @@ class MPCController:
         self.previous_mode = previous_mode
         self.has_external_sensor = has_external_sensor
         self._model_manager = model_manager
+        self._actuation_ledger = actuation_ledger
         self._area_id = room_config.get("area_id", "unknown")
+        self._dispatch_results: dict[str, list[DeviceActuationResult]] = {}
         self._target_resolver = target_resolver
         self.last_plan: MPCPlan | None = None
         self._solar_exposure = solar_exposure or SolarExposure(raw_solar=q_solar, shading_factor=shading_factor)
@@ -1484,13 +1513,17 @@ class MPCController:
                 report.mark_inactive(eid)
                 continue
             if can_heat and ha_heat_target is not None:
-                await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "heat"})
-                await self._call(
+                mode_result = await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "heat"})
+                temperature_result = await self._call(
                     "set_temperature",
                     {"entity_id": eid, "temperature": ha_heat_target, "hvac_mode": "heat"},
                     temp_intent="heat",
                 )
-                report.mark_active(eid)
+                report.record(
+                    eid,
+                    active=True,
+                    operations=(mode_result, temperature_result),
+                )
             else:
                 await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "off"})
                 report.mark_inactive(eid)
@@ -1742,13 +1775,17 @@ class MPCController:
                     report.mark_inactive(eid)
                     continue
                 ha_t = ha_trv_direct if eid in self._direct_eids else ha_trv
-                await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "heat"})
-                await self._call(
+                mode_result = await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "heat"})
+                temperature_result = await self._call(
                     "set_temperature",
                     {"entity_id": eid, "temperature": ha_t, "hvac_mode": "heat"},
                     temp_intent="heat",
                 )
-                report.mark_active(eid)
+                report.record(
+                    eid,
+                    active=True,
+                    operations=(mode_result, temperature_result),
+                )
 
             if self.has_external_sensor and context.current_temp is not None:
                 ac_heat_target = round(
@@ -1784,13 +1821,17 @@ class MPCController:
                 else:
                     ac_mode = ""
                 if ac_mode:
-                    await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": ac_mode})
-                    await self._call(
+                    mode_result = await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": ac_mode})
+                    temperature_result = await self._call(
                         "set_temperature",
                         {"entity_id": eid, "temperature": ha_t, "hvac_mode": ac_mode},
                         temp_intent="heat",
                     )
-                    report.mark_active(eid)
+                    report.record(
+                        eid,
+                        active=True,
+                        operations=(mode_result, temperature_result),
+                    )
                 else:
                     await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "off"})
                     report.mark_inactive(eid)
@@ -1822,13 +1863,17 @@ class MPCController:
                 report.mark_inactive(eid)
                 continue
             ha_t = ha_cool_direct if eid in self._direct_eids else ha_target
-            await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "cool"})
-            await self._call(
+            mode_result = await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "cool"})
+            temperature_result = await self._call(
                 "set_temperature",
                 {"entity_id": eid, "temperature": ha_t, "hvac_mode": "cool"},
                 temp_intent="cool",
             )
-            report.mark_active(eid)
+            report.record(
+                eid,
+                active=True,
+                operations=(mode_result, temperature_result),
+            )
         for eid in context.thermostats:
             if eid in context.forced_off:
                 await async_idle_device(
@@ -1914,6 +1959,7 @@ class MPCController:
         compressor_forced_off: set[str] | None = None,
     ) -> AppliedCommandReport:
         """Apply a controller intent and return the actual command report."""
+        self._dispatch_results = {}
         _forced_on = compressor_forced_on or set()
         _forced_off = compressor_forced_off or set()
 
@@ -1967,25 +2013,47 @@ class MPCController:
             and self.climate_mode not in (CLIMATE_MODE_HEAT_ONLY, CLIMATE_MODE_COOL_ONLY)
             and mode != MODE_IDLE
         ):
-            return await self._async_apply_managed_auto(
+            report = await self._async_apply_managed_auto(
                 apply_context,
                 can_heat=can_heat,
                 can_cool=can_cool,
             )
+        elif mode == MODE_HEATING and heat_source_plan is not None:
+            report = await self._async_apply_heat_source_plan(heat_source_plan, apply_context)
+        else:
+            report = await self._async_apply_standard(apply_context)
+        self._reconcile_dispatch_results(report)
+        return report
 
-        if mode == MODE_HEATING and heat_source_plan is not None:
-            return await self._async_apply_heat_source_plan(heat_source_plan, apply_context)
+    def _record_dispatch_result(self, result: DeviceActuationResult) -> DeviceActuationResult:
+        """Retain immediate evidence for the current apply operation."""
+        self._dispatch_results.setdefault(result.entity_id, []).append(result)
+        if self._actuation_ledger is not None:
+            self._actuation_ledger.record_dispatch(result)
+        return result
 
-        return await self._async_apply_standard(apply_context)
+    def _reconcile_dispatch_results(self, report: AppliedCommandReport) -> None:
+        """Remove activity claims contradicted by dispatch evidence."""
+        for entity_id in tuple(report.active_eids):
+            operations = tuple(self._dispatch_results.get(entity_id, ()))
+            if operations:
+                report.record(entity_id, active=True, operations=operations)
 
-    async def _call(self, service: str, data: dict, *, temp_intent: str = "") -> None:
+    async def _call(self, service: str, data: dict, *, temp_intent: str = "") -> DeviceActuationResult:
         eid = data.get("entity_id")
         state = self.hass.states.get(eid) if eid else None
 
         # Delegate "turn off" to fallback-aware helper (handles heat-only TRVs)
         if service == "set_hvac_mode" and data.get("hvac_mode") == "off" and eid:
             await async_idle_device(self.hass, eid, self._devices, area_id=self._area_id, targets=self._idle_targets)
-            return
+            return self._record_dispatch_result(
+                DeviceActuationResult(
+                    entity_id=eid,
+                    dispatch=DispatchStatus.SENT,
+                    service=service,
+                    desired=dict(data),
+                )
+            )
 
         # Resolve hvac_mode to a supported mode (handles auto-only devices)
         if service == "set_hvac_mode" and state:
@@ -2019,7 +2087,15 @@ class MPCController:
                         eid,
                         data["hvac_mode"],
                     )
-                    return
+                    return self._record_dispatch_result(
+                        DeviceActuationResult(
+                            entity_id=eid or "",
+                            dispatch=DispatchStatus.UNSUPPORTED,
+                            service=service,
+                            desired=dict(data),
+                            diagnostic=f"unsupported HVAC mode: {data['hvac_mode']}",
+                        )
+                    )
             if resolved != data["hvac_mode"]:
                 _LOGGER.debug(
                     "Area '%s': device '%s' resolved '%s' -> '%s'",
@@ -2049,23 +2125,50 @@ class MPCController:
             skip = bool(cached and cached.get("service") == service and _command_payload_matches(cached, service, data))
 
         if skip:
-            return
+            return self._record_dispatch_result(
+                DeviceActuationResult(
+                    entity_id=eid or "",
+                    dispatch=DispatchStatus.SKIPPED,
+                    service=service,
+                    desired=dict(data),
+                )
+            )
 
         try:
+            call_context = make_roommind_context()
             await self.hass.services.async_call(
                 "climate",
                 service,
                 data,
                 blocking=True,
-                context=make_roommind_context(),
+                context=call_context,
             )
             if eid:
                 _last_commands[eid] = _cache_entry(service, data)
-        except Exception:  # noqa: BLE001
+            return self._record_dispatch_result(
+                DeviceActuationResult(
+                    entity_id=eid or "",
+                    dispatch=DispatchStatus.SENT,
+                    service=service,
+                    desired=dict(data),
+                    context_id=call_context.id,
+                )
+            )
+        except Exception as err:  # noqa: BLE001
             _LOGGER.warning(
                 "Area '%s': climate.%s failed on '%s'",
                 self._area_id,
                 service,
                 data.get("entity_id"),
                 exc_info=True,
+            )
+            return self._record_dispatch_result(
+                DeviceActuationResult(
+                    entity_id=eid or "",
+                    dispatch=DispatchStatus.FAILED,
+                    service=service,
+                    desired=dict(data),
+                    diagnostic=str(err),
+                    context_id=call_context.id,
+                )
             )

@@ -145,6 +145,51 @@ class TestRoomMindCoordinator:
         assert data == {"rooms": {}}
 
     @pytest.mark.asyncio
+    async def test_update_freezes_primary_observations_before_processing_rooms(self, hass, mock_config_entry):
+        """No room may actuate before every room's primary inputs are captured."""
+        rooms = {
+            "living_room_abc12345": SAMPLE_ROOM,
+            "bedroom_def67890": {**SAMPLE_ROOM, "area_id": "bedroom_def67890"},
+        }
+        store = _make_store_mock(rooms)
+        hass.data = {"roommind": {"store": store}}
+        coordinator = _create_coordinator(hass, mock_config_entry)
+        reads: list[tuple[str, str]] = []
+
+        coordinator._read_room_sensors = MagicMock(
+            side_effect=lambda room, area_id: reads.append(("sensors", area_id)) or MagicMock()
+        )
+        coordinator._read_climate_device_snapshot = MagicMock(
+            side_effect=lambda room: reads.append(("devices", room["area_id"])) or MagicMock()
+        )
+
+        async def process(room, settings, forecast, *, observation=None):
+            assert reads == [
+                ("sensors", "living_room_abc12345"),
+                ("devices", "living_room_abc12345"),
+                ("sensors", "bedroom_def67890"),
+                ("devices", "bedroom_def67890"),
+            ]
+            assert observation is not None
+            return {"area_id": room["area_id"]}
+
+        coordinator._async_process_room = AsyncMock(side_effect=process)
+        coordinator._read_outdoor_environment = MagicMock()
+        coordinator._ensure_runtime_state = MagicMock()
+        coordinator._begin_observation_cycle = MagicMock()
+        coordinator._async_update_weather_environment = AsyncMock(return_value=[])
+        coordinator._update_room_couplings = MagicMock()
+        coordinator._async_control_master_devices = AsyncMock()
+        coordinator._async_record_history = AsyncMock()
+        coordinator._async_save_thermal_state = AsyncMock(return_value=False)
+        coordinator._async_rotate_and_prune_observations = AsyncMock()
+        coordinator._async_maintain_valves = AsyncMock()
+
+        data = await coordinator._async_update_data()
+
+        assert set(data["rooms"]) == set(rooms)
+
+    @pytest.mark.asyncio
     async def test_update_climate_service_failure_does_not_crash(self, hass, mock_config_entry):
         """Test that a climate service call failure is handled gracefully."""
         store = _make_store_mock({"living_room_abc12345": SAMPLE_ROOM})

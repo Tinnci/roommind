@@ -50,6 +50,7 @@ from .const import (
     is_override_suppressed,
     make_roommind_context,
 )
+from .control.actuation import ActuationLedger
 from .control.constraints import ConstraintInput, ConstraintReducer
 from .control.mpc_controller import (
     DEFAULT_OUTDOOR_TEMP_FALLBACK,
@@ -220,6 +221,14 @@ class RoomSensorSnapshot:
     temperature_observations: list[TemperatureObservation]
 
 
+@dataclass(frozen=True, slots=True)
+class RoomControlObservation:
+    """Primary room inputs frozen before any room actuation begins."""
+
+    sensors: RoomSensorSnapshot
+    climate_devices: ClimateDeviceSnapshot
+
+
 def _get_area_name(hass: HomeAssistant, area_id: str) -> str:
     """Get human-readable area name from area registry."""
     try:
@@ -242,6 +251,11 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(seconds=UPDATE_INTERVAL),
         )
         self.entry = entry
+        self._actuation_ledger = ActuationLedger()
+        self._remove_tcl_command_listener = hass.bus.async_listen(
+            "tcl_udp_ac_command_result",
+            self._handle_tcl_command_result,
+        )
         self.rooms: dict = {}
         self.outdoor_temp: float | None = None
         self.outdoor_temp_effective: float | None = None
@@ -295,6 +309,16 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         self._last_valid_temps: dict[str, tuple[float, float]] = {}  # {area_id: (celsius, monotonic_ts)}
         # Per-entity cache of schedule blocks; fallback when schedule.get_schedule fails (#308)
         self._schedule_blocks_cache: dict[str, dict] = {}
+
+    def _handle_tcl_command_result(self, event: Any) -> None:
+        """Reconcile TCL device evidence without coupling to its implementation."""
+        data = getattr(event, "data", None)
+        if isinstance(data, dict):
+            self._actuation_ledger.record_tcl_event(data)
+
+    async def async_shutdown(self) -> None:
+        """Release event subscriptions owned by the coordinator."""
+        self._remove_tcl_command_listener()
 
     def register_entity_platform(
         self,
@@ -350,10 +374,28 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         self._begin_observation_cycle(settings)
 
         outdoor_forecast = await self._async_update_weather_environment(settings)
-        room_states: dict[str, dict] = {}
+        observations: dict[str, RoomControlObservation] = {}
         for area_id, room in rooms.items():
             try:
-                room_state = await self._async_process_room(room, settings, outdoor_forecast)
+                observations[area_id] = RoomControlObservation(
+                    sensors=self._read_room_sensors(room, area_id),
+                    climate_devices=self._read_climate_device_snapshot(room),
+                )
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("Room '%s': observation failed, skipping", area_id)
+
+        room_states: dict[str, dict] = {}
+        for area_id, room in rooms.items():
+            observation = observations.get(area_id)
+            if observation is None:
+                continue
+            try:
+                room_state = await self._async_process_room(
+                    room,
+                    settings,
+                    outdoor_forecast,
+                    observation=observation,
+                )
                 room_states[area_id] = room_state
             except Exception:  # noqa: BLE001
                 _LOGGER.exception("Room '%s': processing failed, skipping", area_id)
@@ -1138,11 +1180,18 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             cooling_boost_target=max(ac_min_temps) if ac_min_temps else None,
         )
 
-    async def _async_process_room(self, room: dict, settings: dict, outdoor_forecast: list[dict]) -> dict:
+    async def _async_process_room(
+        self,
+        room: dict,
+        settings: dict,
+        outdoor_forecast: list[dict],
+        *,
+        observation: RoomControlObservation | None = None,
+    ) -> dict:
         """Process a single room: read sensor, evaluate schedule, apply control."""
         area_id = room.get("area_id", "unknown")
 
-        sensor_snapshot = self._read_room_sensors(room, area_id)
+        sensor_snapshot = observation.sensors if observation is not None else self._read_room_sensors(room, area_id)
         current_temp = sensor_snapshot.current_temp
         current_temp_raw = sensor_snapshot.current_temp_raw
         current_humidity = sensor_snapshot.humidity.value
@@ -1276,6 +1325,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             self.hass,
             room,
             model_manager=self._model_manager,
+            actuation_ledger=self._actuation_ledger,
             outdoor_temp=self.outdoor_temp_effective,
             outdoor_forecast=outdoor_forecast,
             settings=settings,
@@ -1368,7 +1418,9 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             rapid_recovery_active=rapid_recovery_active,
         )
 
-        device_snapshot = self._read_climate_device_snapshot(room)
+        device_snapshot = (
+            observation.climate_devices if observation is not None else self._read_climate_device_snapshot(room)
+        )
 
         # Exclude TRVs currently being valve-protection-cycled from normal control
         cycling_eids = {eid for eid in device_snapshot.trv_entity_ids if self._valve_manager.is_entity_cycling(eid)}

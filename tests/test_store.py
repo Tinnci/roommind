@@ -2,11 +2,42 @@
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
 
 from custom_components.roommind.const import DEFAULT_COMFORT_TEMP, DEFAULT_ECO_TEMP
+
+
+@pytest.mark.asyncio
+async def test_writes_serialize_mutation_and_persistence_as_one_transaction(store):
+    """A later mutation cannot enter memory while an earlier snapshot is saving."""
+    await store.async_load()
+    first_save_started = asyncio.Event()
+    release_first_save = asyncio.Event()
+    saved: list[dict] = []
+
+    async def save_snapshot(payload):
+        saved.append(payload)
+        if len(saved) == 1:
+            first_save_started.set()
+            await release_first_save.wait()
+
+    store._store.async_save = AsyncMock(side_effect=save_snapshot)
+    settings_write = asyncio.create_task(store.async_save_settings({"prediction_enabled": False}))
+    await first_save_started.wait()
+    thermal_write = asyncio.create_task(store.async_save_thermal_data({"room": {"samples": 1}}))
+    await asyncio.sleep(0)
+
+    assert store.get_thermal_data() == {}
+    assert saved[0]["thermal_data"] == {}
+
+    release_first_save.set()
+    await asyncio.gather(settings_write, thermal_write)
+
+    assert saved[1]["settings"]["prediction_enabled"] is False
+    assert saved[1]["thermal_data"] == {"room": {"samples": 1}}
 
 
 @pytest.mark.asyncio
