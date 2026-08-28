@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.21 - 2026-08-28
+
+### Fixed
+
+- Align the bug-report version placeholder with release metadata so the release packaging gate succeeds.
+
 ## 1.7.20 - 2026-08-28
 
 ### Fixed
