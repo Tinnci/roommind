@@ -160,7 +160,7 @@ class TestCoverageGaps:
             result = await coordinator._async_update_data()
             assert result is not None
             room_state = result["rooms"]["living_room_abc12345"]
-            assert room_state["mode"] in ("heating", "cooling", "idle")
+            assert room_state["commanded_mode"] in ("heating", "cooling", "idle")
             assert room_state["mpc_active"] is False
             assert room_state["target_temp"] is not None
             assert room_state["current_temp"] == 18.0
@@ -196,7 +196,7 @@ class TestCoverageGaps:
         assert result is not None
         room_state = result["rooms"]["living_room_abc12345"]
         # Room still processes normally despite cover schedule parse error
-        assert room_state["mode"] == "heating"  # 18 < 21 target
+        assert room_state["commanded_mode"] == "heating"  # 18 < 21 target
         assert room_state["target_temp"] == 21.0
         assert room_state["current_temp"] == 18.0
 
@@ -234,7 +234,7 @@ class TestCoverageGaps:
             result = await coordinator._async_update_data()
             assert result is not None
             room_state = result["rooms"]["living_room_abc12345"]
-            assert room_state["mode"] in ("heating", "cooling", "idle")
+            assert room_state["commanded_mode"] in ("heating", "cooling", "idle")
             assert room_state["target_temp"] is not None
             assert room_state["current_temp"] == 18.0
             # Verify night close forced position was applied

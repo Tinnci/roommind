@@ -780,6 +780,21 @@ export class RsDeviceSection extends LitElement {
               </ha-select>
               <rs-info-icon .text=${localize("devices.setpoint_mode_hint", lang)}></rs-info-icon>
             </div>
+            ${(device.setpoint_mode ?? "proportional") === "proportional" ? html`
+              <div class="detail-field with-info">
+                <ha-textfield
+                  type="number" min="0" max="10" step="0.5"
+                  .label=${localize("devices.max_setpoint_offset", lang)}
+                  .value=${device.max_setpoint_offset_c == null ? "" : String(device.max_setpoint_offset_c)}
+                  @change=${(e: Event) => {
+                    const raw = (e.target as HTMLInputElement).value;
+                    const value = raw === "" ? null : Number(raw);
+                    if (value !== null && (!Number.isFinite(value) || value < 0 || value > 10)) return;
+                    this._fireDeviceChanged(this.devices.map((d) => d.entity_id === entityId ? { ...d, max_setpoint_offset_c: value } : d));
+                  }}
+                ></ha-textfield>
+                <rs-info-icon .text=${localize("devices.max_setpoint_offset_hint", lang)}></rs-info-icon>
+              </div>` : nothing}
           `
         : nothing}
       ${isThermostat && this.valveProtectionEnabled

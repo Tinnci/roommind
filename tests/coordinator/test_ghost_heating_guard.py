@@ -93,8 +93,45 @@ async def _run_and_capture_train_kwargs(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", [None, "cooling"])
+async def test_full_control_uses_observation_instead_of_heating_request(hass, mock_config_entry, action):
+    states_get = make_mock_states_get(
+        temp="19.5",
+        outdoor_temp="5.0",
+        schedule_state="on",
+        extra={"climate.living_room": ("heat", {"hvac_action": action})},
+    )
+    kwargs = await _run_and_capture_train_kwargs(hass, mock_config_entry, states_get)
+    assert kwargs is not None
+    assert kwargs["ekf_mode"] == action
+    assert kwargs["ekf_pf"] == (1.0 if action else 0.0)
+
+
 class TestGhostHeatingGuard:
     """Verify the observation-based override only fires when unambiguous."""
+
+    @pytest.mark.asyncio
+    async def test_dispatch_cannot_relabel_the_pre_dispatch_temperature(self, hass, mock_config_entry):
+        room = _room_for_guard()
+        hass.data = {"roommind": {"store": _make_store_mock({room["area_id"]: room})}}
+        device = MagicMock()
+        device.state = "heat"
+        device.attributes = {"hvac_action": "idle", "hvac_modes": ["off", "heat"]}
+        base = make_mock_states_get(temp="19.5", outdoor_temp="5.0", schedule_state="on")
+        hass.states.get = MagicMock(side_effect=lambda eid: device if eid == "climate.living_room" else base(eid))
+
+        async def dispatch(domain, service, *args, **kwargs):
+            if domain == "climate":
+                device.attributes["hvac_action"] = "heating"
+
+        hass.services.async_call = AsyncMock(side_effect=dispatch)
+        coordinator = _create_coordinator(hass, mock_config_entry)
+        coordinator._ekf_training.process = MagicMock()
+        result = await coordinator._async_update_data()
+        assert result["rooms"][room["area_id"]]["commanded_mode"] == MODE_HEATING
+        assert result["rooms"][room["area_id"]]["observed_mode"] == MODE_IDLE
+        assert coordinator._ekf_training.process.call_args.kwargs["ekf_mode"] == MODE_IDLE
 
     @pytest.mark.asyncio
     async def test_guard_overrides_heating_to_idle_when_all_devices_idle(self, hass, mock_config_entry):
@@ -177,9 +214,8 @@ class TestGhostHeatingGuard:
         kwargs = await _run_and_capture_train_kwargs(hass, mock_config_entry, states_get)
 
         assert kwargs is not None
-        # Without hvac_action we cannot reliably detect ghost heating; the
-        # commanded mode is used (same as before this fix).
-        assert kwargs["ekf_mode"] == MODE_HEATING
+        # Missing output feedback pauses learning.
+        assert kwargs["ekf_mode"] is None
 
     @pytest.mark.asyncio
     async def test_guard_inactive_on_mixed_hvac_actions(self, hass, mock_config_entry):
@@ -230,7 +266,7 @@ class TestGhostHeatingGuard:
         # Even if commanded/observed are contradictory, guard must not force
         # idle — that would need a reliable single observation.
         assert kwargs is not None
-        assert kwargs["ekf_mode"] in (MODE_HEATING, MODE_COOLING, MODE_IDLE)
+        assert kwargs["ekf_mode"] is None
         # With both actions present, _observe_device_action returns None → no override.
         # The commanded-mode path is used.  We only assert non-interference:
         # q_residual is NOT forced to 0 unless guard fires or heat_source aggregated pf=0.
@@ -442,10 +478,9 @@ class TestGhostHeatingGuard:
 
         assert training_mock.called
         kwargs = training_mock.call_args.kwargs
-        # With all plan commands at pf=0, mean(pf)=0 → zero-pf normalize
-        # forces the mode to idle regardless of the observed heating action.
-        assert kwargs["ekf_pf"] == 0.0
-        assert kwargs["ekf_mode"] == MODE_IDLE
+        # A zero request cannot erase heating observed before dispatch.
+        assert kwargs["ekf_pf"] == 1.0
+        assert kwargs["ekf_mode"] == MODE_HEATING
         assert kwargs["q_residual"] == 0.0
 
     @pytest.mark.asyncio

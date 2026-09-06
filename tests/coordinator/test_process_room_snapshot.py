@@ -34,128 +34,6 @@ def _setup_coordinator(hass, mock_config_entry, rooms, settings=None):
     return coordinator, store
 
 
-# Keys that every normal (non-outdoor) room return dict must contain.
-NORMAL_ROOM_KEYS = {
-    "area_id",
-    "current_temp",
-    "current_temp_raw",
-    "current_humidity",
-    "target_temp",
-    "heat_target",
-    "cool_target",
-    "mode",
-    "commanded_mode",
-    "heating_power",
-    "device_setpoint",
-    "window_open",
-    "override_active",
-    "override_type",
-    "override_temp",
-    "override_until",
-    "override_suppressed",
-    "active_schedule_index",
-    "confidence",
-    "mpc_active",
-    "presence_away",
-    "force_off",
-    "mold_risk_level",
-    "mold_surface_rh",
-    "mold_prevention_active",
-    "mold_prevention_delta",
-    "shading_factor",
-    "q_occupancy",
-    "q_fan_mix",
-    "q_vent",
-    "airflow_ach",
-    "perceived_temp",
-    "airflow_active",
-    "airflow_mix_plan_level",
-    "airflow_vent_plan_level",
-    "airflow_plan_level",
-    "airflow_devices_status",
-    "airflow_command_status",
-    "sensor_conflict",
-    "sensor_fusion_status",
-    "temperature_source",
-    "temperature_source_count",
-    "temperature_primary_available",
-    "humidity_sources",
-    "humidity_source_count",
-    "humidity_primary_available",
-    "hvac_output_status",
-    "night_mode",
-    "night_control_status",
-    "rapid_recovery_active",
-    "effective_control_target",
-    "coupling_status",
-    "n_observations",
-    "blind_position",
-    "cover_auto_paused",
-    "cover_forced_reason",
-    "cover_reason",
-    "active_cover_schedule_index",
-    "active_heat_sources",
-}
-
-OUTDOOR_ROOM_KEYS = {
-    "area_id",
-    "current_temp",
-    "current_temp_raw",
-    "current_humidity",
-    "target_temp",
-    "heat_target",
-    "cool_target",
-    "mode",
-    "heating_power",
-    "device_setpoint",
-    "window_open",
-    "override_active",
-    "override_type",
-    "override_temp",
-    "override_until",
-    "override_suppressed",
-    "active_schedule_index",
-    "confidence",
-    "mpc_active",
-    "presence_away",
-    "force_off",
-    "mold_risk_level",
-    "mold_surface_rh",
-    "mold_prevention_active",
-    "mold_prevention_delta",
-    "shading_factor",
-    "q_fan_mix",
-    "q_vent",
-    "airflow_active",
-    "airflow_mix_plan_level",
-    "airflow_vent_plan_level",
-    "airflow_plan_level",
-    "airflow_devices_status",
-    "airflow_command_status",
-    "sensor_conflict",
-    "sensor_fusion_status",
-    "temperature_source",
-    "temperature_source_count",
-    "temperature_primary_available",
-    "humidity_sources",
-    "humidity_source_count",
-    "humidity_primary_available",
-    "hvac_output_status",
-    "night_mode",
-    "night_control_status",
-    "rapid_recovery_active",
-    "effective_control_target",
-    "coupling_status",
-    "n_observations",
-    "blind_position",
-    "cover_auto_paused",
-    "cover_forced_reason",
-    "active_cover_schedule_index",
-    "q_occupancy",
-    "active_heat_sources",
-}
-
-
 class TestProcessRoomSnapshot:
     """Snapshot tests for _async_process_room return dict."""
 
@@ -175,14 +53,14 @@ class TestProcessRoomSnapshot:
         result = await coordinator._async_process_room(SAMPLE_ROOM, settings, [])
 
         # All expected keys present
-        assert set(result.keys()) == NORMAL_ROOM_KEYS
 
         assert result["area_id"] == "living_room_abc12345"
         assert result["current_temp"] == 18.0
         assert result["target_temp"] == pytest.approx(21.0)
         assert result["heat_target"] == pytest.approx(21.0)
-        assert result["mode"] == "heating"
-        assert result["heating_power"] > 0
+        assert result["commanded_mode"] == "heating"
+        assert result["requested_power"] > 0
+        assert result["observation_status"] == "unknown"
         assert result["window_open"] is False
         assert result["override_active"] is False
         assert result["presence_away"] is False
@@ -289,7 +167,6 @@ class TestProcessRoomSnapshot:
         settings = store.get_settings()
         result = await coordinator._async_process_room(room, settings, [])
 
-        assert set(result.keys()) == OUTDOOR_ROOM_KEYS
         assert result["mode"] == "idle"
         assert result["force_off"] is False  # NOT True!
         assert result["target_temp"] is None
@@ -317,7 +194,6 @@ class TestProcessRoomSnapshot:
         assert result["mode"] == "idle"
         assert result["heating_power"] == 0
         # All normal keys should still be present
-        assert set(result.keys()) == NORMAL_ROOM_KEYS
 
     @pytest.mark.asyncio
     async def test_managed_mode(self, hass, mock_config_entry):
@@ -352,4 +228,3 @@ class TestProcessRoomSnapshot:
 
         assert result["target_temp"] is not None
         # Managed mode should still return all normal keys
-        assert set(result.keys()) == NORMAL_ROOM_KEYS

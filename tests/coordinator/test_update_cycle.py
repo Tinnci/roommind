@@ -61,7 +61,7 @@ class TestRoomMindCoordinator:
         assert room_state["current_temp"] == 18.0
         assert room_state["current_humidity"] == 55.0
         assert room_state["target_temp"] == 21.0
-        assert room_state["mode"] == "heating"
+        assert room_state["commanded_mode"] == "heating"
 
         # Verify service calls for heating: set_hvac_mode(heat) + set_temperature
         # Filter to climate calls only (schedule.get_schedule may also be called)
@@ -206,7 +206,9 @@ class TestRoomMindCoordinator:
         data = await coordinator._async_update_data()
 
         room_state = data["rooms"]["living_room_abc12345"]
-        assert room_state["mode"] == "heating"
+        assert room_state["mode"] == "idle"
+        assert room_state["observation_status"] == "unknown"
+        assert room_state["commanded_mode"] == "heating"
 
     @pytest.mark.asyncio
     async def test_async_room_added_triggers_refresh(self, hass, mock_config_entry):
@@ -839,6 +841,7 @@ class TestCoverageGaps:
             side_effect=make_mock_states_get(
                 temp="18.0",
                 outdoor_temp="5.0",
+                extra={"climate.living_room": ("heat", {"hvac_action": "heating"})},
             )
         )
         hass.services.async_call = AsyncMock()
@@ -869,6 +872,7 @@ class TestCoverageGaps:
                 temp="18.0",
                 outdoor_temp="5.0",
                 window_sensors={"binary_sensor.window": "on"},
+                extra={"climate.living_room": ("off", {})},
             )
         )
         hass.services.async_call = AsyncMock()

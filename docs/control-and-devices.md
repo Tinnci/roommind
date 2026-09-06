@@ -2,6 +2,24 @@
 
 This page explains the RoomMind control settings and the related device options.
 
+## Requests, observations, and accuracy
+
+RoomMind's regular Control Cycle runs every 30 seconds. Room temperature and climate output observations are captured before any room receives commands. The room page separates the requested mode and output from the observed device mode. Missing or conflicting device feedback is shown as unknown; a failed dispatch is reported separately.
+
+A requested percentage is a control signal, not measured electrical or thermal power. A completed Home Assistant service call, or a skipped repeat command, does not prove physical application. Learning uses device output observations; missing feedback pauses normal thermal learning instead of inferring heating from a setpoint gap. Devices reporting only a mode/setpoint may therefore remain in fallback control. Observed heating/cooling is currently a binary activity signal, not a calibrated compressor-capacity measurement.
+
+## Rapid recovery and quiet hours
+
+`Room configuration -> Comfort & night -> Advanced control constraints` contains the rapid-recovery switch and temperature-gap threshold. With a trained model, recovery increases the optimizer's preference for restoring comfort. It does not replace the optimizer's result with full output or restart a direction the controller disallowed. Predictive braking, window pauses, outdoor restrictions, and compressor protection remain effective.
+
+With fallback on/off control, recovery can request stronger circulation while the controller requests heating or cooling. Quiet-hour fan limits still apply, including when recovery at night is enabled. Circulation and ventilation remain separate controls; recovery does not automatically maximize outdoor-air ventilation.
+
+## Limiting Overdrive
+
+For a proportional device, `Devices -> Maximum setpoint offset` caps the device setpoint beyond the room target: heating uses at most `heat target + offset`, cooling at least `cool target - offset`. For example, a 21°C heating target with a 2°C offset permits at most 23°C on the device. Device steps round toward the permitted range; an incompatible device range is reported as unsupported.
+
+Set the offset to 0 to send the room target, or leave it empty to preserve the existing device-range behavior. This limit bounds the command, not physical room-temperature overshoot. Thermal inertia, delayed feedback, and a device's internal controller can still cause overshoot. Existing installations retain their previous setpoint behavior until an offset is configured.
+
 ## What the Priority Slider Does
 
 In `Settings -> Control -> Priority`, the slider balances comfort against runtime/energy use for MPC.

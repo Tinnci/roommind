@@ -1016,8 +1016,8 @@ class TestEnforceUniformMode:
 
         # Cycle 2: both still heating, no override
         result = await coordinator._async_update_data()
-        room_a_mode = result["rooms"].get("room_a", {}).get("mode")
-        room_b_mode = result["rooms"].get("room_b", {}).get("mode")
+        room_a_mode = result["rooms"].get("room_a", {}).get("commanded_mode")
+        room_b_mode = result["rooms"].get("room_b", {}).get("commanded_mode")
         assert room_a_mode == "heating"
         assert room_b_mode == "heating"
 

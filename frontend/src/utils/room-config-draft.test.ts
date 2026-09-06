@@ -33,6 +33,17 @@ const baseConfig: RoomConfig = {
 };
 
 describe("room config draft", () => {
+  test("preserves disabled recovery and a zero Overdrive limit when saving", () => {
+    const draft = createRoomConfigDraft({
+      ...baseConfig,
+      rapid_recovery_enabled: false,
+      devices: [{ entity_id: "climate.radiator", type: "trv", role: "auto", max_setpoint_offset_c: 0 }],
+    });
+    const payload = buildRoomSavePayload("living_room", draft);
+    expect(payload.rapid_recovery_enabled).toBe(false);
+    expect(payload.devices).toEqual(draft.devices);
+    expect(draft.devices[0]?.max_setpoint_offset_c).toBe(0);
+  });
   test("creates a draft from legacy thermostat and AC lists when devices are absent", () => {
     const draft = createRoomConfigDraft(baseConfig);
 

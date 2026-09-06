@@ -6,6 +6,16 @@ from custom_components.roommind.const import MODE_COOLING, MODE_HEATING, MODE_ID
 from custom_components.roommind.control.constraints import ConstraintInput, ConstraintReducer
 
 
+def test_recovery_preserves_mpc_taper_and_does_not_restart_idle():
+    """Recovery must not undo predictive braking or capability gating."""
+    for mode, power in ((MODE_HEATING, 0.25), (MODE_IDLE, 0.0), (MODE_COOLING, 0.3)):
+        result = ConstraintReducer().reduce(
+            ConstraintInput(mode=mode, power_fraction=power, rapid_recovery_mode=MODE_HEATING)
+        )
+        assert (result.mode, result.power_fraction) == (mode, power)
+        assert result.rapid_recovery_active is (mode == MODE_HEATING)
+
+
 def test_force_off_reduces_to_idle_and_disables_rapid_recovery():
     result = ConstraintReducer().reduce(
         ConstraintInput(

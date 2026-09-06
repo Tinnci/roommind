@@ -25,7 +25,7 @@ def resolve_rapid_recovery_mode(
     outdoor_temp: float | None,
 ) -> str | None:
     """Return fast pull-down or warm-up mode when policy permits it."""
-    if current_temp is None:
+    if current_temp is None or not room.get("rapid_recovery_enabled", True):
         return None
     if night_active and not room.get("night_allow_rapid_recovery", True):
         return None

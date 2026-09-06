@@ -365,7 +365,7 @@ class TestFahrenheitConversion:
         # Target temp should remain in Celsius (comfort_temp=21degC stored in Celsius)
         assert room["target_temp"] == pytest.approx(21.0, abs=0.1)
         # Mode should be heating (18degC < 21degC target)
-        assert room["mode"] == "heating"
+        assert room["commanded_mode"] == "heating"
 
     @pytest.mark.asyncio
     async def test_valve_protection_set_temperature_in_fahrenheit(self, hass, mock_config_entry):
@@ -566,8 +566,8 @@ class TestManagedModeDisplay:
         data = await coordinator._async_update_data()
 
         room = data["rooms"]["living_room_abc12345"]
-        assert room["mode"] == "heating", "Managed Mode should show heating when device is below setpoint"
-        assert room["heating_power"] == 100
+        assert room["observation_status"] == "unknown", "A setpoint gap is not device feedback"
+        assert room["heating_power"] == 0
 
     @pytest.mark.asyncio
     async def test_managed_mode_display_uses_hvac_action(self, hass, mock_config_entry):
@@ -630,7 +630,7 @@ class TestManagedModeDisplay:
         n_idle, n_heating, n_cooling = coordinator._model_manager.get_mode_counts(
             "living_room_abc12345",
         )
-        assert n_idle > 0, "EKF should have idle training samples in Managed Mode at setpoint"
+        assert n_idle == 0, "Managed Mode without output feedback must not train inferred idle"
         assert n_heating == 0, "EKF should NOT train as heating when device is at setpoint"
 
     @pytest.mark.asyncio

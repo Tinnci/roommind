@@ -98,9 +98,9 @@ class TestMPCActivation:
             data = await coordinator._async_update_data()
 
         room = data["rooms"]["living_room"]
-        assert room["mode"] == "heating"
+        assert room["commanded_mode"] == "heating"
         assert "heating_power" in room
-        assert 0 <= room["heating_power"] <= 100
+        assert 0 <= room["requested_power"] <= 100
 
     @pytest.mark.asyncio
     async def test_mpc_proportional_power_varies_with_distance(self, coordinator, real_store):
@@ -139,7 +139,7 @@ class TestMPCActivation:
         with patch("time.time", return_value=FROZEN_TS):
             data = await coordinator._async_update_data()
 
-        assert data["rooms"]["living_room"]["mode"] == "idle"
+        assert data["rooms"]["living_room"]["commanded_mode"] == "idle"
 
 
 class TestMPCPreheating:
@@ -163,7 +163,7 @@ class TestMPCPreheating:
 
         room = data["rooms"]["living_room"]
         # MPC should decide to pre-heat: 17C -> 21C needed in 30 min
-        assert room["mode"] == "heating"
+        assert room["commanded_mode"] == "heating"
 
     @pytest.mark.asyncio
     async def test_no_preheating_at_target(self, coordinator, real_store):
@@ -178,7 +178,7 @@ class TestMPCPreheating:
         with patch("time.time", return_value=FROZEN_TS):
             data = await coordinator._async_update_data()
 
-        assert data["rooms"]["living_room"]["mode"] == "idle"
+        assert data["rooms"]["living_room"]["commanded_mode"] == "idle"
 
     @pytest.mark.asyncio
     async def test_no_preheating_without_upcoming_blocks(self, coordinator, real_store):
@@ -196,7 +196,7 @@ class TestMPCPreheating:
             data = await coordinator._async_update_data()
 
         # MPC sees constant eco (17C) across entire horizon, room at 17C -> idle
-        assert data["rooms"]["living_room"]["mode"] == "idle"
+        assert data["rooms"]["living_room"]["commanded_mode"] == "idle"
 
 
 class TestMPCFallback:
@@ -211,9 +211,9 @@ class TestMPCFallback:
 
         room = data["rooms"]["living_room"]
         # Bang-bang: should heat (18 < 21 - hysteresis)
-        assert room["mode"] == "heating"
+        assert room["commanded_mode"] == "heating"
         # Bang-bang always uses full power
-        assert room["heating_power"] == 100
+        assert room["requested_power"] == 100
 
     @pytest.mark.asyncio
     async def test_bangbang_hysteresis_prevents_cycling(self, coordinator, real_store):
@@ -225,4 +225,4 @@ class TestMPCFallback:
         data = await coordinator._async_update_data()
 
         # 20.8 is within 0.5C hysteresis of 21.0 -> should NOT start heating from idle
-        assert data["rooms"]["living_room"]["mode"] == "idle"
+        assert data["rooms"]["living_room"]["commanded_mode"] == "idle"

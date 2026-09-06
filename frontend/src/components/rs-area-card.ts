@@ -542,7 +542,7 @@ export class RsAreaCard extends LitElement {
               ? html`
                   <span class="mode-pill ${getModeClass(live.mode)}">
                     <span class="mode-dot"></span>
-                    ${formatMode(live.mode, this.hass.language)}${live.heating_power > 0 &&
+                    ${live.observation_status === "unknown" ? localize("hero.output_unknown", this.hass.language) : formatMode(live.mode, this.hass.language)}${live.heating_power > 0 &&
                     live.heating_power < 100
                       ? html` ${live.heating_power}%`
                       : nothing}

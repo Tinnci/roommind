@@ -41,7 +41,7 @@ class TestRoomMindCoordinator:
         data = await coordinator._async_update_data()
 
         room_state = data["rooms"]["living_room_abc12345"]
-        assert room_state["mode"] == "idle"
+        assert room_state["commanded_mode"] == "idle"
         assert room_state["window_open"] is True
 
         # MODE_IDLE turns off all devices via set_hvac_mode "off"
@@ -81,7 +81,7 @@ class TestRoomMindCoordinator:
         data = await coordinator._async_update_data()
 
         room_state = data["rooms"]["living_room_abc12345"]
-        assert room_state["mode"] == "heating"
+        assert room_state["commanded_mode"] == "heating"
         assert room_state["window_open"] is False
 
     @pytest.mark.asyncio
@@ -106,7 +106,7 @@ class TestRoomMindCoordinator:
 
         room_state = data["rooms"]["living_room_abc12345"]
         assert room_state["window_open"] is False
-        assert room_state["mode"] == "heating"
+        assert room_state["commanded_mode"] == "heating"
 
     @pytest.mark.asyncio
     async def test_no_window_sensors_normal_operation(self, hass, mock_config_entry):
@@ -126,7 +126,7 @@ class TestRoomMindCoordinator:
 
         room_state = data["rooms"]["living_room_abc12345"]
         assert room_state["window_open"] is False
-        assert room_state["mode"] == "heating"
+        assert room_state["commanded_mode"] == "heating"
 
     @pytest.mark.asyncio
     async def test_multiple_windows_one_open_pauses(self, hass, mock_config_entry):
@@ -153,7 +153,7 @@ class TestRoomMindCoordinator:
 
         room_state = data["rooms"]["living_room_abc12345"]
         assert room_state["window_open"] is True
-        assert room_state["mode"] == "idle"
+        assert room_state["commanded_mode"] == "idle"
 
     @pytest.mark.asyncio
     async def test_window_open_delay_not_reached(self, hass, mock_config_entry):
@@ -179,7 +179,7 @@ class TestRoomMindCoordinator:
         data = await coordinator._async_update_data()
 
         room_state = data["rooms"]["living_room_abc12345"]
-        assert room_state["mode"] == "heating"
+        assert room_state["commanded_mode"] == "heating"
         assert room_state["window_open"] is False
 
     @pytest.mark.asyncio
@@ -207,7 +207,7 @@ class TestRoomMindCoordinator:
         data = await coordinator._async_update_data()
 
         room_state = data["rooms"]["living_room_abc12345"]
-        assert room_state["mode"] == "idle"
+        assert room_state["commanded_mode"] == "idle"
         assert room_state["window_open"] is True
 
     @pytest.mark.asyncio
@@ -234,7 +234,7 @@ class TestRoomMindCoordinator:
         data = await coordinator._async_update_data()
 
         room_state = data["rooms"]["living_room_abc12345"]
-        assert room_state["mode"] == "idle"
+        assert room_state["commanded_mode"] == "idle"
         assert room_state["window_open"] is True
 
     @pytest.mark.asyncio
@@ -262,7 +262,7 @@ class TestRoomMindCoordinator:
         data = await coordinator._async_update_data()
 
         room_state = data["rooms"]["living_room_abc12345"]
-        assert room_state["mode"] == "heating"
+        assert room_state["commanded_mode"] == "heating"
         assert room_state["window_open"] is False
 
     @pytest.mark.asyncio
@@ -302,7 +302,7 @@ class TestRoomMindCoordinator:
 
         room_state = data["rooms"]["living_room_abc12345"]
         # Still heating (delay not reached)
-        assert room_state["mode"] == "heating"
+        assert room_state["commanded_mode"] == "heating"
         assert room_state["window_open"] is False
 
         # EKF accumulator must be cleared (not carried over into next cycle)
@@ -416,7 +416,7 @@ class TestRoomMindCoordinator:
         data = await coordinator._async_update_data()
 
         room_state = data["rooms"]["living_room_abc12345"]
-        assert room_state["mode"] == "idle"
+        assert room_state["commanded_mode"] == "idle"
         assert room_state["window_open"] is True
 
     @pytest.mark.asyncio
@@ -452,14 +452,14 @@ class TestRoomMindCoordinator:
         mock_states["binary_sensor.living_room_window"] = window_state
         data = await coordinator._async_update_data()
         room_state = data["rooms"]["living_room_abc12345"]
-        assert room_state["mode"] == "heating"
+        assert room_state["commanded_mode"] == "heating"
         assert "living_room_abc12345" in coordinator._window_manager._open_since
 
         # Window closes before delay reached
         window_state.state = "off"
         data = await coordinator._async_update_data()
         room_state = data["rooms"]["living_room_abc12345"]
-        assert room_state["mode"] == "heating"
+        assert room_state["commanded_mode"] == "heating"
         assert room_state["window_open"] is False
         assert "living_room_abc12345" not in coordinator._window_manager._open_since
 

@@ -102,6 +102,8 @@ class RoomMindModeSensor(_RoomMindBaseSensor):
         """Return the current mode, defaulting to 'idle'."""
         room = self.coordinator.data.get("rooms", {}).get(self._area_id)
         if room:
+            if room.get("observation_status") == "unknown":
+                return None
             val = room.get("mode", "idle")
             return str(val) if val is not None else "idle"
         return "idle"

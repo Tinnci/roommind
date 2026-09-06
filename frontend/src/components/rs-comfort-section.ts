@@ -34,6 +34,7 @@ export class RsComfortSection extends LitElement {
   @property({ type: Number }) public sleepTempRampC = 0;
   @property({ type: Boolean }) public nightAllowRapidRecovery = true;
   @property({ type: Number }) public rapidRecoveryDeltaC = 2.0;
+  @property({ type: Boolean }) public rapidRecoveryEnabled = true;
   @property({ attribute: false }) public nightMode: NightModeLiveStatus | null = null;
   @property({ attribute: false }) public nightControls: NightControlConfig[] = [];
   @property({ attribute: false }) public nightControlStatus: NightControlStatus[] = [];
@@ -423,6 +424,17 @@ export class RsComfortSection extends LitElement {
       <details class="settings-group">
         <summary>${localize("comfort.advanced_constraints", lang)}</summary>
         <div class="settings-group-body">
+          <div class="toggle-row mode-text">
+            <div>
+              <div class="toggle-title">${localize("comfort.rapid_recovery", lang)}</div>
+              <div class="toggle-hint">${localize("comfort.rapid_recovery_hint", lang)}</div>
+            </div>
+            <ha-switch
+              .checked=${this.rapidRecoveryEnabled}
+              aria-label=${localize("comfort.rapid_recovery", lang)}
+              @change=${(e: Event) => this._emit("rapid_recovery_enabled", (e.target as HTMLInputElement).checked)}
+            ></ha-switch>
+          </div>
           <div class="field-row">
             ${this._numberField(
               "comfort.room_volume",

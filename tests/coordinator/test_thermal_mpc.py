@@ -45,7 +45,7 @@ class TestCoordinatorMPCIntegration:
         room_state = data["rooms"]["mpc_room"]
         assert room_state["current_temp"] == 17.0
         assert room_state["target_temp"] == 21.0
-        assert room_state["mode"] == "heating"
+        assert room_state["commanded_mode"] == "heating"
         assert room_state["confidence"] is not None
         # Verify climate service was called (MPC decided to heat)
         assert hass.services.async_call.called
@@ -71,7 +71,7 @@ class TestCoordinatorMPCIntegration:
 
         room_state = data["rooms"]["bangbang_room"]
         # 16degC is well below 21degC comfort -> heating (via bang-bang)
-        assert room_state["mode"] == "heating"
+        assert room_state["commanded_mode"] == "heating"
         assert room_state["current_temp"] == 16.0
         assert room_state["target_temp"] == 21.0
 
@@ -125,7 +125,7 @@ class TestCoordinatorMPCIntegration:
         data = await coordinator._async_update_data()
 
         room_state = data["rooms"]["forecast_room"]
-        assert room_state["mode"] == "heating"
+        assert room_state["commanded_mode"] == "heating"
         # Weather service should have been called
         weather_calls = [c for c in hass.services.async_call.call_args_list if c.args[0] == "weather"]
         assert len(weather_calls) >= 1
@@ -185,7 +185,7 @@ class TestCoordinatorMPCIntegration:
         data = await coordinator._async_update_data()
 
         room_state = data["rooms"]["idle_room"]
-        assert room_state["mode"] == "idle"
+        assert room_state["commanded_mode"] == "idle"
         assert room_state["target_temp"] == 21.0
 
 

@@ -900,6 +900,7 @@ export class RsRoomDetail extends LitElement {
     else if (key === "night_controls") this._nightControls = value as RoomConfig["night_controls"];
     else if (key === "night_allow_rapid_recovery") this._nightAllowRapidRecovery = value as boolean;
     else if (key === "rapid_recovery_delta_c") this._rapidRecoveryDeltaC = value as number;
+    else if (key === "rapid_recovery_enabled") this._patchDraft({ rapidRecoveryEnabled: value as boolean });
     else if (key === "max_fan_level_night") this._maxFanLevelNight = value as number;
     else if (key === "sleep_temp_ramp_c") this._sleepTempRampC = value as number;
     else if (key === "adjacent_rooms") this._adjacentRooms = value as RoomConfig["adjacent_rooms"];

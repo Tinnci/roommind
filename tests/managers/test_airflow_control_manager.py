@@ -498,7 +498,8 @@ async def test_stale_command_confidence_still_takes_precedence(hass):
 
 
 @pytest.mark.asyncio
-async def test_night_mode_caps_mix_level_and_reports_skip_reasons(hass):
+@pytest.mark.parametrize("recovering", [False, True])
+async def test_night_mode_caps_mix_level_and_reports_skip_reasons(hass, recovering):
     hass.states.get.return_value = _state(
         "on",
         {
@@ -527,7 +528,7 @@ async def test_night_mode_caps_mix_level_and_reports_skip_reasons(hass):
         mix_level=0.8,
         vent_level=0.0,
         mode="cooling",
-        context=AirflowRuntimeContext(night_active=True),
+        context=AirflowRuntimeContext(night_active=True, rapid_recovery_active=recovering),
     )
 
     calls = [c.args[:3] for c in hass.services.async_call.call_args_list]

@@ -39,6 +39,7 @@ ROOM_CONFIG_DEFAULTS: dict[str, object] = {
     "night_controls": [],
     "night_allow_rapid_recovery": True,
     "rapid_recovery_delta_c": 2.0,
+    "rapid_recovery_enabled": True,
     "max_fan_level_night": 0.5,
     "sleep_temp_ramp_c": 0.0,
     "adjacent_rooms": [],
@@ -106,6 +107,9 @@ ROOM_CONFIG_SCHEMA: dict[vol.Marker, object] = {
                 vol.Optional("idle_action", default="off"): vol.In(["off", "fan_only", "setback", "low"]),
                 vol.Optional("idle_fan_mode", default="low"): str,
                 vol.Optional("setpoint_mode", default="proportional"): vol.In(["proportional", "direct"]),
+                vol.Optional("max_setpoint_offset_c"): vol.Any(
+                    None, vol.All(vol.Coerce(float), vol.Range(min=0, max=10))
+                ),
             },
             validate_device_idle_action,
         )
@@ -232,6 +236,7 @@ ROOM_CONFIG_SCHEMA: dict[vol.Marker, object] = {
     ],
     vol.Optional("night_allow_rapid_recovery"): bool,
     vol.Optional("rapid_recovery_delta_c"): vol.All(vol.Coerce(float), vol.Range(min=0.5, max=10)),
+    vol.Optional("rapid_recovery_enabled"): bool,
     vol.Optional("max_fan_level_night"): vol.All(vol.Coerce(float), vol.Range(min=0, max=1)),
     vol.Optional("sleep_temp_ramp_c"): vol.All(vol.Coerce(float), vol.Range(min=0, max=5)),
     vol.Optional("adjacent_rooms"): [

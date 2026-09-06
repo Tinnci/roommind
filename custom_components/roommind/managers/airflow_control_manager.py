@@ -64,10 +64,9 @@ class AirflowControlManager:
         vent_target = _clamp_level(vent_level if vent_level is not None else (legacy_target or 0.0))
         night_active = context.night_active
         away_active = context.presence_away
-        rapid_recovery = context.rapid_recovery_active
         night_cap = room.get("max_fan_level_night")
         capped_by_night = False
-        if night_active and not rapid_recovery and night_cap is not None:
+        if night_active and night_cap is not None:
             capped_mix = min(mix_target, _clamp_level(float(night_cap)))
             capped_by_night = capped_mix < mix_target
             mix_target = capped_mix

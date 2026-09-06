@@ -45,6 +45,7 @@ from ..utils.temp_utils import celsius_to_ha_temp
 from .actuation import ActuationLedger, DeviceActuationResult, DispatchStatus
 from .forecast_series import build_outdoor_temperature_series
 from .mpc_optimizer import MPCOptimizer, MPCPlan
+from .rapid_recovery import resolve_rapid_recovery_mode
 from .residual_heat import get_min_run_blocks
 from .solar import SolarExposure
 from .thermal_model import RoomModelManager
@@ -1037,6 +1038,7 @@ class MPCController:
         self._idle_targets: TargetTemps | None = None
 
         s = settings or {}
+        self._settings = s
         self.outdoor_cooling_min = s.get("outdoor_cooling_min", DEFAULT_OUTDOOR_COOLING_MIN)
         self.outdoor_heating_max = s.get("outdoor_heating_max", DEFAULT_OUTDOOR_HEATING_MAX)
 
@@ -1196,11 +1198,26 @@ class MPCController:
 
         min_run = get_min_run_blocks(self._heating_system_type, PLAN_DT_MINUTES)
 
+        recovery = resolve_rapid_recovery_mode(
+            self.room_config,
+            self._settings,
+            current_temp=current_temp,
+            targets=targets,
+            night_active=self.night_active,
+            outdoor_temp=self.outdoor_temp,
+        )
+        # Recovery stays inside planning so thermal inertia and predictive
+        # braking continue to determine the requested output.
+        recovery_allowed = (recovery == MODE_HEATING and can_heat) or (recovery == MODE_COOLING and can_cool)
+        mix_levels = self.mix_levels
+        night_limit = self.room_config.get("max_fan_level_night")
+        if self.night_active and night_limit is not None:
+            mix_levels = [level for level in mix_levels if level <= float(night_limit)] or [0.0]
         optimizer = MPCOptimizer(
             model=model,
             can_heat=can_heat,
             can_cool=can_cool,
-            w_comfort=self._w_comfort,
+            w_comfort=self._w_comfort * (2.0 if recovery_allowed else 1.0),
             w_energy=self._w_energy,
             outdoor_cooling_min=self.outdoor_cooling_min,
             outdoor_heating_max=self.outdoor_heating_max,
@@ -1208,7 +1225,7 @@ class MPCController:
             override_active=is_override_active(self.room_config),
             heating_system_type=self._heating_system_type,
             airflow_levels=self.airflow_levels,
-            mix_levels=self.mix_levels,
+            mix_levels=mix_levels,
             vent_levels=self.vent_levels,
             airflow_has_ventilation=self.airflow_has_ventilation,
             airflow_has_hvac_fan=self.airflow_has_hvac_fan,
@@ -2105,6 +2122,41 @@ class MPCController:
                     resolved,
                 )
                 data = {**data, "hvac_mode": resolved}
+
+        if service == "set_temperature" and "temperature" in data and self._idle_targets is not None:
+            device = next((d for d in self._devices if d.get("entity_id") == eid), {})
+            offset = device.get("max_setpoint_offset_c")
+            target = (
+                self._idle_targets.heat
+                if temp_intent == "heat"
+                else self._idle_targets.cool
+                if temp_intent == "cool"
+                else None
+            )
+            if offset is not None and target is not None:
+                limit = celsius_to_ha_temp(self.hass, target + float(offset) * (1 if temp_intent == "heat" else -1))
+                step = float(state.attributes.get("target_temp_step") or 0) if state else 0.0
+                if step > 0:
+                    limit = round(
+                        (math.floor(limit / step) if temp_intent == "heat" else math.ceil(limit / step)) * step, 2
+                    )
+                device_bound = (
+                    state.attributes.get("min_temp" if temp_intent == "heat" else "max_temp") if state else None
+                )
+                if device_bound is not None and (
+                    limit < device_bound if temp_intent == "heat" else limit > device_bound
+                ):
+                    return self._record_dispatch_result(
+                        DeviceActuationResult(
+                            entity_id=eid or "",
+                            dispatch=DispatchStatus.UNSUPPORTED,
+                            service=service,
+                            desired=dict(data),
+                            diagnostic="no device setpoint within configured offset",
+                        )
+                    )
+                bounded = min(data["temperature"], limit) if temp_intent == "heat" else max(data["temperature"], limit)
+                data = {**data, "temperature": bounded}
 
         if service == "set_temperature" and state:
             data = _normalize_temperature_payload(state, data, temp_intent)

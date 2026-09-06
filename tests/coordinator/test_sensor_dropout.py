@@ -34,13 +34,13 @@ async def test_sensor_dropout_keeps_previous_mode(hass, mock_config_entry):
     hass.services.async_call = AsyncMock()
     coordinator = _create_coordinator(hass, mock_config_entry)
     result1 = await coordinator._async_update_data()
-    assert result1["rooms"]["living_room_abc12345"]["mode"] == "heating"
+    assert result1["rooms"]["living_room_abc12345"]["commanded_mode"] == "heating"
 
     # Cycle 2: sensor dropout (temp=None) → should still be heating via cache
     hass.states.get = MagicMock(side_effect=make_mock_states_get(temp=None))
     result2 = await coordinator._async_update_data()
     room2 = result2["rooms"]["living_room_abc12345"]
-    assert room2["mode"] == "heating", "sensor dropout should use cached temp, not idle"
+    assert room2["commanded_mode"] == "heating", "sensor dropout should use cached temp, not idle"
     assert room2["current_temp"] == 18.0, "current_temp should show cached value"
     assert room2["current_temp_raw"] is None, "current_temp_raw should be None (real reading)"
 
@@ -105,7 +105,7 @@ async def test_observe_and_train_uses_calibrated_temperature_observations(hass, 
     ]
     coordinator._sensor_fusion.calibrate_observations = MagicMock(return_value=corrected_observations)
     coordinator._ekf_training.process = MagicMock()
-    coordinator._observe_device_action = MagicMock(return_value=(None, 0.0))
+    coordinator._observe_device_action = MagicMock(return_value=("heating", 1.0))
 
     await coordinator._observe_and_train(
         area_id="living_room_abc12345",
@@ -133,7 +133,7 @@ async def test_observe_and_train_uses_calibrated_temperature_observations(hass, 
     coordinator._sensor_fusion.calibrate_observations.assert_called_once_with(
         raw_observations,
         mode="heating",
-        power_fraction=0.5,
+        power_fraction=1.0,
         q_fan_mix=0.0,
     )
     assert coordinator._ekf_training.process.call_args.kwargs["current_observations"] == corrected_observations
@@ -159,7 +159,7 @@ async def test_sensor_dropout_staleness_timeout(hass, mock_config_entry):
     # Cycle 2: sensor dropout with expired cache → idle
     hass.states.get = MagicMock(side_effect=make_mock_states_get(temp=None))
     result = await coordinator._async_update_data()
-    assert result["rooms"]["living_room_abc12345"]["mode"] == MODE_IDLE
+    assert result["rooms"]["living_room_abc12345"]["commanded_mode"] == MODE_IDLE
 
 
 @pytest.mark.asyncio
@@ -238,7 +238,7 @@ async def test_no_cache_first_cycle_stays_idle(hass, mock_config_entry):
     coordinator = _create_coordinator(hass, mock_config_entry)
     result = await coordinator._async_update_data()
 
-    assert result["rooms"]["living_room_abc12345"]["mode"] == MODE_IDLE
+    assert result["rooms"]["living_room_abc12345"]["commanded_mode"] == MODE_IDLE
 
 
 @pytest.mark.asyncio

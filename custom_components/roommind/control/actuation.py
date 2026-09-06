@@ -106,9 +106,9 @@ class ActuationLedger:
 
     def record_dispatch(self, result: DeviceActuationResult) -> ActuationEvidence:
         """Record dispatch, consuming an event that may have arrived first."""
-        if result.dispatch is DispatchStatus.SKIPPED:
-            application = ApplicationStatus.CONFIRMED
-        elif result.dispatch is DispatchStatus.SENT:
+        # A skip may come from the sent-command cache of an optimistic IR
+        # integration. Deduplication is not physical application evidence.
+        if result.dispatch is DispatchStatus.SENT:
             application = ApplicationStatus.PENDING
         else:
             application = ApplicationStatus.UNKNOWN

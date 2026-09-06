@@ -85,7 +85,7 @@ class TestHeatSourceOrchestration:
 
         # async_apply was called with the plan (no exception = wiring works)
         room_state = data["rooms"]["living_room_abc12345"]
-        assert room_state["mode"] == "heating"
+        assert room_state["commanded_mode"] == "heating"
 
     @pytest.mark.asyncio
     async def test_orchestration_disabled_plan_is_none(self, hass, mock_config_entry):

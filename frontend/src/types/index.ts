@@ -41,6 +41,11 @@ export interface SensorFusionStatus {
 }
 
 export interface RoomLiveData {
+  observed_mode?: RoomMode | null;
+  observation_status?: "observed" | "unknown";
+  commanded_mode?: RoomMode;
+  requested_power?: number;
+  dispatch_status?: "sent" | "skipped" | "failed" | "disabled" | "unknown";
   current_temp: number | null;
   current_humidity: number | null;
   target_temp: number | null;
@@ -100,6 +105,7 @@ export interface DeviceConfig {
   idle_action?: "off" | "fan_only" | "setback" | "low"; // default "off"
   idle_fan_mode?: string; // default "low"
   setpoint_mode?: "proportional" | "direct"; // default "proportional"
+  max_setpoint_offset_c?: number | null;
 }
 
 export type AirflowRole = "circulation" | "ventilation" | "hvac_fan";
@@ -264,6 +270,7 @@ export interface RoomConfig {
   night_controls?: NightControlConfig[];
   night_allow_rapid_recovery?: boolean;
   rapid_recovery_delta_c?: number;
+  rapid_recovery_enabled?: boolean;
   max_fan_level_night?: number;
   sleep_temp_ramp_c?: number;
   adjacent_rooms?: AdjacentRoomConfig[];

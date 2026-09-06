@@ -19,6 +19,7 @@ export interface RoomConfigDraft {
   nightControls: RoomConfig["night_controls"];
   nightAllowRapidRecovery: boolean;
   rapidRecoveryDeltaC: number;
+  rapidRecoveryEnabled: boolean;
   maxFanLevelNight: number;
   sleepTempRampC: number;
   adjacentRooms: RoomConfig["adjacent_rooms"];
@@ -75,6 +76,7 @@ export function createEmptyRoomConfigDraft(): RoomConfigDraft {
     nightControls: [],
     nightAllowRapidRecovery: true,
     rapidRecoveryDeltaC: 2.0,
+    rapidRecoveryEnabled: true,
     maxFanLevelNight: 0.5,
     sleepTempRampC: 0.0,
     adjacentRooms: [],
@@ -148,6 +150,7 @@ export function createRoomConfigDraft(config: RoomConfig | null): RoomConfigDraf
   draft.nightControls = [...(config.night_controls ?? [])];
   draft.nightAllowRapidRecovery = config.night_allow_rapid_recovery ?? true;
   draft.rapidRecoveryDeltaC = config.rapid_recovery_delta_c ?? 2.0;
+  draft.rapidRecoveryEnabled = config.rapid_recovery_enabled ?? true;
   draft.maxFanLevelNight = config.max_fan_level_night ?? 0.5;
   draft.sleepTempRampC = config.sleep_temp_ramp_c ?? 0.0;
   draft.adjacentRooms = [...(config.adjacent_rooms ?? [])];
@@ -391,6 +394,7 @@ export function buildRoomSavePayload(
     night_controls: draft.nightControls ?? [],
     night_allow_rapid_recovery: draft.nightAllowRapidRecovery,
     rapid_recovery_delta_c: draft.rapidRecoveryDeltaC,
+    rapid_recovery_enabled: draft.rapidRecoveryEnabled,
     max_fan_level_night: draft.maxFanLevelNight,
     sleep_temp_ramp_c: draft.sleepTempRampC,
     adjacent_rooms: draft.adjacentRooms ?? [],

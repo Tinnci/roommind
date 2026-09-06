@@ -114,6 +114,18 @@ def test_actuation_ledger_preserves_not_confirmed_as_distinct_evidence():
     assert evidence.application is ApplicationStatus.NOT_CONFIRMED
 
 
+def test_skipping_cached_dispatch_does_not_confirm_application():
+    evidence = ActuationLedger().record_dispatch(
+        DeviceActuationResult(
+            entity_id="climate.ir_ac",
+            dispatch=DispatchStatus.SKIPPED,
+            service="set_temperature",
+            desired={"temperature": 24.0},
+        )
+    )
+    assert evidence.application is ApplicationStatus.UNKNOWN
+
+
 @pytest.mark.asyncio
 async def test_async_apply_reports_idle_devices_inactive():
     hass = build_hass()

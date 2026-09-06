@@ -227,6 +227,7 @@ class RoomControlObservation:
 
     sensors: RoomSensorSnapshot
     climate_devices: ClimateDeviceSnapshot
+    device_action: tuple[str | None, float]
 
 
 def _get_area_name(hass: HomeAssistant, area_id: str) -> str:
@@ -380,6 +381,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 observations[area_id] = RoomControlObservation(
                     sensors=self._read_room_sensors(room, area_id),
                     climate_devices=self._read_climate_device_snapshot(room),
+                    device_action=self._observe_device_action(room),
                 )
             except Exception:  # noqa: BLE001
                 _LOGGER.exception("Room '%s': observation failed, skipping", area_id)
@@ -528,7 +530,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             if area_id in learning_disabled:
                 continue
             current_temp = room_state.get("current_temp")
-            mode = room_state.get("mode", MODE_IDLE)
+            mode = room_state.get("observed_mode", room_state.get("mode", MODE_IDLE))
             # A pending prediction describes this snapshot, not the next one.
             predicted = self._pending_predictions.pop(area_id, None)
             try:
@@ -589,7 +591,12 @@ class RoomMindCoordinator(DataUpdateCoordinator):
     ) -> None:
         """Prepare the prediction to evaluate at the next history write."""
         current_temp = room_state.get("current_temp")
-        if current_temp is None or self.outdoor_temp_effective is None or room.get("is_outdoor", False):
+        if (
+            current_temp is None
+            or self.outdoor_temp_effective is None
+            or room.get("is_outdoor", False)
+            or room_state.get("observation_status") == "unknown"
+        ):
             return
         try:
             if room_state.get("window_open", False):
@@ -1191,6 +1198,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         """Process a single room: read sensor, evaluate schedule, apply control."""
         area_id = room.get("area_id", "unknown")
 
+        device_action = observation.device_action if observation is not None else self._observe_device_action(room)
         sensor_snapshot = observation.sensors if observation is not None else self._read_room_sensors(room, area_id)
         current_temp = sensor_snapshot.current_temp
         current_temp_raw = sensor_snapshot.current_temp_raw
@@ -1380,6 +1388,8 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             night_active=night_mode_active,
             outdoor_temp=self.outdoor_temp_effective,
         )
+        if not has_external_sensor:
+            rapid_recovery_mode = None
         raw_open = self._is_window_open(room)
         window_open = self._window_manager.update(
             area_id,
@@ -1405,10 +1415,16 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         climate_active = settings.get("climate_control_active", True) and room.get("climate_control_enabled", True)
         airflow_mix_plan_level = 0.0 if window_open or force_off else controller.last_airflow_mix_level
         airflow_vent_plan_level = 0.0 if window_open or force_off else controller.last_airflow_vent_level
-        if rapid_recovery_active and not window_open and not force_off and mode in (MODE_HEATING, MODE_COOLING):
+        if (
+            rapid_recovery_active
+            and controller.last_plan is None
+            and not window_open
+            and not force_off
+            and mode in (MODE_HEATING, MODE_COOLING)
+        ):
             airflow_mix_plan_level = max(airflow_mix_plan_level, *(airflow.mix_levels or [1.0]))
         night_fan_limit = room.get("max_fan_level_night")
-        if night_mode_active and not rapid_recovery_active and night_fan_limit is not None:
+        if night_mode_active and night_fan_limit is not None:
             airflow_mix_plan_level = min(airflow_mix_plan_level, max(0.0, min(1.0, float(night_fan_limit))))
         airflow_plan_level = max(airflow_mix_plan_level, airflow_vent_plan_level)
         airflow_command_status: list[dict[str, Any]] = []
@@ -1496,6 +1512,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 q_residual=q_residual,
             )
 
+        dispatch_status = "disabled"
         if climate_active:
             applied_report: AppliedCommandReport | None = None
             try:
@@ -1512,7 +1529,18 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                     compressor_forced_on=compressor_forced_on or None,
                     compressor_forced_off=compressor_forced_off or None,
                 )
+                results = tuple(applied_report.results.values())
+                dispatch_status = (
+                    "failed"
+                    if applied_report.failed_eids
+                    else "sent"
+                    if any(result.dispatch == "sent" for result in results)
+                    else "skipped"
+                    if results and all(result.dispatch == "skipped" for result in results)
+                    else "unknown"
+                )
             except Exception:  # noqa: BLE001
+                dispatch_status = "failed"
                 _LOGGER.warning(
                     "Room '%s': climate service call failed",
                     area_id,
@@ -1556,6 +1584,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             # RoomMind-owned climate fan_only state.
             mode = MODE_IDLE
             power_fraction = 0.0
+            rapid_recovery_active = False
             airflow_mix_plan_level = 0.0
             airflow_vent_plan_level = 0.0
             airflow_plan_level = 0.0
@@ -1639,9 +1668,10 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             q_occupancy=q_occupancy,
             heat_source_plan=heat_source_plan,
             climate_active=climate_active,
+            device_action=device_action,
         )
 
-        return self._build_room_state_dict(
+        room_state = self._build_room_state_dict(
             area_id=area_id,
             room=room,
             settings=settings,
@@ -1679,6 +1709,11 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             cover_result=cover_result,
             mpc_active=mpc_active,
         )
+        room_state["observed_mode"] = device_action[0]
+        room_state["observation_status"] = "observed" if device_action[0] is not None else "unknown"
+        room_state["requested_power"] = round(power_fraction * 100) if mode != MODE_IDLE else 0
+        room_state["dispatch_status"] = dispatch_status
+        return room_state
 
     async def _observe_and_train(
         self,
@@ -1697,6 +1732,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         q_occupancy: float,
         heat_source_plan: Any | None,
         climate_active: bool,
+        device_action: tuple[str | None, float] | None = None,
     ) -> tuple[str, float]:
         """Observe device state, train EKF, compute display mode.
 
@@ -1704,99 +1740,12 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         """
         current_temp_raw = sensor_snapshot.current_temp_raw
         temperature_observations = sensor_snapshot.temperature_observations
-        has_external_sensor = sensor_snapshot.has_external_sensor
 
-        # observed_mode/observed_pf: only populated when climate control is off
-        observed_mode: str | None = None
-        observed_pf = 0.0
-
-        if not climate_active:
-            # Climate control disabled (learn-only) — observe device state
-            # for training and display.
-            observed_mode, observed_pf = self._observe_device_action(room)
-            if observed_mode is None and self._devices_lack_hvac_action(room):
-                # No hvac_action on any device — fall back to temp-vs-setpoint
-                # inference for approximate training (better than skipping).
-                # Do not infer for other None reasons (conflicts, unavailable).
-                inferred = self._infer_device_mode(room)
-                observed_mode = inferred
-                observed_pf = 1.0 if inferred != MODE_IDLE else 0.0
-            if observed_mode is not None and observed_mode != MODE_IDLE:
-                _LOGGER.debug(
-                    "Room '%s': device self-regulating (%s), using for training",
-                    area_id,
-                    observed_mode,
-                )
-
-        # For Managed Mode rooms, observe actual device state for display + training.
-        # The controller's mode is "intent" (the controller tells the device to
-        # heat), but the device self-regulates and may be idle at setpoint. See #69.
-        managed_display_mode: str | None = None
-        managed_display_pf = 0.0
-        if climate_active and not has_external_sensor:
-            obs_mode, obs_pf = self._observe_device_action(room)
-            if obs_mode is not None:
-                managed_display_mode = obs_mode
-                managed_display_pf = obs_pf
-            else:
-                managed_display_mode = self._infer_device_mode(room)
-                managed_display_pf = 1.0 if managed_display_mode != MODE_IDLE else 0.0
-
-        # Determine mode for EKF training: use observed device state when
-        # RoomMind does not directly control the device (see #36, #69).
-        if climate_active:
-            if has_external_sensor:
-                # Full Control: controller's commanded mode is truth
-                ekf_mode: str | None = mode
-                ekf_pf = power_fraction
-                # When heat source orchestration is active, adjust ekf_pf to
-                # reflect the actual power delivered. Not all devices may be
-                # heating. Use the mean of per-device power_fractions. The
-                # EKF then learns an accurate aggregated beta_h.
-                if heat_source_plan is not None and heat_source_plan.commands:
-                    ekf_pf = sum(c.power_fraction for c in heat_source_plan.commands) / len(heat_source_plan.commands)
-            else:
-                # Managed Mode: device self-regulates, use observed/inferred
-                # state to avoid training "always heating" (#69).
-                ekf_mode = managed_display_mode
-                ekf_pf = managed_display_pf
-        else:
-            ekf_mode = observed_mode  # may be None → skip training
-            ekf_pf = observed_pf
-
-        # --- Observation-based corrections on the training mode (#150, #241) ---
-        # Ghost-heating guard: in Full Control the controller's commanded mode
-        # can diverge from what the device actually does. Near target with
-        # setpoint_mode="direct" a device's internal hysteresis can block
-        # firing even while RoomMind commands heating/cooling. Without this
-        # guard the EKF receives a heating/cooling label for a period where
-        # no energy enters the room. This drives alpha toward its upper
-        # bound via cross-covariance with a negative innovation.
-        # We only override to idle when all active devices unambiguously
-        # report idle/off. Heating/cooling observations keep the commanded
-        # power_fraction so MPC throttling (e.g. pf=0.3) is preserved.
+        # Use the pre-dispatch observation for the interval ending now.
+        # Missing feedback is unknown; neither a setpoint nor a completed
+        # service call measures heat delivered to the room.
+        ekf_mode, ekf_pf = device_action if device_action is not None else self._observe_device_action(room)
         q_residual_training = q_residual
-        if climate_active and has_external_sensor and ekf_mode in (MODE_HEATING, MODE_COOLING):
-            obs_mode, _ = self._observe_device_action(room)
-            if obs_mode == MODE_IDLE:
-                _LOGGER.debug(
-                    "Room '%s': ghost-heating guard — commanded %s but devices idle, training as idle",
-                    area_id,
-                    ekf_mode,
-                )
-                ekf_mode = MODE_IDLE
-                ekf_pf = 0.0
-                q_residual_training = 0.0
-
-        # Zero-power normalization: heat source orchestration may yield
-        # mean(pf)=0 while the commanded mode is still heating/cooling.
-        # Without this the predict step inflates Q_BETA_H through a zero
-        # Jacobian (F[0][2]=pf=0). Variance grows without an observable
-        # signal and destabilises the alpha↔beta coupling. Downgrade to
-        # idle for a consistent training batch.
-        if ekf_mode in (MODE_HEATING, MODE_COOLING) and ekf_pf == 0.0:
-            ekf_mode = MODE_IDLE
-            q_residual_training = 0.0
 
         # Update thermal model with observation (EKF online learning).
         # The filter must NOT train with a degenerate outdoor fallback (e.g.
@@ -1843,30 +1792,8 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             self._mode_on_since.pop(area_id, None)
         self._previous_modes[area_id] = mode
 
-        # Compute display mode: show actual device state when RoomMind does
-        # not directly control the device. Do not affect internal tracking
-        # (residual heat, valve actuation, _previous_modes). See #36, #69.
-        if climate_active:
-            if has_external_sensor:
-                # Full Control: controller's mode is authoritative
-                display_mode = mode
-                display_pf = power_fraction
-            else:
-                # Managed Mode: show observed/inferred device state (#69)
-                display_mode = managed_display_mode if managed_display_mode is not None else mode
-                display_pf = managed_display_pf if managed_display_mode is not None else power_fraction
-        else:
-            if observed_mode is not None and observed_mode != MODE_IDLE:
-                display_mode = observed_mode
-                display_pf = observed_pf
-            elif observed_mode is None:
-                display_mode = self._infer_device_mode(room)
-                display_pf = 1.0 if display_mode != MODE_IDLE else 0.0
-            else:
-                display_mode = MODE_IDLE
-                display_pf = 0.0
-
-        return display_mode, display_pf
+        # Unknown output is surfaced separately from the requested mode.
+        return ekf_mode or MODE_IDLE, ekf_pf
 
     def _build_room_state_dict(
         self,
@@ -2144,7 +2071,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         for eid in get_all_entity_ids(room.get("devices", [])):
             state = self.hass.states.get(eid)
             if state is None or state.state in ("unavailable", "unknown"):
-                continue
+                return (None, 0.0)
 
             # Device explicitly off → conclusively idle
             if state.state == "off":
@@ -2178,44 +2105,6 @@ class RoomMindCoordinator(DataUpdateCoordinator):
 
         pf = 1.0 if dominated in ("heating", "cooling") else 0.0
         return (dominated, pf)
-
-    def _devices_lack_hvac_action(self, room: dict) -> bool:
-        """Return True if at least one active device lacks hvac_action.
-
-        Distinguishes 'missing attribute' from other reasons
-        _observe_device_action returns None (conflicts, unavailable, etc.).
-        """
-        for eid in get_all_entity_ids(room.get("devices", [])):
-            state = self.hass.states.get(eid)
-            if state is None or state.state in ("unavailable", "unknown", "off"):
-                continue
-            if state.attributes.get("hvac_action") is None:
-                return True
-        return False
-
-    def _infer_device_mode(self, room: dict) -> str:
-        """Infer heating/cooling from hvac_mode when hvac_action is unavailable.
-
-        Compares current_temperature to the device setpoint to avoid showing
-        'Heating' when the thermostat is in heat mode but already at target.
-        Serves display and as a fallback for EKF training when hvac_action
-        is missing (Managed Mode and learn-only mode). See #69.
-        """
-        for eid in get_all_entity_ids(room.get("devices", [])):
-            state = self.hass.states.get(eid)
-            if state is None or state.state in ("unavailable", "unknown", "off"):
-                continue
-            current = state.attributes.get("current_temperature")
-            setpoint = state.attributes.get("temperature")
-            if state.state == "heat":
-                if current is not None and setpoint is not None and current >= setpoint:
-                    continue  # at or above setpoint — not actively heating
-                return MODE_HEATING
-            if state.state == "cool":
-                if current is not None and setpoint is not None and current <= setpoint:
-                    continue  # at or below setpoint — not actively cooling
-                return MODE_COOLING
-        return MODE_IDLE
 
     def _is_window_open(self, room: dict) -> bool:
         """Return True if any configured window/door sensor reports 'on' (open)."""

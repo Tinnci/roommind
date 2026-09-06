@@ -16,6 +16,42 @@ from .conftest import build_hass, make_room
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "mode,target,temperature,expected", [("heating", 21.0, 30.0, 23.0), ("cooling", 24.0, 16.0, 22.0)]
+)
+async def test_overdrive_limit_bounds_dispatched_setpoint(mode, target, temperature, expected):
+    hass = build_hass()
+    room = make_room()
+    room["devices"][0]["max_setpoint_offset_c"] = 2.0
+    ctrl = MPCController(hass, room, model_manager=RoomModelManager())
+    ctrl._idle_targets = TargetTemps(heat=target, cool=target)
+    result = await ctrl._call(
+        "set_temperature",
+        {"entity_id": "climate.living_trv", "temperature": temperature},
+        temp_intent="heat" if mode == "heating" else "cool",
+    )
+    assert result.desired["temperature"] == expected
+    assert hass.services.async_call.call_args.args[2]["temperature"] == expected
+
+
+@pytest.mark.asyncio
+async def test_overdrive_rounding_stays_inside_cap():
+    hass = build_hass()
+    state = MagicMock()
+    state.state = "heat"
+    state.attributes = {"min_temp": 5.0, "max_temp": 30.0, "target_temp_step": 1.0}
+    hass.states.get.return_value = state
+    room = make_room()
+    room["devices"][0]["max_setpoint_offset_c"] = 2.0
+    ctrl = MPCController(hass, room, model_manager=RoomModelManager())
+    ctrl._idle_targets = TargetTemps(heat=21.6, cool=24.0)
+    result = await ctrl._call(
+        "set_temperature", {"entity_id": "climate.living_trv", "temperature": 30.0}, temp_intent="heat"
+    )
+    assert result.desired["temperature"] == 23.0
+
+
+@pytest.mark.asyncio
 async def test_proportional_power_far_from_target():
     """MPC mode, large error → power_fraction near 1.0."""
     hass = build_hass()

@@ -326,9 +326,6 @@ class TestHeatSourceIntegration:
             reason="small gap",
         )
 
-        # Expected mean pf = (0.0 + 0.8) / 2 = 0.4
-        expected_ekf_pf = 0.4
-
         # Observed state reflects the plan: AC actually heating, TRV idle.
         # With the #150 ghost-heating guard in place, mode=heating flows
         # through only when at least one device's hvac_action confirms firing.
@@ -377,9 +374,7 @@ class TestHeatSourceIntegration:
 
         assert len(calls_received) > 0, "EKF training should have been called"
         ekf_call = calls_received[0]
-        assert abs(ekf_call["ekf_pf"] - expected_ekf_pf) < 0.01, (
-            f"EKF pf should be {expected_ekf_pf} (mean of device pfs), got {ekf_call['ekf_pf']}"
-        )
+        assert ekf_call["ekf_pf"] == 1.0, "Observed heating must not be scaled by a new setpoint request"
 
     @pytest.mark.asyncio
     async def test_orchestration_disabled_mid_session_cleans_state(self, coordinator, real_store, hass):

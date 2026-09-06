@@ -278,6 +278,7 @@ export class RsRoomEditDialogRouter extends LitElement {
           .sleepTempRampC=${draft.sleepTempRampC}
           .nightAllowRapidRecovery=${draft.nightAllowRapidRecovery}
           .rapidRecoveryDeltaC=${draft.rapidRecoveryDeltaC}
+          .rapidRecoveryEnabled=${draft.rapidRecoveryEnabled}
           .nightMode=${live?.night_mode ?? null}
           .nightControls=${draft.nightControls ?? []}
           .nightControlStatus=${live?.night_control_status ?? []}

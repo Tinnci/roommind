@@ -133,7 +133,7 @@ class TestClimateControlDisabled:
         n_idle, n_heating, n_cooling = coordinator._model_manager.get_mode_counts(
             "living_room_abc12345",
         )
-        assert n_heating > 0, "Training should use inferred heating when hvac_action is missing"
+        assert n_heating == 0, "Missing feedback must not become a heating sample"
 
     @pytest.mark.asyncio
     async def test_inferred_heating_does_not_affect_previous_modes(self, hass, mock_config_entry):
@@ -165,8 +165,8 @@ class TestClimateControlDisabled:
         data = await coordinator._async_update_data()
 
         room_data = data["rooms"]["living_room_abc12345"]
-        # Display should show heating (inferred from hvac_mode + setpoint)
-        assert room_data["mode"] == "heating"
+        # A setpoint comparison cannot confirm heat delivery.
+        assert room_data["observation_status"] == "unknown"
         # Internal _previous_modes must stay idle (no side effects)
         assert coordinator._previous_modes.get("living_room_abc12345") == "idle"
         # Residual heat tracking must not be triggered
@@ -214,7 +214,6 @@ class TestClimateControlDisabled:
             "thermostats": [],
             "acs": ["climate.living_room_ac"],
             "devices": [
-                {"entity_id": "climate.living_room", "type": "trv", "role": "auto", "heating_system_type": ""},
                 {"entity_id": "climate.living_room_ac", "type": "ac", "role": "auto", "heating_system_type": ""},
             ],
             "climate_mode": "cool_only",
@@ -469,73 +468,7 @@ class TestCoverageGaps:
 
         room = data["rooms"]["living_room_abc12345"]
         # _infer_device_mode: heat mode, current < setpoint -> heating
-        assert room["mode"] == "heating"
-
-    @pytest.mark.asyncio
-    async def test_infer_device_mode_at_setpoint_idle(self, hass, mock_config_entry):
-        """_infer_device_mode returns idle when device is at setpoint."""
-        coordinator = _create_coordinator(hass, mock_config_entry)
-
-        device_state = MagicMock()
-        device_state.state = "heat"
-        device_state.attributes = {
-            "current_temperature": 21.0,
-            "temperature": 21.0,
-        }
-        hass.states.get = MagicMock(return_value=device_state)
-
-        result = coordinator._infer_device_mode(
-            {
-                "thermostats": ["climate.trv1"],
-                "acs": [],
-                "devices": [{"entity_id": "climate.trv1", "type": "trv", "role": "auto", "heating_system_type": ""}],
-            }
-        )
-        assert result == "idle"
-
-    @pytest.mark.asyncio
-    async def test_infer_device_mode_cooling_at_setpoint(self, hass, mock_config_entry):
-        """_infer_device_mode returns idle when AC is at/below setpoint."""
-        coordinator = _create_coordinator(hass, mock_config_entry)
-
-        device_state = MagicMock()
-        device_state.state = "cool"
-        device_state.attributes = {
-            "current_temperature": 23.0,
-            "temperature": 24.0,
-        }
-        hass.states.get = MagicMock(return_value=device_state)
-
-        result = coordinator._infer_device_mode(
-            {
-                "thermostats": [],
-                "acs": ["climate.ac1"],
-                "devices": [{"entity_id": "climate.ac1", "type": "ac", "role": "auto", "heating_system_type": ""}],
-            }
-        )
-        assert result == "idle"
-
-    @pytest.mark.asyncio
-    async def test_infer_device_mode_cooling_above_setpoint(self, hass, mock_config_entry):
-        """_infer_device_mode returns cooling when AC is above setpoint."""
-        coordinator = _create_coordinator(hass, mock_config_entry)
-
-        device_state = MagicMock()
-        device_state.state = "cool"
-        device_state.attributes = {
-            "current_temperature": 26.0,
-            "temperature": 24.0,
-        }
-        hass.states.get = MagicMock(return_value=device_state)
-
-        result = coordinator._infer_device_mode(
-            {
-                "thermostats": [],
-                "acs": ["climate.ac1"],
-                "devices": [{"entity_id": "climate.ac1", "type": "ac", "role": "auto", "heating_system_type": ""}],
-            }
-        )
-        assert result == "cooling"
+        assert room["observation_status"] == "unknown"
 
     @pytest.mark.asyncio
     async def test_observe_device_conflicting_actions(self, hass, mock_config_entry):
@@ -602,7 +535,7 @@ class TestCoverageGaps:
         n_idle, n_heating, n_cooling = coordinator._model_manager.get_mode_counts(
             "living_room_abc12345",
         )
-        assert n_idle > 0, "Learn-only mode should use inferred idle when hvac_action is missing"
+        assert n_idle == 0, "An inferred setpoint state must not become an idle sample"
 
 
 class TestPerRoomClimateControlDisabled:
@@ -678,7 +611,7 @@ class TestPerRoomClimateControlDisabled:
         data = await coordinator._async_update_data()
 
         assert data["rooms"]["living_room_abc12345"]["mode"] == "idle"
-        assert data["rooms"]["bedroom_xyz"]["mode"] == "heating"
+        assert data["rooms"]["bedroom_xyz"]["commanded_mode"] == "heating"
 
     @pytest.mark.asyncio
     async def test_per_room_disabled_combined_with_global_disabled(self, hass, mock_config_entry):
@@ -710,4 +643,4 @@ class TestPerRoomClimateControlDisabled:
         coordinator = _create_coordinator(hass, mock_config_entry)
         data = await coordinator._async_update_data()
 
-        assert data["rooms"]["living_room_abc12345"]["mode"] == "heating"
+        assert data["rooms"]["living_room_abc12345"]["commanded_mode"] == "heating"

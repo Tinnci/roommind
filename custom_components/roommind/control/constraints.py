@@ -102,9 +102,9 @@ class ConstraintReducer:
         compressor_forced_off = constraints.compressor_forced_off
 
         if constraints.rapid_recovery_mode:
-            mode = constraints.rapid_recovery_mode
-            power_fraction = 1.0
-            rapid_recovery_active = True
+            # Recovery is a planning preference, never a second controller.
+            # Preserve MPC braking, capability gating, and selected power.
+            rapid_recovery_active = mode == constraints.rapid_recovery_mode and power_fraction > 0
 
         if constraints.force_off:
             mode = MODE_IDLE
