@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from custom_components.roommind.const import EKF_UPDATE_MIN_DT
-from custom_components.roommind.control.thermal_model import TemperatureObservation
+from custom_components.roommind.control.thermal_model import RoomModelManager, TemperatureObservation
 from custom_components.roommind.managers.ekf_training_manager import EkfTrainingManager
 
 
@@ -121,8 +121,8 @@ class TestProcess:
         mgr.process(
             "r1",
             **self.COMMON,
-            ekf_mode="heat",
-            ekf_pf=1.0,
+            ekf_mode="idle",
+            ekf_pf=0.0,
             window_open=True,
             raw_open=False,
         )
@@ -157,8 +157,8 @@ class TestProcess:
         )
         model_manager.update_window_open.assert_called_once()
 
-    def test_none_mode_flushes_only(self, mgr, model_manager):
-        """ekf_mode=None should flush but NOT call update_window_open."""
+    def test_none_mode_discards_batch_and_observes_temperature(self, mgr, model_manager):
+        """An unknown interval must not complete a batch under the previous mode."""
         mgr._accumulated_dt["r1"] = 3.0
         mgr._accumulated_mode["r1"] = "heat"
         mgr._accumulated_pf["r1"] = 1.0
@@ -170,7 +170,8 @@ class TestProcess:
             window_open=False,
             raw_open=False,
         )
-        model_manager.update.assert_called_once()
+        model_manager.update.assert_not_called()
+        model_manager.observe_temperature.assert_called_once_with("r1", 20.0)
         model_manager.update_window_open.assert_not_called()
         assert "r1" not in mgr._accumulated_dt
 
@@ -320,3 +321,71 @@ class TestClearAndRemove:
 
     def test_remove_nonexistent_room_no_error(self, mgr):
         mgr.remove_room("nonexistent")
+
+
+def test_unknown_interval_cannot_train_previous_cooling_batch_or_recovery():
+    """A telemetry gap cannot be assigned to the last observed compressor mode."""
+    models = RoomModelManager()
+    manager = EkfTrainingManager(models)
+    models.update("ac_room", 26.0, 32.0, "cooling", 3.0)
+    common = {
+        "area_id": "ac_room",
+        "T_outdoor": 32.0,
+        "window_open": False,
+        "raw_open": False,
+        "q_residual": 0.0,
+        "shading_factor": 1.0,
+        "q_solar": 0.0,
+        "can_heat": False,
+        "can_cool": True,
+        "dt_minutes": 0.5,
+    }
+    for temperature in (25.9, 25.8):
+        manager.process(**common, current_temp=temperature, ekf_mode="cooling", ekf_pf=1.0)
+    learned_before_gap = models.get_model("ac_room").to_dict()
+    count_before_gap = models.get_n_observations("ac_room")
+
+    manager.process(**common, current_temp=24.0, ekf_mode=None, ekf_pf=0.0)
+
+    assert models.get_n_observations("ac_room") == count_before_gap
+    assert models.get_model("ac_room").to_dict() == learned_before_gap
+    assert models.get_estimator("ac_room")._x[0] == 24.0
+    assert "ac_room" not in manager._accumulated_dt
+
+    manager.process(**common, current_temp=23.5, ekf_mode="idle", ekf_pf=0.0)
+
+    assert models.get_n_observations("ac_room") == count_before_gap
+    assert models.get_model("ac_room").to_dict() == learned_before_gap
+    assert models.get_estimator("ac_room")._x[0] == 23.5
+    for _ in range(6):
+        manager.process(**common, current_temp=23.5, ekf_mode="idle", ekf_pf=0.0)
+    assert models.get_n_observations("ac_room") == count_before_gap + 1
+    assert models.get_mode_counts("ac_room") == (1, 0, 0)
+
+
+@pytest.mark.parametrize("mode", [None, "heating", "cooling"])
+def test_open_window_with_active_or_unknown_hvac_does_not_learn_heat_loss(mode):
+    """Window cooling cannot be isolated while HVAC output is active or unknown."""
+    models = RoomModelManager()
+    manager = EkfTrainingManager(models)
+    estimator = models.get_estimator("room")
+    estimator.update(24.0, 10.0, "idle", 3.0)
+
+    manager.process(
+        area_id="room",
+        current_temp=23.0,
+        T_outdoor=10.0,
+        ekf_mode=mode,
+        ekf_pf=1.0 if mode else 0.0,
+        window_open=True,
+        raw_open=True,
+        q_residual=0.0,
+        shading_factor=1.0,
+        q_solar=0.0,
+        can_heat=True,
+        can_cool=True,
+        dt_minutes=0.5,
+    )
+
+    assert estimator._x[0] == 23.0
+    assert estimator._k_window_n == 0

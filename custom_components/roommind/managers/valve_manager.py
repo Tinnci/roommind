@@ -16,7 +16,7 @@ from ..const import (
     TargetTemps,
     make_roommind_context,
 )
-from ..control.mpc_controller import async_idle_device, async_turn_off_climate, resolve_hvac_mode
+from ..control.climate_actuator import async_idle_device, async_turn_off_climate, resolve_hvac_mode
 from ..utils.device_utils import build_rooms_devices_map, get_trv_eids
 from ..utils.temp_utils import celsius_to_ha_temp
 

@@ -387,12 +387,12 @@ class TestClimateControlDisabled:
         hass.states.get = MagicMock(return_value=None)
         assert coordinator._observe_device_action(room) == (None, 0.0)
 
-        # Preheating -> treated as heating
+        # Preheating does not confirm heat delivered to the room.
         s = MagicMock()
         s.state = "heat"
         s.attributes = {"hvac_action": "preheating"}
         hass.states.get = MagicMock(return_value=s)
-        assert coordinator._observe_device_action(room) == ("heating", 1.0)
+        assert coordinator._observe_device_action(room) == (None, 0.0)
 
 
 class TestCoverageGaps:

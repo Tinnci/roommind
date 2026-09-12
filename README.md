@@ -107,6 +107,8 @@ For a more detailed explanation of the `Priority` slider, device types, setpoint
 
 For HA state freshness, sensor fusion, airflow modeling, and comfort diagnostics, see the [Observer and Airflow Guide](docs/observer-and-airflow.md).
 
+For AC output interpretation, feedback gaps, consistent observations, and dispatch evidence, see [AC Observation and Control](docs/ac-observation-and-control.md).
+
 ## Entities Created
 
 | Entity | Description |

@@ -52,6 +52,7 @@ from .const import (
 )
 from .control.actuation import ActuationLedger
 from .control.constraints import ConstraintInput, ConstraintReducer
+from .control.hvac_observation import HVACOutputObservation, observed_room_activity
 from .control.mpc_controller import (
     DEFAULT_OUTDOOR_TEMP_FALLBACK,
     AppliedCommandReport,
@@ -219,7 +220,7 @@ class RoomSensorSnapshot:
     current_temp_raw: float | None
     humidity: HumiditySensorSnapshot
     has_external_sensor: bool
-    temperature_observations: list[TemperatureObservation]
+    temperature_observations: tuple[TemperatureObservation, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -229,6 +230,11 @@ class RoomControlObservation:
     sensors: RoomSensorSnapshot
     climate_devices: ClimateDeviceSnapshot
     device_action: tuple[str | None, float]
+    airflow: AirflowFactors
+    hvac_output: HVACOutputObservation | None
+    raw_window_open: bool
+    q_occupancy: float
+    shading_factor: float
 
 
 def _get_area_name(hass: HomeAssistant, area_id: str) -> str:
@@ -379,11 +385,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         observations: dict[str, RoomControlObservation] = {}
         for area_id, room in rooms.items():
             try:
-                observations[area_id] = RoomControlObservation(
-                    sensors=self._read_room_sensors(room, area_id),
-                    climate_devices=self._read_climate_device_snapshot(room),
-                    device_action=self._observe_device_action(room),
-                )
+                observations[area_id] = self._read_control_observation(room, area_id)
             except Exception:  # noqa: BLE001
                 _LOGGER.exception("Room '%s': observation failed, skipping", area_id)
 
@@ -825,7 +827,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             current_temp_raw=current_temp_raw,
             humidity=humidity,
             has_external_sensor=has_external_sensor,
-            temperature_observations=observations,
+            temperature_observations=tuple(observations),
         )
 
     def _record_raw_state_observation(
@@ -1188,6 +1190,27 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             cooling_boost_target=max(ac_min_temps) if ac_min_temps else None,
         )
 
+    def _read_control_observation(self, room: dict[str, Any], area_id: str) -> RoomControlObservation:
+        """Capture physical inputs together, before any room can dispatch work."""
+        sensors = self._read_room_sensors(room, area_id)
+        climate_devices = self._read_climate_device_snapshot(room)
+        airflow = self._environmental_factors.read_room_airflow(room)
+        occupied = any(
+            state.state == "on"
+            for entity_id in room.get("occupancy_sensors", [])
+            if (state := self.hass.states.get(entity_id)) is not None
+        )
+        return RoomControlObservation(
+            sensors=sensors,
+            climate_devices=climate_devices,
+            device_action=self._observe_device_action(room),
+            airflow=airflow,
+            hvac_output=self._observe_hvac_output(room, airflow),
+            raw_window_open=self._is_window_open(room),
+            q_occupancy=1.0 if occupied else 0.0,
+            shading_factor=self._cover_orchestrator.read_positions(area_id, room).shading_factor,
+        )
+
     async def _async_process_room(
         self,
         room: dict,
@@ -1199,8 +1222,10 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         """Process a single room: read sensor, evaluate schedule, apply control."""
         area_id = room.get("area_id", "unknown")
 
-        device_action = observation.device_action if observation is not None else self._observe_device_action(room)
-        sensor_snapshot = observation.sensors if observation is not None else self._read_room_sensors(room, area_id)
+        if observation is None:
+            observation = self._read_control_observation(room, area_id)
+        device_action = observation.device_action
+        sensor_snapshot = observation.sensors
         current_temp = sensor_snapshot.current_temp
         current_temp_raw = sensor_snapshot.current_temp_raw
         current_humidity = sensor_snapshot.humidity.value
@@ -1303,24 +1328,14 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             self._previous_modes.get(area_id, MODE_IDLE),
         )
 
-        # Read current cover positions for shading factor
-        cover_pos_result = self._cover_orchestrator.read_positions(area_id, room)
-        shading_factor = cover_pos_result.shading_factor
+        shading_factor = observation.shading_factor
         solar_exposure = SolarExposure(
             raw_solar=self._current_q_solar,
             shading_factor=shading_factor,
         )
 
-        # Read occupancy sensors for thermal model (OR logic: any sensor "on" → occupied)
-        q_occupancy = 0.0
-        for occ_eid in room.get("occupancy_sensors", []):
-            occ_state = self.hass.states.get(occ_eid)
-            if occ_state and occ_state.state == "on":
-                q_occupancy = 1.0
-                break
-            # unavailable/unknown/off → skip (conservative: no occupancy heat)
-
-        airflow = self._environmental_factors.read_room_airflow(room)
+        q_occupancy = observation.q_occupancy
+        airflow = observation.airflow
         airflow_has_ventilation = any(
             status.available and status.role == AIRFLOW_ROLE_VENTILATION for status in airflow.statuses
         )
@@ -1352,9 +1367,9 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             shading_factor=shading_factor,
             q_occupancy=q_occupancy,
             q_vent=airflow.q_vent,
-            airflow_levels=airflow.levels,
-            mix_levels=airflow.mix_levels,
-            vent_levels=airflow.vent_levels,
+            airflow_levels=list(airflow.levels),
+            mix_levels=list(airflow.mix_levels),
+            vent_levels=list(airflow.vent_levels),
             airflow_has_ventilation=airflow_has_ventilation,
             airflow_has_hvac_fan=airflow.has_hvac_fan_control,
             airflow_mix_score=airflow_mix_score,
@@ -1392,7 +1407,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         )
         if not has_external_sensor:
             rapid_recovery_mode = None
-        raw_open = self._is_window_open(room)
+        raw_open = observation.raw_window_open
         window_open = self._window_manager.update(
             area_id,
             raw_open,
@@ -1436,9 +1451,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             rapid_recovery_active=rapid_recovery_active,
         )
 
-        device_snapshot = (
-            observation.climate_devices if observation is not None else self._read_climate_device_snapshot(room)
-        )
+        device_snapshot = observation.climate_devices
 
         # Exclude TRVs currently being valve-protection-cycled from normal control
         cycling_eids = {eid for eid in device_snapshot.trv_entity_ids if self._valve_manager.is_entity_cycling(eid)}
@@ -1701,10 +1714,12 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             sensor_conflict=sensor_conflict,
             sensor_fusion_status=self._sensor_fusion.diagnostics(
                 temperature_observations,
-                power_fraction=power_fraction,
+                power_fraction=device_action[1],
                 q_fan_mix=airflow.q_fan_mix,
             ),
-            hvac_output_status=self._observe_hvac_output(room, airflow.as_status_dicts(), current_temp_raw),
+            hvac_output_status=observation.hvac_output.as_status_dict()
+            if observation.hvac_output is not None
+            else None,
             night_control_status=night_control_status,
             rapid_recovery_active=rapid_recovery_active,
             coupling_status=coupling_terms,
@@ -1759,11 +1774,15 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         learning_active = area_id not in learning_disabled
         if learning_active and current_temp_raw is not None and self.outdoor_temp_effective is not None:
             can_heat, can_cool = get_can_heat_cool(room, acs_can_heat=check_acs_can_heat(self.hass, room))
-            training_observations = self._sensor_fusion.calibrate_observations(
-                temperature_observations,
-                mode=ekf_mode or MODE_IDLE,
-                power_fraction=ekf_pf,
-                q_fan_mix=airflow.q_fan_mix,
+            training_observations = (
+                self._sensor_fusion.calibrate_observations(
+                    temperature_observations,
+                    mode=ekf_mode,
+                    power_fraction=ekf_pf,
+                    q_fan_mix=airflow.q_fan_mix,
+                )
+                if ekf_mode is not None
+                else None
             )
             self._ekf_training.process(
                 area_id=area_id,
@@ -1944,30 +1963,20 @@ class RoomMindCoordinator(DataUpdateCoordinator):
     def _observe_hvac_output(
         self,
         room: dict,
-        airflow_statuses: list[dict],
-        current_temp_raw: float | None,
-    ) -> dict | None:
+        airflow: AirflowFactors,
+    ) -> HVACOutputObservation | None:
         """Return a coarse HVAC output observation for the first configured climate airflow device."""
-        status_by_entity = {status.get("entity_id"): status for status in airflow_statuses}
+        fan_levels = {status.entity_id: status.q for status in airflow.statuses}
         for device in room.get("airflow_devices", []) or []:
             entity_id = device.get("entity_id", "")
             if not entity_id.startswith("climate."):
                 continue
-            state = self.hass.states.get(entity_id)
-            attrs = state.attributes if state else {}
-            observation = self._hvac_output_observer.observe(
+            climate = self._hvac_output_observer.read_climate(entity_id)
+            return self._hvac_output_observer.observe(
                 device,
-                hvac_action=attrs.get("hvac_action"),
-                fan_q=float(status_by_entity.get(entity_id, {}).get("q") or 0.0),
-                temp_slope_c_per_h=None if current_temp_raw is None else 0.0,
+                hvac_action=climate.output_action,
+                fan_q=fan_levels.get(entity_id, 0.0),
             )
-            return {
-                "entity_id": entity_id,
-                "stage": observation.stage,
-                "delivered_capacity_factor": observation.delivered_capacity_factor,
-                "electric_power_w": observation.electric_power_w,
-                "confidence": observation.confidence,
-            }
         return None
 
     @staticmethod
@@ -2058,55 +2067,11 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         )
 
     def _observe_device_action(self, room: dict) -> tuple[str | None, float]:
-        """Observe actual hvac_action from climate devices for model training.
-
-        When climate control is disabled, devices may still self-regulate.
-        This method reads the actual device state so the EKF receives
-        correct mode information instead of blindly assuming idle.
-
-        Returns (observed_mode, power_fraction):
-          - ("heating", 1.0) / ("cooling", 1.0) / ("idle", 0.0) when conclusive
-          - (None, 0.0) when state is unobservable (caller should skip training)
-        """
-        dominated: str | None = None
-
-        for eid in get_all_entity_ids(room.get("devices", [])):
-            state = self.hass.states.get(eid)
-            if state is None or state.state in ("unavailable", "unknown"):
-                return (None, 0.0)
-
-            # Device explicitly off → conclusively idle
-            if state.state == "off":
-                if dominated is None:
-                    dominated = "idle"
-                continue
-
-            # Device in an active hvac_mode → need hvac_action to determine firing
-            action = state.attributes.get("hvac_action")
-            if action is None:
-                # No hvac_action attribute → cannot tell if firing → unobservable
-                return (None, 0.0)
-
-            if action in ("heating", "preheating"):
-                if dominated == "cooling":
-                    return (None, 0.0)  # conflicting → skip
-                dominated = "heating"
-            elif action == "cooling":
-                if dominated == "heating":
-                    return (None, 0.0)  # conflicting → skip
-                dominated = "cooling"
-            elif action in ("idle", "off"):
-                if dominated is None:
-                    dominated = "idle"
-            else:
-                # drying, fan, etc. — unknown thermal effect → skip
-                return (None, 0.0)
-
-        if dominated is None:
-            return (None, 0.0)  # no devices or all unavailable
-
-        pf = 1.0 if dominated in ("heating", "cooling") else 0.0
-        return (dominated, pf)
+        """Read conclusive room activity without promoting assumed state to feedback."""
+        return observed_room_activity(
+            self._hvac_output_observer.read_climate(entity_id)
+            for entity_id in get_all_entity_ids(room.get("devices", []))
+        )
 
     def _is_window_open(self, room: dict) -> bool:
         """Return True if any configured window/door sensor reports 'on' (open)."""

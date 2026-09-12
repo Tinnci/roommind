@@ -9,7 +9,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN, VERSION
-from .control.mpc_controller import last_command_snapshot
+from .control.climate_actuator import last_command_snapshot
 
 
 def _build_device_states(

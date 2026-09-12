@@ -27,23 +27,32 @@ from ..const import (
     MODE_IDLE,
     TargetTemps,
     is_override_active,
-    make_roommind_context,
 )
 from ..room_config import resolve_setback_offset
 from ..settings_config import mpc_control_enabled
 from ..utils.device_utils import (
-    DEFAULT_IDLE_SETBACK_OFFSET,
-    IDLE_ACTION_FAN_ONLY,
-    IDLE_ACTION_LOW,
-    IDLE_ACTION_SETBACK,
     get_ac_eids,
     get_direct_setpoint_eids,
-    get_idle_action,
     get_trv_eids,
     has_reliable_hvac_modes,
 )
 from ..utils.temp_utils import celsius_to_ha_temp
-from .actuation import ActuationLedger, DeviceActuationResult, DispatchStatus, plan_setback_temperature
+from .actuation import ActuationLedger, DeviceActuationResult, DispatchStatus
+from .climate_actuator import (  # noqa: F401 -- Preserve previous helper import paths.
+    _command_payload_matches,
+    _last_commands,
+    _normalize_temperature_payload,
+    _resolve_idle_setpoint,
+    _send_idle_setpoint,
+    _should_use_cache,
+    _snap_to_step,
+    async_dispatch_climate,
+    async_idle_device,
+    async_turn_off_climate,
+    clear_command_cache,
+    last_command_snapshot,
+    resolve_hvac_mode,
+)
 from .forecast_series import build_outdoor_temperature_series
 from .mpc_optimizer import MPCOptimizer, MPCPlan
 from .rapid_recovery import resolve_rapid_recovery_mode
@@ -56,17 +65,10 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-# Cache of last successfully sent command per climate entity.
-# Fallback for IR devices that don't report temperature attributes.
-# Persists across MPCController instances (created fresh each 30s cycle),
-# resets on integration reload (module reimport).
-_last_commands: dict[str, dict[str, Any]] = {}
-_setpoint_override_warned: set[str] = set()
-
 
 @dataclass
 class AppliedCommandReport:
-    """Report of device activity implied by actually applied commands."""
+    """Commanded activity supported by dispatch evidence, separate from physical state."""
 
     active_eids: set[str] = field(default_factory=set)
     inactive_eids: set[str] = field(default_factory=set)
@@ -123,717 +125,6 @@ class DeviceApplyContext:
     trv_heat_boost: float
     ac_heat_boost: float
     ac_cool_boost: float
-
-
-def _cache_entry(service: str, data: dict) -> dict[str, Any]:
-    """Build a cache entry from a service call."""
-    return {
-        "service": service,
-        "hvac_mode": data.get("hvac_mode"),
-        "temperature": data.get("temperature"),
-        "target_temp_low": data.get("target_temp_low"),
-        "target_temp_high": data.get("target_temp_high"),
-    }
-
-
-def _should_use_cache(state: Any) -> bool:
-    """Return True when the sent-command cache should be trusted.
-
-    The cache exists for IR-controlled devices that never report state changes.
-    When a device has a real HVAC state (not unavailable/unknown), the device's
-    actual reported state is authoritative and the cache must not suppress
-    retries — a cached "off" must not prevent re-sending when the device
-    clearly reports it is still heating.
-    """
-    if state is None:
-        return True
-    return state.state in ("unavailable", "unknown")
-
-
-def _command_payload_matches(observed: dict[str, Any], service: str, desired: dict[str, Any]) -> bool:
-    """Return whether observed state already represents a desired command."""
-    if service == "set_hvac_mode":
-        return observed.get("hvac_mode") == desired.get("hvac_mode")
-    if service != "set_temperature":
-        return False
-    if "target_temp_low" in desired:
-        observed_low = observed.get("target_temp_low")
-        observed_high = observed.get("target_temp_high")
-        desired_low = desired.get("target_temp_low")
-        desired_high = desired.get("target_temp_high")
-        return (
-            observed_low is not None
-            and desired_low is not None
-            and observed_high is not None
-            and desired_high is not None
-            and round(observed_low, 1) == round(desired_low, 1)
-            and round(observed_high, 1) == round(desired_high, 1)
-        )
-    observed_temp = observed.get("temperature")
-    desired_temp = desired.get("temperature")
-    return observed_temp is not None and desired_temp is not None and round(observed_temp, 1) == round(desired_temp, 1)
-
-
-def _snap_to_step(value: float, step: float | None) -> float:
-    if step is None or step <= 0:
-        return value
-    return round(round(value / step) * step, 2)
-
-
-def _normalize_temperature_payload(state: Any, data: dict[str, Any], temp_intent: str) -> dict[str, Any]:
-    """Clamp and adapt one temperature command to device capabilities."""
-    normalized = dict(data)
-    attrs = state.attributes
-    dev_min = attrs.get("min_temp")
-    dev_max = attrs.get("max_temp")
-
-    if "temperature" in normalized:
-        temperature = normalized["temperature"]
-        if dev_max is not None and temperature > dev_max:
-            normalized["temperature"] = dev_max
-        if dev_min is not None and normalized["temperature"] < dev_min:
-            normalized["temperature"] = dev_min
-
-    if "temperature" in normalized and temp_intent in ("heat", "cool") and attrs.get("target_temp_low") is not None:
-        temperature = normalized.pop("temperature")
-        if temp_intent == "heat":
-            range_max = attrs.get("max_temp", temperature)
-            current_high = attrs.get("target_temp_high", range_max)
-            normalized["target_temp_low"] = temperature
-            normalized["target_temp_high"] = max(temperature, current_high)
-        elif temp_intent == "cool":
-            range_min = attrs.get("min_temp", temperature)
-            current_low = attrs.get("target_temp_low", range_min)
-            normalized["target_temp_low"] = min(temperature, current_low)
-            normalized["target_temp_high"] = temperature
-
-    if "target_temp_low" in normalized:
-        if dev_min is not None and normalized["target_temp_low"] < dev_min:
-            normalized["target_temp_low"] = dev_min
-        if dev_max is not None and normalized["target_temp_high"] > dev_max:
-            normalized["target_temp_high"] = dev_max
-
-    raw_step = attrs.get("target_temp_step")
-    if raw_step is None:
-        return normalized
-    step = float(raw_step)
-    if "temperature" in normalized:
-        temperature = _snap_to_step(normalized["temperature"], step)
-        if dev_max is not None and temperature > dev_max:
-            temperature = dev_max
-        if dev_min is not None and temperature < dev_min:
-            temperature = dev_min
-        normalized["temperature"] = temperature
-    if "target_temp_low" in normalized:
-        low = _snap_to_step(normalized["target_temp_low"], step)
-        if dev_min is not None and low < dev_min:
-            low = dev_min
-        normalized["target_temp_low"] = low
-    if "target_temp_high" in normalized:
-        high = _snap_to_step(normalized["target_temp_high"], step)
-        if dev_max is not None and high > dev_max:
-            high = dev_max
-        normalized["target_temp_high"] = high
-    return normalized
-
-
-def clear_command_cache() -> None:
-    """Clear the sent-command cache (for tests)."""
-    _last_commands.clear()
-    _setpoint_override_warned.clear()
-
-
-def last_command_snapshot() -> dict[str, dict[str, Any]]:
-    """Return a detached snapshot of the most recently sent device commands."""
-    return {entity_id: dict(command) for entity_id, command in _last_commands.items()}
-
-
-def _resolve_idle_setpoint(
-    state: Any,
-    fallback_setpoint: float | None,
-    *,
-    area_id: str = "unknown",
-    entity_id: str = "unknown",
-) -> float | None:
-    """Pick the best setpoint to idle a device.
-
-    Returns min_temp when available (authoritative device floor),
-    otherwise fallback_setpoint. Returns None if neither works.
-    """
-    min_temp: float | None = None
-    if state:
-        raw = state.attributes.get("min_temp")
-        if raw is not None:
-            try:
-                val = float(raw)
-            except ValueError, TypeError:
-                val = -1.0
-            if val > 0:
-                min_temp = val
-            elif fallback_setpoint is None:
-                _LOGGER.warning(
-                    "Area '%s': device '%s' reports min_temp=%s (<= 0), "
-                    "no fallback available — cannot lower setpoint (Z2M/firmware bug?)",
-                    area_id,
-                    entity_id,
-                    raw,
-                )
-
-    return min_temp if min_temp is not None else fallback_setpoint
-
-
-async def _send_idle_setpoint(
-    hass: HomeAssistant,
-    entity_id: str,
-    state: Any,
-    setpoint: float,
-    *,
-    area_id: str = "unknown",
-) -> None:
-    """Lower a device's temperature setpoint during idle. Best-effort."""
-    current = state.attributes.get("temperature")
-    if current is not None and round(float(current), 1) == round(setpoint, 1):
-        _setpoint_override_warned.discard(entity_id)
-        return
-
-    dev_min = state.attributes.get("min_temp")
-    dev_max = state.attributes.get("max_temp")
-    if dev_min is not None:
-        try:
-            dev_min_f = float(dev_min)
-            if setpoint < dev_min_f:
-                setpoint = dev_min_f
-        except ValueError, TypeError:
-            pass
-    if dev_max is not None:
-        try:
-            dev_max_f = float(dev_max)
-            if setpoint > dev_max_f:
-                setpoint = dev_max_f
-        except ValueError, TypeError:
-            pass
-    if current is not None and round(float(current), 1) == round(setpoint, 1):
-        return
-
-    cached = _last_commands.get(entity_id)
-    if (
-        cached
-        and cached.get("service") == "set_temperature"
-        and cached.get("temperature") is not None
-        and round(cached["temperature"], 1) == round(setpoint, 1)
-        and current is not None
-    ):
-        if entity_id not in _setpoint_override_warned:
-            _LOGGER.warning(
-                "Area '%s': device '%s' setpoint is %.1f but RoomMind previously sent %.1f — "
-                "an external controller may be overriding the setpoint. "
-                "Check the device's own schedule/minimum temperature settings",
-                area_id,
-                entity_id,
-                float(current),
-                setpoint,
-            )
-            _setpoint_override_warned.add(entity_id)
-
-    try:
-        await hass.services.async_call(
-            "climate",
-            "set_temperature",
-            {"entity_id": entity_id, "temperature": setpoint},
-            blocking=True,
-            context=make_roommind_context(),
-        )
-        _last_commands[entity_id] = _cache_entry("set_temperature", {"temperature": setpoint})
-    except Exception:  # noqa: BLE001
-        _LOGGER.warning(
-            "Area '%s': climate.set_temperature(%.1f) failed on '%s'",
-            area_id,
-            setpoint,
-            entity_id,
-            exc_info=True,
-        )
-
-
-async def _async_idle_without_off_mode(
-    hass: HomeAssistant,
-    entity_id: str,
-    state: Any,
-    hvac_modes: list[str],
-    *,
-    area_id: str,
-) -> None:
-    """Neutralize a climate entity that cannot enter an explicit off mode."""
-    if state.state in ("heat", "cool"):
-        is_cooling = state.state == "cool"
-    else:
-        is_cooling = "heat" not in hvac_modes and ("cool" in hvac_modes or "heat_cool" in hvac_modes)
-    fallback_temp = state.attributes.get("max_temp") if is_cooling else state.attributes.get("min_temp")
-    boundary_name = "max_temp" if is_cooling else "min_temp"
-    if fallback_temp is None:
-        _LOGGER.warning(
-            "Area '%s': device '%s' has no 'off' mode and no %s attribute, cannot turn off reliably",
-            area_id,
-            entity_id,
-            boundary_name,
-        )
-        return
-    if float(fallback_temp) <= 0:
-        _LOGGER.warning(
-            "Area '%s': device '%s' reports %s=%s (<= 0), cannot use as fallback setpoint (Z2M/firmware bug?)",
-            area_id,
-            entity_id,
-            boundary_name,
-            fallback_temp,
-        )
-        return
-
-    is_range = state.attributes.get("target_temp_low") is not None
-    if is_range and "heat_cool" in hvac_modes:
-        range_low = state.attributes.get("min_temp")
-        range_high = state.attributes.get("max_temp")
-        if (
-            range_low is None
-            or range_high is None
-            or float(range_low) <= 0
-            or float(range_high) <= 0
-            or float(range_low) > float(range_high)
-        ):
-            _LOGGER.warning(
-                "Area '%s': range device '%s' has invalid min/max fallback bounds (%s, %s)",
-                area_id,
-                entity_id,
-                range_low,
-                range_high,
-            )
-            return
-        current_low = state.attributes.get("target_temp_low")
-        current_high = state.attributes.get("target_temp_high")
-        if (
-            current_low is not None
-            and current_high is not None
-            and round(current_low, 1) == round(range_low, 1)
-            and round(current_high, 1) == round(range_high, 1)
-        ):
-            return
-        if (current_low is None or current_high is None) and _should_use_cache(state):
-            cached = _last_commands.get(entity_id)
-            if cached and cached.get("service") == "set_temperature":
-                cached_low = cached.get("target_temp_low")
-                cached_high = cached.get("target_temp_high")
-                if (
-                    cached_low is not None
-                    and cached_high is not None
-                    and round(cached_low, 1) == round(range_low, 1)
-                    and round(cached_high, 1) == round(range_high, 1)
-                ):
-                    return
-        service_data: dict = {
-            "entity_id": entity_id,
-            "target_temp_low": range_low,
-            "target_temp_high": range_high,
-        }
-        fallback_description: Any = (range_low, range_high)
-    elif is_range:
-        current_boundary = (
-            state.attributes.get("target_temp_high") if is_cooling else state.attributes.get("target_temp_low")
-        )
-        if current_boundary is not None and round(current_boundary, 1) == round(fallback_temp, 1):
-            return
-        if current_boundary is None and _should_use_cache(state):
-            cached = _last_commands.get(entity_id)
-            if cached and cached.get("service") == "set_temperature":
-                cached_low = cached.get("target_temp_low")
-                cached_high = cached.get("target_temp_high")
-                if (
-                    cached_low is not None
-                    and cached_high is not None
-                    and round(cached_low, 1) == round(fallback_temp, 1)
-                    and round(cached_high, 1) == round(fallback_temp, 1)
-                ):
-                    return
-        service_data = {
-            "entity_id": entity_id,
-            "target_temp_low": fallback_temp,
-            "target_temp_high": fallback_temp,
-        }
-        fallback_description = fallback_temp
-    else:
-        current_temp_setting = state.attributes.get("temperature")
-        if current_temp_setting is not None and round(current_temp_setting, 1) == round(fallback_temp, 1):
-            return
-        if current_temp_setting is None and _should_use_cache(state):
-            cached = _last_commands.get(entity_id)
-            if (
-                cached
-                and cached.get("service") == "set_temperature"
-                and cached.get("temperature") is not None
-                and round(cached["temperature"], 1) == round(fallback_temp, 1)
-            ):
-                return
-        service_data = {"entity_id": entity_id, "temperature": fallback_temp}
-        fallback_description = fallback_temp
-
-    _LOGGER.debug(
-        "Area '%s': device '%s' has no 'off' mode, setting temperature to %s as fallback",
-        area_id,
-        entity_id,
-        fallback_description,
-    )
-    try:
-        await hass.services.async_call(
-            "climate",
-            "set_temperature",
-            service_data,
-            blocking=True,
-            context=make_roommind_context(),
-        )
-        _last_commands[entity_id] = _cache_entry("set_temperature", service_data)
-    except Exception:  # noqa: BLE001
-        _LOGGER.warning(
-            "Area '%s': climate.set_temperature(%s) fallback failed on '%s'",
-            area_id,
-            fallback_temp,
-            entity_id,
-            exc_info=True,
-        )
-
-
-async def async_turn_off_climate(
-    hass: HomeAssistant,
-    entity_id: str,
-    *,
-    area_id: str = "unknown",
-    fallback_setpoint: float | None = None,
-) -> None:
-    """Turn off a climate entity, falling back to min_temp for heat-only devices.
-
-    Some TRVs (e.g. Shelly) only support hvac_modes: ["heat"] with no "off".
-    For these devices, setting the temperature to min_temp effectively closes
-    the valve.  For cooling-only devices without "off", max_temp is used.
-    """
-    state = hass.states.get(entity_id)
-    hvac_modes: list[str] = (state.attributes.get("hvac_modes") or []) if state else []
-
-    # Normal path: "off" is supported (or modes unknown → assume supported)
-    if not hvac_modes or "off" in hvac_modes:
-        # Permanently-off devices (e.g. Wavin Sentio): hvac_modes only contains
-        # "off", meaning there is no real mode transition.  Heating is controlled
-        # purely via the temperature setpoint.  Sending set_hvac_mode("off") to
-        # these devices can reset the setpoint, undoing the lowering.  Only lower
-        # the setpoint for these devices, never send set_hvac_mode.
-        permanently_off = bool(hvac_modes) and set(hvac_modes) == {"off"}
-
-        effective_setpoint = _resolve_idle_setpoint(
-            state,
-            fallback_setpoint,
-            area_id=area_id,
-            entity_id=entity_id,
-        )
-
-        if state and state.state == "off":
-            if permanently_off and effective_setpoint is not None:
-                await _send_idle_setpoint(hass, entity_id, state, effective_setpoint, area_id=area_id)
-            return  # already off
-
-        if permanently_off:
-            if state and effective_setpoint is not None:
-                await _send_idle_setpoint(hass, entity_id, state, effective_setpoint, area_id=area_id)
-            return
-
-        # Cache fallback for IR devices (only when device has no reliable state)
-        if _should_use_cache(state):
-            cached = _last_commands.get(entity_id)
-            if cached and cached.get("service") == "set_hvac_mode" and cached.get("hvac_mode") == "off":
-                return
-        # Defense-in-depth: lower setpoint to min_temp BEFORE sending "off".
-        # Some devices (e.g. Wavin AHC9000) claim "off" support but only
-        # process temperature changes when in "heat" mode.  Sending the setpoint
-        # first (while the device is still active) ensures the valve closes even
-        # if set_hvac_mode(off) is later ignored.
-        if state and effective_setpoint is not None:
-            await _send_idle_setpoint(hass, entity_id, state, effective_setpoint, area_id=area_id)
-
-        try:
-            await hass.services.async_call(
-                "climate",
-                "set_hvac_mode",
-                {"entity_id": entity_id, "hvac_mode": "off"},
-                blocking=True,
-                context=make_roommind_context(),
-            )
-            _last_commands[entity_id] = _cache_entry("set_hvac_mode", {"hvac_mode": "off"})
-        except Exception:  # noqa: BLE001
-            _LOGGER.warning(
-                "Area '%s': climate.set_hvac_mode(off) failed on '%s'",
-                area_id,
-                entity_id,
-                exc_info=True,
-            )
-        return
-
-    assert state is not None  # guaranteed: hvac_modes non-empty implies state exists
-    await _async_idle_without_off_mode(
-        hass,
-        entity_id,
-        state,
-        hvac_modes,
-        area_id=area_id,
-    )
-
-
-async def _async_idle_low(
-    hass: HomeAssistant,
-    entity_id: str,
-    *,
-    area_id: str,
-    fallback_temp: float | None,
-) -> None:
-    """Keep a device awake while lowering its setpoint."""
-    state = hass.states.get(entity_id)
-    if state is None:
-        return
-    effective_setpoint = _resolve_idle_setpoint(
-        state,
-        fallback_temp,
-        area_id=area_id,
-        entity_id=entity_id,
-    )
-    if effective_setpoint is not None:
-        await _send_idle_setpoint(hass, entity_id, state, effective_setpoint, area_id=area_id)
-
-
-async def _async_idle_setback(
-    hass: HomeAssistant,
-    entity_id: str,
-    *,
-    area_id: str,
-    targets: TargetTemps | None,
-    fallback_temp: float | None,
-    setback_offset: float,
-) -> DeviceActuationResult | None:
-    """Shift the active heat or cool target away from the comfort band."""
-    state = hass.states.get(entity_id)
-    current_hvac = state.state if state else None
-    setback_temp = plan_setback_temperature(current_hvac, targets, setback_offset)
-    if state is None or targets is None or setback_temp is None:
-        _LOGGER.debug(
-            "Area '%s': setback not applicable for '%s' (hvac=%s, targets=%s), falling back to off",
-            area_id,
-            entity_id,
-            current_hvac,
-            targets,
-        )
-        await async_turn_off_climate(hass, entity_id, area_id=area_id, fallback_setpoint=fallback_temp)
-        return
-
-    ha_t = celsius_to_ha_temp(hass, setback_temp)
-    min_t = state.attributes.get("min_temp")
-    max_t = state.attributes.get("max_temp")
-    if min_t is not None:
-        ha_t = max(ha_t, float(min_t))
-    if max_t is not None:
-        ha_t = min(ha_t, float(max_t))
-    step = state.attributes.get("target_temp_step")
-    if step is not None:
-        ha_t = _snap_to_step(ha_t, float(step))
-        if min_t is not None:
-            ha_t = max(ha_t, float(min_t))
-        if max_t is not None:
-            ha_t = min(ha_t, float(max_t))
-
-    desired = {"entity_id": entity_id, "temperature": ha_t}
-    current_temp_attr = state.attributes.get("temperature")
-    if current_temp_attr is not None and abs(float(current_temp_attr) - ha_t) < 0.1:
-        return DeviceActuationResult(entity_id, DispatchStatus.SKIPPED, "set_temperature", desired)
-    if _should_use_cache(state):
-        cached = _last_commands.get(entity_id)
-        if cached and cached.get("service") == "set_temperature" and cached.get("temperature") == ha_t:
-            return DeviceActuationResult(entity_id, DispatchStatus.SKIPPED, "set_temperature", desired)
-
-    _LOGGER.debug(
-        "Area '%s': setback on '%s' — target %.1f → %.1f",
-        area_id,
-        entity_id,
-        targets.heat if current_hvac == "heat" else targets.cool,
-        ha_t,
-    )
-    call_context = make_roommind_context()
-    try:
-        await hass.services.async_call(
-            "climate",
-            "set_temperature",
-            desired,
-            blocking=True,
-            context=call_context,
-        )
-        _last_commands[entity_id] = _cache_entry("set_temperature", {"temperature": ha_t})
-        return DeviceActuationResult(
-            entity_id, DispatchStatus.SENT, "set_temperature", desired, context_id=call_context.id
-        )
-    except Exception as err:  # noqa: BLE001
-        _LOGGER.warning(
-            "Area '%s': climate.set_temperature(%.1f) failed on '%s'",
-            area_id,
-            ha_t,
-            entity_id,
-            exc_info=True,
-        )
-        return DeviceActuationResult(
-            entity_id,
-            DispatchStatus.FAILED,
-            "set_temperature",
-            desired,
-            diagnostic=str(err),
-            context_id=call_context.id,
-        )
-
-
-async def _async_idle_fan_only(
-    hass: HomeAssistant,
-    entity_id: str,
-    *,
-    area_id: str,
-    idle_fan_mode: str,
-    fallback_temp: float | None,
-) -> None:
-    """Switch a supported device to circulation-only idle."""
-    state = hass.states.get(entity_id)
-    hvac_modes: list[str] = (state.attributes.get("hvac_modes") or []) if state else []
-    if "fan_only" not in hvac_modes:
-        _LOGGER.warning(
-            "Area '%s': device '%s' configured for fan_only idle but does not support it, falling back to off",
-            area_id,
-            entity_id,
-        )
-        await async_turn_off_climate(hass, entity_id, area_id=area_id, fallback_setpoint=fallback_temp)
-        return
-
-    if state and state.state == "fan_only":
-        current_fan = state.attributes.get("fan_mode")
-        if not idle_fan_mode or current_fan == idle_fan_mode:
-            return
-    if _should_use_cache(state):
-        cached = _last_commands.get(entity_id)
-        if cached and cached.get("service") == "set_hvac_mode" and cached.get("hvac_mode") == "fan_only":
-            if not idle_fan_mode:
-                return
-
-    try:
-        await hass.services.async_call(
-            "climate",
-            "set_hvac_mode",
-            {"entity_id": entity_id, "hvac_mode": "fan_only"},
-            blocking=True,
-            context=make_roommind_context(),
-        )
-        _last_commands[entity_id] = _cache_entry("set_hvac_mode", {"hvac_mode": "fan_only"})
-    except Exception:  # noqa: BLE001
-        _LOGGER.warning(
-            "Area '%s': climate.set_hvac_mode(fan_only) failed on '%s'",
-            area_id,
-            entity_id,
-            exc_info=True,
-        )
-        return
-
-    if not idle_fan_mode:
-        return
-    fan_modes: list[str] = (state.attributes.get("fan_modes") or []) if state else []
-    if idle_fan_mode not in fan_modes:
-        _LOGGER.debug(
-            "Area '%s': device '%s' does not support fan_mode '%s' (available: %s)",
-            area_id,
-            entity_id,
-            idle_fan_mode,
-            fan_modes,
-        )
-        return
-    try:
-        await hass.services.async_call(
-            "climate",
-            "set_fan_mode",
-            {"entity_id": entity_id, "fan_mode": idle_fan_mode},
-            blocking=True,
-            context=make_roommind_context(),
-        )
-    except Exception:  # noqa: BLE001
-        _LOGGER.warning(
-            "Area '%s': climate.set_fan_mode('%s') failed on '%s'",
-            area_id,
-            idle_fan_mode,
-            entity_id,
-            exc_info=True,
-        )
-
-
-async def async_idle_device(
-    hass: HomeAssistant,
-    entity_id: str,
-    devices: list[dict],
-    *,
-    area_id: str = "unknown",
-    targets: TargetTemps | None = None,
-    setback_offset: float = DEFAULT_IDLE_SETBACK_OFFSET,
-) -> DeviceActuationResult | None:
-    """Idle a climate device per its configured idle_action.
-
-    "off"      -> async_turn_off_climate() (existing behavior)
-    "fan_only" -> hvac_mode=fan_only + set_fan_mode(idle_fan_mode)
-    "setback"  -> keep current hvac_mode, shift target by offset
-    "low"      -> lower setpoint to device min_temp, never send set_hvac_mode(off)
-    Falls back to off when the configured action is not applicable.
-    """
-    idle_action, idle_fan_mode = get_idle_action(devices, entity_id)
-
-    # Fallback low setpoint (in HA display units) for devices where min_temp
-    # is not effective (e.g. Wavin Sentio with min_temp=0 or high min_temp).
-    fallback_temp: float | None = None
-    if targets is not None and targets.heat is not None:
-        fallback_temp = celsius_to_ha_temp(hass, targets.heat - DEFAULT_IDLE_SETBACK_OFFSET)
-
-    if idle_action == IDLE_ACTION_LOW:
-        await _async_idle_low(
-            hass,
-            entity_id,
-            area_id=area_id,
-            fallback_temp=fallback_temp,
-        )
-        return
-
-    if idle_action == IDLE_ACTION_SETBACK:
-        return await _async_idle_setback(
-            hass,
-            entity_id,
-            area_id=area_id,
-            targets=targets,
-            fallback_temp=fallback_temp,
-            setback_offset=setback_offset,
-        )
-
-    if idle_action != IDLE_ACTION_FAN_ONLY:
-        await async_turn_off_climate(hass, entity_id, area_id=area_id, fallback_setpoint=fallback_temp)
-        return
-
-    await _async_idle_fan_only(
-        hass,
-        entity_id,
-        area_id=area_id,
-        idle_fan_mode=idle_fan_mode,
-        fallback_temp=fallback_temp,
-    )
-
-
-def resolve_hvac_mode(desired: str, hvac_modes: list[str]) -> str | None:
-    """Pick the best available hvac_mode for the desired intent.
-
-    Fallback: heat/cool/heat_cool -> "auto" if desired mode unavailable.
-    Returns None if no compatible mode exists.
-    """
-    if not hvac_modes or desired in hvac_modes:
-        return desired
-    if desired in ("heat", "cool", "heat_cool") and "auto" in hvac_modes:
-        return "auto"
-    return None
 
 
 # Assumed full mode set for devices whose hvac_modes attribute is unreliable.
@@ -2015,9 +1306,9 @@ class MPCController:
         *,
         targets: TargetTemps | None,
         report: AppliedCommandReport | None = None,
-    ) -> DeviceActuationResult | None:
-        """Submit idle work with the cycle's offset and retain available evidence."""
-        result = await async_idle_device(
+    ) -> DeviceActuationResult:
+        """Retain each idle operation so partial failures cannot imply inactivity."""
+        operations = await async_idle_device(
             self.hass,
             entity_id,
             self._devices,
@@ -2025,14 +1316,11 @@ class MPCController:
             targets=targets,
             setback_offset=self._setback_offset,
         )
-        if result is not None:
+        for result in operations:
             self._record_dispatch_result(result)
         if report is not None:
-            if result is not None:
-                report.record(entity_id, active=False, operations=(result,))
-            else:
-                report.mark_inactive(entity_id)
-        return result
+            report.record(entity_id, active=False, operations=operations)
+        return DeviceActuationResult.combine(entity_id, operations)
 
     async def _call(self, service: str, data: dict, *, temp_intent: str = "") -> DeviceActuationResult:
         eid = data.get("entity_id")
@@ -2040,17 +1328,7 @@ class MPCController:
 
         # Delegate "turn off" to fallback-aware helper (handles heat-only TRVs)
         if service == "set_hvac_mode" and data.get("hvac_mode") == "off" and eid:
-            result = await self._async_idle_device(eid, targets=self._idle_targets)
-            if result is not None:
-                return result
-            return self._record_dispatch_result(
-                DeviceActuationResult(
-                    entity_id=eid,
-                    dispatch=DispatchStatus.SENT,
-                    service=service,
-                    desired=dict(data),
-                )
-            )
+            return await self._async_idle_device(eid, targets=self._idle_targets)
 
         # Resolve hvac_mode to a supported mode (handles auto-only devices)
         if service == "set_hvac_mode" and state:
@@ -2166,41 +1444,6 @@ class MPCController:
                 )
             )
 
-        try:
-            call_context = make_roommind_context()
-            await self.hass.services.async_call(
-                "climate",
-                service,
-                data,
-                blocking=True,
-                context=call_context,
-            )
-            if eid:
-                _last_commands[eid] = _cache_entry(service, data)
-            return self._record_dispatch_result(
-                DeviceActuationResult(
-                    entity_id=eid or "",
-                    dispatch=DispatchStatus.SENT,
-                    service=service,
-                    desired=dict(data),
-                    context_id=call_context.id,
-                )
-            )
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.warning(
-                "Area '%s': climate.%s failed on '%s'",
-                self._area_id,
-                service,
-                data.get("entity_id"),
-                exc_info=True,
-            )
-            return self._record_dispatch_result(
-                DeviceActuationResult(
-                    entity_id=eid or "",
-                    dispatch=DispatchStatus.FAILED,
-                    service=service,
-                    desired=dict(data),
-                    diagnostic=str(err),
-                    context_id=call_context.id,
-                )
-            )
+        return self._record_dispatch_result(
+            await async_dispatch_climate(self.hass, service, data, area_id=self._area_id)
+        )

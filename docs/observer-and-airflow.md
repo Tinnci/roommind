@@ -67,3 +67,5 @@ The Sensors tab shows compact fusion diagnostics:
 - room-level sensor conflict
 
 Use this view to spot bad sensor placement, stale HA entities, or cases where airflow mixing explains a temporary temperature spread.
+
+The HVAC output summary distinguishes measured electrical power from estimated fan power and unknown compressor load. See [AC Observation and Control](ac-observation-and-control.md) for the interpretation rules and feedback-gap behavior.

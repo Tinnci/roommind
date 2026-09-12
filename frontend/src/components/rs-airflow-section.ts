@@ -20,6 +20,7 @@ import {
   airflowModelingPreferenceCount,
 } from "../utils/airflow-settings-layout";
 import { toAirflowDeviceUiSchema } from "../utils/airflow-device-profile";
+import { describeHvacOutput } from "../utils/hvac-output";
 import "./shared/rs-master-detail";
 
 const KEEP = "";
@@ -386,10 +387,7 @@ export class RsAirflowSection extends LitElement {
         ${this.hvacOutputStatus
           ? html`<div class="summary-item">
               <div class="summary-label">${localize("airflow.hvac_output", lang)}</div>
-              <div class="summary-value">
-                ${this.hvacOutputStatus.stage} ·
-                ${this.hvacOutputStatus.delivered_capacity_factor.toFixed(2)}x
-              </div>
+              <div class="summary-value">${describeHvacOutput(this.hvacOutputStatus, lang)}</div>
             </div>`
           : nothing}
       </div>

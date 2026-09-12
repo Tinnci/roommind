@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -31,16 +32,16 @@ class AirflowDeviceStatus:
     domain: str = ""
     percentage: float | None = None
     preset_mode: str | None = None
-    preset_modes: list[str] = field(default_factory=list)
+    preset_modes: tuple[str, ...] = ()
     direction: str | None = None
     oscillating: bool | None = None
     fan_mode: str | None = None
-    fan_modes: list[str] = field(default_factory=list)
+    fan_modes: tuple[str, ...] = ()
     swing_mode: str | None = None
-    swing_modes: list[str] = field(default_factory=list)
+    swing_modes: tuple[str, ...] = ()
     swing_horizontal_mode: str | None = None
-    swing_horizontal_modes: list[str] = field(default_factory=list)
-    levels: list[float] = field(default_factory=lambda: [0.0])
+    swing_horizontal_modes: tuple[str, ...] = ()
+    levels: tuple[float, ...] = (0.0,)
     effect_weight: float = 1.0
     airflow_m3h: float | None = None
     age_s: float | None = None
@@ -58,11 +59,11 @@ class AirflowFactors:
     q_vent: float = 0.0
     airflow_ach: float = 0.0
     active: bool = False
-    levels: list[float] = field(default_factory=lambda: [0.0])
-    mix_levels: list[float] = field(default_factory=lambda: [0.0])
-    vent_levels: list[float] = field(default_factory=lambda: [0.0])
+    levels: tuple[float, ...] = (0.0,)
+    mix_levels: tuple[float, ...] = (0.0,)
+    vent_levels: tuple[float, ...] = (0.0,)
     has_hvac_fan_control: bool = False
-    statuses: list[AirflowDeviceStatus] = field(default_factory=list)
+    statuses: tuple[AirflowDeviceStatus, ...] = ()
 
     def as_status_dicts(self) -> list[dict[str, Any]]:
         """Serialize status entries for room state payloads."""
@@ -77,16 +78,16 @@ class AirflowFactors:
                 "domain": status.domain,
                 "percentage": status.percentage,
                 "preset_mode": status.preset_mode,
-                "preset_modes": status.preset_modes,
+                "preset_modes": list(status.preset_modes),
                 "direction": status.direction,
                 "oscillating": status.oscillating,
                 "fan_mode": status.fan_mode,
-                "fan_modes": status.fan_modes,
+                "fan_modes": list(status.fan_modes),
                 "swing_mode": status.swing_mode,
-                "swing_modes": status.swing_modes,
+                "swing_modes": list(status.swing_modes),
                 "swing_horizontal_mode": status.swing_horizontal_mode,
-                "swing_horizontal_modes": status.swing_horizontal_modes,
-                "levels": status.levels,
+                "swing_horizontal_modes": list(status.swing_horizontal_modes),
+                "levels": list(status.levels),
                 "effect_weight": status.effect_weight,
                 "airflow_m3h": status.airflow_m3h,
                 "age_s": status.age_s,
@@ -150,11 +151,11 @@ class EnvironmentalFactorManager:
             q_vent=_round_level(q_vent),
             airflow_ach=round(max(0.0, airflow_ach), 3),
             active=q_fan_mix > 0.0 or q_vent > 0.0,
-            levels=sorted_levels or [0.0],
-            mix_levels=sorted(_round_level(level) for level in mix_levels) or [0.0],
-            vent_levels=sorted(_round_level(level) for level in vent_levels) or [0.0],
+            levels=tuple(sorted_levels) or (0.0,),
+            mix_levels=tuple(sorted(_round_level(level) for level in mix_levels)) or (0.0,),
+            vent_levels=tuple(sorted(_round_level(level) for level in vent_levels)) or (0.0,),
             has_hvac_fan_control=has_hvac_fan_control,
-            statuses=statuses,
+            statuses=tuple(statuses),
         )
 
     def _read_device(self, config: dict) -> AirflowDeviceStatus:
@@ -260,7 +261,7 @@ class EnvironmentalFactorManager:
             domain="fan",
             percentage=percentage,
             preset_mode=preset_mode,
-            preset_modes=preset_modes,
+            preset_modes=tuple(preset_modes),
             direction=state.attributes.get("current_direction"),
             oscillating=state.attributes.get("oscillating"),
             levels=_unique_levels(levels),
@@ -303,11 +304,11 @@ class EnvironmentalFactorManager:
             control_enabled=control_enabled,
             domain="climate",
             fan_mode=fan_mode,
-            fan_modes=fan_modes,
+            fan_modes=tuple(fan_modes),
             swing_mode=state.attributes.get("swing_mode"),
-            swing_modes=[str(mode) for mode in state.attributes.get("swing_modes") or []],
+            swing_modes=tuple(str(mode) for mode in state.attributes.get("swing_modes") or []),
             swing_horizontal_mode=state.attributes.get("swing_horizontal_mode"),
-            swing_horizontal_modes=[str(mode) for mode in state.attributes.get("swing_horizontal_modes") or []],
+            swing_horizontal_modes=tuple(str(mode) for mode in state.attributes.get("swing_horizontal_modes") or []),
             levels=levels,
             effect_weight=effect_weight,
             airflow_m3h=airflow_m3h,
@@ -315,7 +316,7 @@ class EnvironmentalFactorManager:
         )
 
 
-def airflow_sensor_conflict(observations: list[Any]) -> float:
+def airflow_sensor_conflict(observations: Sequence[Any]) -> float:
     """Return a normalized 0..1 measure of current temperature-channel disagreement."""
     values = [float(obs.value) for obs in observations if getattr(obs, "value", None) is not None]
     if len(values) < 2:
@@ -366,14 +367,14 @@ def _timestamp_iso(value: Any) -> str | None:
     return value.isoformat() if isinstance(value, datetime) else None
 
 
-def _levels_from_fan_modes(fan_modes: list[str]) -> list[float]:
+def _levels_from_fan_modes(fan_modes: list[str]) -> tuple[float, ...]:
     if not fan_modes:
-        return [0.0, 1.0]
+        return (0.0, 1.0)
     return _unique_levels(fan_mode_level(mode, fan_modes) for mode in fan_modes)
 
 
-def _unique_levels(levels: Any) -> list[float]:
-    return sorted({_round_level(float(level)) for level in levels if _safe_float(level) is not None})
+def _unique_levels(levels: Any) -> tuple[float, ...]:
+    return tuple(sorted({_round_level(float(level)) for level in levels if _safe_float(level) is not None}))
 
 
 def _round_level(value: float) -> float:

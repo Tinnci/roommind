@@ -23,6 +23,7 @@ class EkfTrainingManager:
         self._accumulated_mode: dict[str, str] = {}
         self._accumulated_pf: dict[str, float] = {}
         self._accumulated_q_vent: dict[str, float] = {}
+        self._interrupted: set[str] = set()
         self.last_temps: dict[str, float] = {}
 
     def set_model_manager(self, model_manager: RoomModelManager) -> None:
@@ -90,7 +91,16 @@ class EkfTrainingManager:
         Contains the full training decision tree: window open, raw open
         (within delay), unobservable mode, or normal accumulation.
         """
-        if window_open or raw_open:
+        if ekf_mode is None:
+            # The current endpoint includes unknown HVAC work. It cannot close
+            # a batch labeled with the previous mode, even when a window is open.
+            self.clear(area_id)
+            self._model_manager.observe_temperature(area_id, current_temp)
+        elif area_id in self._interrupted:
+            # Resume at a known endpoint; do not learn across the feedback gap.
+            self._interrupted.discard(area_id)
+            self._model_manager.observe_temperature(area_id, current_temp)
+        elif window_open or raw_open:
             self.flush(
                 area_id,
                 current_temp,
@@ -110,32 +120,14 @@ class EkfTrainingManager:
             self._accumulated_q_vent.pop(area_id, None)
             # Always track temperature state to prevent stale _x[0]
             # when normal learning resumes.  Only learn k_window when
-            # the signal is clean (no residual heat).
+            # HVAC is observed idle and no residual heat remains.
             self._model_manager.update_window_open(
                 area_id,
                 current_temp,
                 T_outdoor,
                 dt_minutes,
-                learn_k_window=(window_open and q_residual == 0.0),
+                learn_k_window=(window_open and ekf_mode == "idle" and q_residual == 0.0),
             )
-        elif ekf_mode is None:
-            self.flush(
-                area_id,
-                current_temp,
-                T_outdoor,
-                can_heat,
-                can_cool,
-                q_solar,
-                q_residual=q_residual,
-                shading_factor=shading_factor,
-                q_occupancy=q_occupancy,
-                q_vent=q_vent,
-                current_observations=current_observations,
-            )
-            self._accumulated_dt.pop(area_id, None)
-            self._accumulated_mode.pop(area_id, None)
-            self._accumulated_pf.pop(area_id, None)
-            self._accumulated_q_vent.pop(area_id, None)
         else:
             prev_mode = self._accumulated_mode.get(area_id)
             if prev_mode is not None and prev_mode != ekf_mode:
@@ -237,13 +229,15 @@ class EkfTrainingManager:
         )
 
     def clear(self, area_id: str) -> None:
-        """Clear accumulated EKF state for a room."""
+        """Discard an interrupted batch and require a fresh endpoint on resumption."""
         self._accumulated_dt.pop(area_id, None)
         self._accumulated_mode.pop(area_id, None)
         self._accumulated_pf.pop(area_id, None)
         self._accumulated_q_vent.pop(area_id, None)
+        self._interrupted.add(area_id)
 
     def remove_room(self, area_id: str) -> None:
         """Clean up all state for a removed room."""
         self.clear(area_id)
+        self._interrupted.discard(area_id)
         self.last_temps.pop(area_id, None)

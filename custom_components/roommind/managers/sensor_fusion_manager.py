@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
@@ -83,7 +84,7 @@ class SensorFusionManager:
 
     def calibrate_observations(
         self,
-        observations: list[TemperatureObservation],
+        observations: Sequence[TemperatureObservation],
         *,
         mode: str,
         power_fraction: float,
@@ -92,7 +93,7 @@ class SensorFusionManager:
         """Apply online auxiliary-sensor bias correction against the primary observation."""
         primary = next((observation for observation in observations if observation.is_primary), None)
         if primary is None:
-            return observations
+            return list(observations)
 
         corrected: list[TemperatureObservation] = []
         pf = max(0.0, min(1.0, power_fraction))
@@ -154,7 +155,7 @@ class SensorFusionManager:
 
     def diagnostics(
         self,
-        observations: list[TemperatureObservation],
+        observations: Sequence[TemperatureObservation],
         *,
         power_fraction: float,
         q_fan_mix: float = 0.0,

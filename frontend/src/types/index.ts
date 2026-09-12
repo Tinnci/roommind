@@ -210,6 +210,7 @@ export interface HVACOutputStatus {
   stage: string;
   delivered_capacity_factor: number;
   electric_power_w?: number | null;
+  electric_power_source?: "sensor" | "fan_curve" | "none";
   confidence: string;
 }
 

@@ -507,6 +507,16 @@ class ThermalEKF:
         """Learned window heat-exchange multiplier."""
         return self._k_window
 
+    def observe_temperature(self, temperature: float) -> None:
+        """Reanchor temperature after an unobserved interval without learning parameters."""
+        self._x[0] = temperature
+        self._initialized = True
+        # The new measurement has no known dynamics linking it to the parameters.
+        self._P[0][0] = self._R
+        for index in range(1, self._N):
+            self._P[0][index] = 0.0
+            self._P[index][0] = 0.0
+
     def update_window_open(
         self,
         T_measured: float,
@@ -1418,6 +1428,10 @@ class RoomModelManager:
         """Return total number of EKF updates for *area_id*."""
         est = self._estimators.get(area_id)
         return est._n_updates if est else 0
+
+    def observe_temperature(self, area_id: str, temperature: float) -> None:
+        """Retain an observed temperature without assigning unknown heat input."""
+        self.get_estimator(area_id).observe_temperature(temperature)
 
     def update_window_open(
         self,

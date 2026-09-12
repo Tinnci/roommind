@@ -285,6 +285,7 @@ class TestRoomMindCoordinator:
         hass.states.get = MagicMock(
             side_effect=make_mock_states_get(
                 window_sensors={"binary_sensor.living_room_window": "on"},
+                extra={"climate.living_room": ("heat", {"hvac_action": "heating", "hvac_modes": ["heat", "off"]})},
             )
         )
         hass.services.async_call = AsyncMock()
@@ -335,6 +336,7 @@ class TestRoomMindCoordinator:
         hass.states.get = MagicMock(
             side_effect=make_mock_states_get(
                 window_sensors={"binary_sensor.living_room_window": "on"},
+                extra={"climate.living_room": ("off", {"hvac_action": "off", "hvac_modes": ["heat", "off"]})},
             )
         )
         hass.services.async_call = AsyncMock()
@@ -375,6 +377,7 @@ class TestRoomMindCoordinator:
         hass.states.get = MagicMock(
             side_effect=make_mock_states_get(
                 window_sensors={"binary_sensor.living_room_window": "on"},
+                extra={"climate.living_room": ("off", {"hvac_action": "off", "hvac_modes": ["heat", "off"]})},
             )
         )
         hass.services.async_call = AsyncMock()

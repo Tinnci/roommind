@@ -16,6 +16,25 @@ def _state(state: str, attrs: dict | None = None):
     return s
 
 
+def test_serialized_airflow_status_cannot_mutate_cycle_observation(hass):
+    """Consumers of published lists must not change the captured fan capabilities."""
+    hass.states.get.return_value = _state(
+        "cool",
+        {"hvac_action": "cooling", "fan_mode": "high", "fan_modes": ["low", "high"]},
+    )
+    factors = EnvironmentalFactorManager(hass).read_room_airflow(
+        {"airflow_devices": [{"entity_id": "climate.ac", "role": "hvac_fan"}]}
+    )
+
+    published = factors.as_status_dicts()
+    published[0]["fan_modes"].clear()
+    published[0]["levels"].clear()
+
+    assert list(factors.statuses[0].fan_modes) == ["low", "high"]
+    assert factors.statuses[0].levels
+    assert factors.as_status_dicts()[0]["fan_modes"] == ["low", "high"]
+
+
 def test_reads_fan_percentage_as_circulation_factor(hass):
     hass.states.get.side_effect = lambda eid: _state(
         "on",
@@ -45,9 +64,9 @@ def test_reads_fan_percentage_as_circulation_factor(hass):
     assert factors.q_fan_mix == 0.4
     assert factors.q_vent == 0.0
     assert factors.active is True
-    assert factors.levels == [0.0, 0.25, 0.5, 0.75, 1.0]
-    assert factors.mix_levels == [0.0, 0.25, 0.5, 0.75, 1.0]
-    assert factors.vent_levels == [0.0]
+    assert factors.levels == (0.0, 0.25, 0.5, 0.75, 1.0)
+    assert factors.mix_levels == (0.0, 0.25, 0.5, 0.75, 1.0)
+    assert factors.vent_levels == (0.0,)
     assert factors.has_hvac_fan_control is False
     assert factors.statuses[0].preset_mode == "normal"
     assert factors.statuses[0].oscillating is True
@@ -149,9 +168,9 @@ def test_reads_climate_fan_mode_and_ventilation_role(hass):
 
     assert factors.q_fan_mix == 0.0
     assert factors.q_vent == 1.0
-    assert factors.levels == [0.0, 0.333, 0.667, 1.0]
-    assert factors.mix_levels == [0.0]
-    assert factors.vent_levels == [0.0, 0.333, 0.667, 1.0]
+    assert factors.levels == (0.0, 0.333, 0.667, 1.0)
+    assert factors.mix_levels == (0.0,)
+    assert factors.vent_levels == (0.0, 0.333, 0.667, 1.0)
     assert factors.statuses[0].fan_mode == "high"
     assert factors.statuses[0].swing_mode == "both"
     assert factors.statuses[0].swing_horizontal_mode == "on"
@@ -199,7 +218,7 @@ def test_ignores_unavailable_airflow_entities(hass):
     assert factors.q_fan_mix == 0.0
     assert factors.q_vent == 0.0
     assert factors.active is False
-    assert factors.levels == [0.0]
+    assert factors.levels == (0.0,)
     assert factors.statuses[0].available is False
 
 
@@ -224,7 +243,7 @@ def test_off_climate_fan_mode_does_not_count_as_active_airflow(hass):
 
     assert factors.q_fan_mix == 0.0
     assert factors.active is False
-    assert factors.mix_levels == [0.0, 0.333, 0.5, 1.0]
+    assert factors.mix_levels == (0.0, 0.333, 0.5, 1.0)
 
 
 def test_idle_climate_action_does_not_count_stale_fan_mode_as_airflow(hass):

@@ -116,7 +116,7 @@ async def test_observe_and_train_uses_calibrated_temperature_observations(hass, 
             current_temp_raw=20.0,
             humidity=HumiditySensorSnapshot(value=None),
             has_external_sensor=True,
-            temperature_observations=raw_observations,
+            temperature_observations=tuple(raw_observations),
         ),
         airflow=AirflowFactors(),
         solar_exposure=SolarExposure(raw_solar=0.0),
@@ -131,7 +131,7 @@ async def test_observe_and_train_uses_calibrated_temperature_observations(hass, 
     )
 
     coordinator._sensor_fusion.calibrate_observations.assert_called_once_with(
-        raw_observations,
+        tuple(raw_observations),
         mode="heating",
         power_fraction=1.0,
         q_fan_mix=0.0,
