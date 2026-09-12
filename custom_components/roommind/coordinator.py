@@ -193,6 +193,7 @@ class ClimateDeviceSnapshot:
     heating_boost_target: float | None
     ac_heating_boost_target: float | None
     cooling_boost_target: float | None
+    acs_can_heat: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -1188,6 +1189,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             heating_boost_target=min(trv_max_temps) if trv_max_temps else None,
             ac_heating_boost_target=min(ac_max_temps) if ac_max_temps else None,
             cooling_boost_target=max(ac_min_temps) if ac_min_temps else None,
+            acs_can_heat=check_acs_can_heat(self.hass, room),
         )
 
     def _read_control_observation(self, room: dict[str, Any], area_id: str) -> RoomControlObservation:
@@ -1357,6 +1359,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             previous_mode=self._previous_modes.get(area_id, MODE_IDLE),
             mode_on_since=self._mode_on_since.get(area_id),
             has_external_sensor=has_external_sensor,
+            acs_can_heat=observation.climate_devices.acs_can_heat,
             target_resolver=target_resolver,
             q_solar=solar_exposure.raw_solar,
             latitude=self.hass.config.latitude,
@@ -1649,7 +1652,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 _ch, _cc = get_can_heat_cool(
                     room,
                     self.outdoor_temp_effective,
-                    acs_can_heat=check_acs_can_heat(self.hass, room),
+                    acs_can_heat=device_snapshot.acs_can_heat,
                     override_active=is_override_active(room),
                 )
                 _T_out = (
@@ -1672,18 +1675,11 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             area_id=area_id,
             room=room,
             settings=settings,
-            sensor_snapshot=sensor_snapshot,
-            airflow=airflow,
+            observation=observation,
             solar_exposure=solar_exposure,
             mode=mode,
-            power_fraction=power_fraction,
             window_open=window_open,
-            raw_open=raw_open,
             q_residual=q_residual,
-            q_occupancy=q_occupancy,
-            heat_source_plan=heat_source_plan,
-            climate_active=climate_active,
-            device_action=device_action,
         )
 
         room_state = self._build_room_state_dict(
@@ -1738,30 +1734,24 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         area_id: str,
         room: dict,
         settings: dict,
-        sensor_snapshot: RoomSensorSnapshot,
-        airflow: AirflowFactors,
+        observation: RoomControlObservation,
         solar_exposure: SolarExposure,
         mode: str,
-        power_fraction: float,
         window_open: bool,
-        raw_open: bool,
         q_residual: float,
-        q_occupancy: float,
-        heat_source_plan: Any | None,
-        climate_active: bool,
-        device_action: tuple[str | None, float] | None = None,
     ) -> tuple[str, float]:
         """Observe device state, train EKF, compute display mode.
 
         Returns (display_mode, display_pf).
         """
-        current_temp_raw = sensor_snapshot.current_temp_raw
-        temperature_observations = sensor_snapshot.temperature_observations
+        current_temp_raw = observation.sensors.current_temp_raw
+        temperature_observations = observation.sensors.temperature_observations
+        airflow = observation.airflow
 
         # Use the pre-dispatch observation for the interval ending now.
         # Missing feedback is unknown; neither a setpoint nor a completed
         # service call measures heat delivered to the room.
-        ekf_mode, ekf_pf = device_action if device_action is not None else self._observe_device_action(room)
+        ekf_mode, ekf_pf = observation.device_action
         q_residual_training = q_residual
 
         # Update thermal model with observation (EKF online learning).
@@ -1773,7 +1763,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         learning_disabled = settings.get("learning_disabled_rooms", [])
         learning_active = area_id not in learning_disabled
         if learning_active and current_temp_raw is not None and self.outdoor_temp_effective is not None:
-            can_heat, can_cool = get_can_heat_cool(room, acs_can_heat=check_acs_can_heat(self.hass, room))
+            can_heat, can_cool = get_can_heat_cool(room, acs_can_heat=observation.climate_devices.acs_can_heat)
             training_observations = (
                 self._sensor_fusion.calibrate_observations(
                     temperature_observations,
@@ -1792,14 +1782,14 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 ekf_mode=ekf_mode,
                 ekf_pf=ekf_pf,
                 window_open=window_open,
-                raw_open=raw_open,
+                raw_open=observation.raw_window_open,
                 q_residual=q_residual_training,
                 shading_factor=solar_exposure.shading_factor,
                 q_solar=self._current_q_solar,
                 can_heat=can_heat,
                 can_cool=can_cool,
                 dt_minutes=UPDATE_INTERVAL / 60.0,
-                q_occupancy=q_occupancy,
+                q_occupancy=observation.q_occupancy,
                 q_vent=airflow.q_vent,
             )
         else:

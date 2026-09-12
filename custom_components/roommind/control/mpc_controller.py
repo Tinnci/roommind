@@ -265,6 +265,7 @@ class MPCController:
         setback_offset: float | None = None,
         previous_mode: str = MODE_IDLE,
         has_external_sensor: bool = True,
+        acs_can_heat: bool | None = None,
         target_resolver: Callable[[float], TargetTemps | float] | None = None,
         q_solar: float = 0.0,
         solar_exposure: SolarExposure | None = None,
@@ -302,6 +303,7 @@ class MPCController:
         self.outdoor_forecast = outdoor_forecast or []
         self.previous_mode = previous_mode
         self.has_external_sensor = has_external_sensor
+        self._acs_can_heat = acs_can_heat
         self._model_manager = model_manager
         self._actuation_ledger = actuation_ledger
         self._area_id = room_config.get("area_id", "unknown")
@@ -688,7 +690,11 @@ class MPCController:
             self.outdoor_temp,
             self.outdoor_cooling_min,
             self.outdoor_heating_max,
-            acs_can_heat=check_acs_can_heat(self.hass, self.room_config),
+            acs_can_heat=(
+                self._acs_can_heat
+                if self._acs_can_heat is not None
+                else check_acs_can_heat(self.hass, self.room_config)
+            ),
             override_active=_override,
         )
 

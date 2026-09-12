@@ -51,10 +51,13 @@ Astra 在每一次演进迭代中，可自由权衡并交叉推进以下核心�
 > **给 Astra 的自主工程指引**：
 > 基础底座决定上层建筑。我们不硬性预设任何具体算法、数据结构或实现手段（Keep it open and ambiguous），仅提供演进的**宏观优先级次序与真实世界体验关切**。请作为首席架构师，自主理解背后的真实人机矛盾，自驱推演最优解法：
 
-### 阶段一：真实物理世界与基础观测 (Phase 1: Physical Reality & Observation Grounding) [IN PROGRESS]
-- [ ] **Phase 1: 真实家庭空调物理特性、可靠反馈与状态冻结**
+### 阶段一：真实物理世界与基础观测 (Phase 1: Physical Reality & Observation Grounding) [COMPLETED]
+- [x] **Phase 1: 真实家庭空调物理特性、可靠反馈与状态冻结**（2026-09-12）
   - **核心关切**：系统的控制与学习必须扎根于真实的物理世界，严格区分真实发生的事实与假设出来的状态，保持单周期观测的一致性与纯粹性。
-  - **本轮进展 / Iteration progress**：已完成下方自主迭代的家庭数据分析、观测冻结、反馈来源修正与驱动协同修复；部署后的实机反馈、容量与时滞核验继续保留。
+  - **观测与冻结 / Observation and snapshots**：在既有家庭数据分析基础上，驱动逐字段保留来源与接收时间，嵌套快照不可变；局部更新不刷新旧电源、风速、摆风或诊断值，超过 300 秒无报告即保持未知。RoomMind 优先检查明确的观测时间，设备供暖能力也在全房间动作前冻结，规划、就绪判断与学习共用同一观测。
+  - **可靠确认 / Reliable confirmation**：每个必要字段都必须有本条指令派发开始后的匹配报告。旧缓存、派生值、派发前已在途的云查询及延后处理的旧 UDP 包不能确认新指令；派发等待期间的提前反馈仍有效。配套驱动提交：`a2ee0a2`。
+  - **核验与边界 / Measurement and limits**：16:20 再次只读核对家庭 Recorder 与线上驱动；线上仍使用旧温差启发式。历史状态变化不等于逐次设备报告，不能从现有记录校准压缩机启动时滞或容量。本阶段完成观测基础、回归验证和可证实的数据分析；部署后反馈、容量与时滞实验留在 Phase 4 实机核验。未部署或下发实机动作。详见[补充核验](docs/household-ac-analysis-2026-09-12.md)及[观测规则](docs/ac-observation-and-control.md)。
+  - **验证 / Validation**：2,229 Python tests、59 Bun tests、268 TCL driver tests（含固定 cryptography 版本）通过；Ruff、mypy、tsgo typecheck、build、ESLint、驱动 compileall 与文档链接检查通过。
 
 ### 阶段二：控制行为重塑与舒适防扰 (Phase 2: Control Behavior & Disturbance Shield) [NEXT]
 - [ ] **Phase 2: 温度目标与执行手段重构、动态调节能力与设备防打扰**

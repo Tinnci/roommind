@@ -69,3 +69,13 @@ Both repositories now preserve unknown activity and remove thermostat-derived le
 下一阶段应核验驱动温度编码与设备回报，按设备类型审视关机前设定点操作，结合已有静音/熄屏能力减少重复干扰；同时将压缩机频率、电流/功率和状态时间对齐，再评估动态补偿与启动时滞。本轮未部署、未执行家庭设备动作，也未给出节能率或家庭专属容量校准。
 
 Next measurements should align physical activity signals with temperature and command evidence before choosing dynamic compensation. This iteration made local code changes and read-only measurements; it did not deploy or calibrate household capacity.
+
+## Phase 1 follow-up / 阶段一补充核验
+
+2026-09-12 16:20（Asia/Shanghai）再次通过只读 SQLite 事务检查家庭 Recorder，并核对已安装驱动源码。线上 `hvac_action` 仍读取内机温度与目标温度进行推算，尚未使用本地修复。最近 48 小时可查询到卧室 442 条、第二卧室 54 条气候状态变更；这些属性均没有逐字段观测时间。
+
+第二卧室已注册压缩机频率、电流、电压等独立实体；其最后存储的频率与电流为 0，电压为 225 V，最近 48 小时没有这些实体的新 Recorder 变更行。**缺少变更行不证明缺少设备报告**：相同数值的重复报告可能不产生新的历史状态。因此这些记录无法用于确定压缩机启动时刻、确认实时停机或拟合家庭专属容量。卧室 Legacy 协议仍没有已核实的压缩机运行位。
+
+本轮修复了可以确定的软件失真来源：逐字段保留报告来源与时刻；禁止旧字段、派生缓存、派发前已在途的云查询或延后处理的旧 UDP 包确认新指令；同时令过期气候反馈与诊断值保持未知。RoomMind 共用周期内冻结的设备供暖能力，避免前一房间的动作改变后一房间的决策和学习输入。详见[逐字段时效与确认规则](ac-observation-and-control.md)。
+
+The follow-up was read-only. Recorder changes do not reveal all repeated device reports, and a recorded zero is not a current compressor measurement without provenance. Phase 1 delivers observation and confirmation correctness with deterministic regression coverage; deployment verification and household capacity/startup experiments remain later field work. No device actions, deployment or calibration were performed.

@@ -127,3 +127,42 @@ async def test_unknown_activity_does_not_calibrate_sensor_bias_as_idle(hass, moc
 
     assert live["observation_status"] == "unknown"
     coordinator._sensor_fusion.calibrate_observations.assert_not_called()
+
+
+async def test_dispatch_cannot_change_another_rooms_heating_capability(hass, mock_config_entry):
+    """A partial device update must not change planning or learning mid-cycle."""
+    rooms = {
+        area_id: {
+            **SAMPLE_ROOM,
+            "area_id": area_id,
+            "climate_mode": "heat_only",
+            "devices": [{"entity_id": f"climate.{area_id}", "type": "ac"}],
+        }
+        for area_id in ("room_a", "room_b")
+    }
+    states = {
+        f"climate.{area_id}": (
+            "heat",
+            {"hvac_modes": ["off", "heat", "cool"], "hvac_action": "heating", "temperature": 25.0},
+        )
+        for area_id in rooms
+    }
+    hass.states.get = MagicMock(side_effect=make_mock_states_get(temp="15", outdoor_temp="5", extra=states))
+    hass.data = {"roommind": {"store": _make_store_mock(rooms)}}
+
+    async def dispatch(domain, service, data, **kwargs):
+        if domain == "climate":
+            states["climate.room_b"] = ("unavailable", {"hvac_modes": ["off", "cool"]})
+
+    hass.services.async_call = AsyncMock(side_effect=dispatch)
+    coordinator = _create_coordinator(hass, mock_config_entry)
+    coordinator._ekf_training.process = MagicMock()
+
+    result = await coordinator._async_update_data()
+
+    assert states["climate.room_b"][0] == "unavailable"
+    assert result["rooms"]["room_b"]["requested_power"] > 0
+    assert coordinator._ekf_training.process.call_count == 2
+    for call in coordinator._ekf_training.process.call_args_list:
+        assert call.kwargs["can_heat"] is True
+        assert call.kwargs["ekf_mode"] == "heating"

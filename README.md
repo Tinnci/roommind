@@ -32,6 +32,7 @@
 - **Fan-only & Setback Idle Modes** - AC and heat pump devices can switch to fan-only or setback mode instead of turning off, keeping air circulation or low-load operation active. Setback offsets are configurable globally or per room from 1–5°C (default 2°C).
 - **Airflow-Aware Comfort** - Circulation, ventilation, and HVAC fan devices feed the thermal model, perceived temperature, and sensor disagreement analysis.
 - **Multi-Sensor Fusion Diagnostics** - Temperature sensors expose freshness, bias correction, variance, and conflict status in the room interface.
+- **Physical Feedback Provenance** - Uses device observation timestamps when available, keeps stale activity unknown, and shares one observation snapshot across planning and learning.
 - **Per-Device Setpoint Mode** - Choose proportional (boost setpoint) or direct (exact target) control per device for optimal results with different hardware.
 - **Separate Heat/Cool Targets** - Independent comfort and eco temperatures for heating and cooling in auto mode, creating a natural dead-band.
 - **Per-Room Climate Toggle** - Disable climate control for individual rooms while keeping other rooms active.

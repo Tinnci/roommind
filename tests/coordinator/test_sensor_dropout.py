@@ -11,7 +11,7 @@ import pytest
 from custom_components.roommind.const import MAX_SENSOR_STALENESS, MODE_IDLE
 from custom_components.roommind.control.solar import SolarExposure
 from custom_components.roommind.control.thermal_model import TemperatureObservation
-from custom_components.roommind.coordinator import HumiditySensorSnapshot, RoomSensorSnapshot
+from custom_components.roommind.coordinator import HumiditySensorSnapshot, RoomControlObservation, RoomSensorSnapshot
 from custom_components.roommind.managers.environmental_factor_manager import AirflowFactors
 
 from .conftest import (
@@ -111,23 +111,26 @@ async def test_observe_and_train_uses_calibrated_temperature_observations(hass, 
         area_id="living_room_abc12345",
         room=SAMPLE_ROOM,
         settings={},
-        sensor_snapshot=RoomSensorSnapshot(
-            current_temp=20.0,
-            current_temp_raw=20.0,
-            humidity=HumiditySensorSnapshot(value=None),
-            has_external_sensor=True,
-            temperature_observations=tuple(raw_observations),
+        observation=RoomControlObservation(
+            sensors=RoomSensorSnapshot(
+                current_temp=20.0,
+                current_temp_raw=20.0,
+                humidity=HumiditySensorSnapshot(value=None),
+                has_external_sensor=True,
+                temperature_observations=tuple(raw_observations),
+            ),
+            climate_devices=coordinator._read_climate_device_snapshot(SAMPLE_ROOM),
+            device_action=("heating", 1.0),
+            airflow=AirflowFactors(),
+            hvac_output=None,
+            raw_window_open=False,
+            q_occupancy=0.0,
+            shading_factor=1.0,
         ),
-        airflow=AirflowFactors(),
         solar_exposure=SolarExposure(raw_solar=0.0),
         mode="heating",
-        power_fraction=0.5,
         window_open=False,
-        raw_open=False,
         q_residual=0.0,
-        q_occupancy=0.0,
-        heat_source_plan=None,
-        climate_active=True,
     )
 
     coordinator._sensor_fusion.calibrate_observations.assert_called_once_with(

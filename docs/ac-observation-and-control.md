@@ -25,19 +25,33 @@ The existing thermal model uses a binary activity indicator for observed heating
 | Fan capacity/power curve / 风机容量或功率曲线 | A configured estimate, including fan-only electrical power. / 配置模型的估计值，风机功率不代表整机耗电。 |
 | Missing or assumed feedback / 缺失或假定反馈 | Unknown; never infer off from a stored fan setting. / 未知，不能通过保存的风速设定推断停机。 |
 
-Power readings reject nonfinite values, negative consumption and incompatible units such as kWh. Freshness uses `last_reported`, then `last_updated`, then `last_changed`, with the existing 300-second sensor limit. Unitless legacy power sensors retain the watts convention. In explicit power-sensor mode, unavailable power remains unknown; automatic mode can fall back to usable action feedback.
+Power readings reject nonfinite values, negative consumption and incompatible units such as kWh. A driver's explicit `observed_at` takes precedence over HA publication time. Otherwise freshness uses `last_reported`, then `last_updated`, then `last_changed`, with the existing 300-second sensor limit. Unitless legacy power sensors retain the watts convention. In explicit power-sensor mode, unavailable power remains unknown; automatic mode can fall back to usable action feedback.
 
-功率读数排除非有限数、负耗电量及 kWh 等不兼容单位。时效性依次采用报告、更新、状态变化时间，沿用现有 300 秒传感器限制。旧有无单位功率传感器继续按瓦解释。显式功率传感器模式下，读数不可用即保持未知；自动模式可退回有效的设备活动反馈。
+功率读数排除非有限数、负耗电量及 kWh 等不兼容单位。驱动明确提供的 `observed_at` 优先于 HA 发布时间；否则依次采用报告、更新、状态变化时间，沿用现有 300 秒传感器限制。旧有无单位功率传感器继续按瓦解释。显式功率传感器模式下，读数不可用即保持未知；自动模式可退回有效的设备活动反馈。
 
 A room's temperature slope is not a compressor-stage measurement. Solar gain, outdoor conditions, ventilation, thermal mass and startup lag all affect the same slope. Electrical power is also not thermal capacity without device-specific calibration.
 
 室温斜率不能测量压缩机档位：太阳辐射、室外环境、通风、热惯性和启动时滞都会影响同一斜率。未经设备校准，电功率也不能直接当成制冷或制热量。
 
+## Per-field report freshness / 逐字段报告时效
+
+A partial TCL report updates only the fields it contains. Each field retains its source, monotonic receipt time and UTC receipt time in the immutable device snapshot. A fresh indoor temperature or monthly energy report cannot renew an old power bit, compressor frequency or valve status. Climate feedback and diagnostics become unknown or unavailable after 300 seconds without their own report; an unchanged value reported again remains fresh. Nested snapshot values are immutable, and exported HA dictionaries are detached copies.
+
+TCL 局部报告仅更新其包含的字段。不可变设备快照逐字段保留来源、单调时钟接收时间及 UTC 接收时间。新室温或月度电量不能刷新旧电源位、压缩机频率或阀门状态；气候反馈与诊断字段超过 300 秒未重新报告即为未知或不可用，相同数值的再次报告仍有效。嵌套快照不可修改，导出的 HA 字典为独立副本。
+
+The climate entity exposes `hvac_mode_observed_at` and `hvac_action_observed_at`; diagnostic sensors expose `observed_at` and `observation_source`. Mode time is the oldest required report: power alone for off, power and mode otherwise. Unknown compressor activity has no action timestamp. RoomMind checks declared timestamps independently and rejects missing, malformed, timezone-less, future or expired values instead of falling back to a newer HA publication. Integrations without these attributes retain the existing feedback interpretation.
+
+气候实体提供 `hvac_mode_observed_at` 和 `hvac_action_observed_at`，诊断传感器提供 `observed_at` 与 `observation_source`。模式时间取必要字段中最早的报告：关机只需电源，其他模式需要电源与模式；未知压缩机活动没有活动时间戳。RoomMind 分别检查已声明的时间，空值、格式错误、无时区、未来或过期时间均不能借较新的 HA 发布时间恢复有效。未提供这些属性的集成继续使用原有反馈解释。
+
+These timestamps describe receipt of device or cloud reports, not the exact physical transition time. Cloud caching and lack of compressor feedback still limit startup-delay and thermal-capacity calibration.
+
+这些时间表示设备或云端报告的接收时刻，不是精确物理切换时刻。云端缓存与压缩机反馈缺失仍会限制启动时滞和热容量校准。
+
 ## One consistent observation / 单周期一致观测
 
-Before any room actuates, the coordinator captures room temperature and humidity, climate feedback and limits, airflow, HVAC output, raw window state, occupancy and shading. These inputs travel in `RoomControlObservation`; temperature channels, airflow capabilities and status collections are tuples. Published lists are fresh copies.
+Before any room actuates, the coordinator captures room temperature and humidity, climate feedback, heating capability and limits, airflow, HVAC output, raw window state, occupancy and shading. These inputs travel in `RoomControlObservation`; temperature channels, airflow capabilities and status collections are tuples. Published lists are fresh copies. MPC evaluation, readiness and learning share the captured heating capability; the learning entry point accepts the complete observation and does not reread device state.
 
-在任一房间执行动作前，协调器先采集各房间的温湿度、设备反馈与限制、气流、暖通输出、原始窗户状态、占用和遮阳。这些输入随 `RoomControlObservation` 传递；温度通道、气流能力和状态集合使用不可变元组，发布时生成新的列表副本。
+在任一房间执行动作前，协调器先采集各房间的温湿度、设备反馈、供暖能力与限制、气流、暖通输出、原始窗户状态、占用和遮阳。这些输入随 `RoomControlObservation` 传递；温度通道、气流能力和状态集合使用不可变元组，发布时生成新的列表副本。MPC 决策、就绪判断与学习共用已采集的供暖能力，学习入口接收完整观测，不再临时读取设备状态。
 
 This prevents an early room's service call or an associated automation from changing another room's learning inputs halfway through the Control Cycle. Later feedback belongs to reconciliation or the next observation; it does not rewrite the interval ending at the captured temperature.
 
@@ -54,6 +68,10 @@ Unknown HVAC activity discards the pending thermal batch and updates only the me
 `control/hvac_observation.py` interprets captured signals without Home Assistant I/O. `managers/hvac_output_observer.py` reads HA state. `control/climate_actuator.py` handles climate dispatch, deduplication, device setpoint adaptation and idle fallbacks. MPC decides the requested behavior and consumes the operation results.
 
 `control/hvac_observation.py` 纯计算解释观测，`managers/hvac_output_observer.py` 负责 HA 读取，`control/climate_actuator.py` 负责派发、去重、设备设定适配与空闲回退；MPC 负责决策并接收操作结果。
+
+TCL confirmation requires every expected field to have a matching physical report from an observation begun after that command's dispatch started. Retained cache fields and integration-derived values do not qualify. The start is recorded before awaiting transport, so early feedback remains usable. UDP receipt time is captured before queuing its callback; cloud requests already in flight before dispatch cannot confirm it. Out-of-order cloud responses cannot replace a newer requested snapshot. A confirmed setting still does not prove compressor operation.
+
+TCL 确认要求每个预期字段都有匹配的物理报告，且对应观测开始于本条指令派发开始之后。保留缓存与集成派生值不满足确认条件。起点在等待传输前记录，因此提前到达的反馈仍可使用；UDP 时间在回调入队前采集，派发前已在途的云端查询不能确认本条指令。乱序云端响应不能覆盖更新请求的快照。设定已确认仍不代表压缩机已运行。
 
 Off, low, setback and fan-only paths retain each required operation's dispatch status and HA context ID. A fan-only mode call and a fan-speed call remain separate evidence, including partial failure and confirmation arriving before the dispatch record. Existing setpoint-before-off valve protection, limits and no-off fallbacks remain in place. Dispatch does not confirm physical inactivity.
 

@@ -240,3 +240,87 @@ def test_explicit_action_provenance_overrides_legacy_platform_fallback(hass, est
     climate = HVACOutputObserver(hass).read_climate("climate.ac")
 
     assert observed_room_activity([climate]) == ((None, 0.0) if estimated else ("cooling", 1.0))
+
+
+@pytest.mark.parametrize(("mode", "action"), [("cool", "cooling"), ("off", "off")])
+def test_republishing_climate_state_does_not_refresh_old_physical_feedback(hass, mode, action):
+    """An unrelated attribute update cannot renew the physical observation."""
+    old_report = datetime.now(UTC) - timedelta(seconds=MAX_SENSOR_STALENESS + 60)
+    state = _state(
+        mode,
+        {
+            "hvac_action": action,
+            "hvac_action_is_estimated": False,
+            "hvac_mode_observed_at": old_report.isoformat(),
+            "hvac_action_observed_at": old_report.isoformat(),
+        },
+    )
+    state.last_reported = datetime.now(UTC)
+    hass.states.get.return_value = state
+
+    observation = HVACOutputObserver(hass).read_climate("climate.ac")
+
+    assert observed_room_activity([observation]) == (None, 0.0)
+    assert observation.output_action is None
+
+
+def test_republishing_power_state_does_not_refresh_old_measurement(hass):
+    """HA publication time is not a measurement time for merged driver state."""
+    old_report = datetime.now(UTC) - timedelta(seconds=MAX_SENSOR_STALENESS + 60)
+    state = _state("800", {"unit_of_measurement": "W", "observed_at": old_report.isoformat()})
+    state.last_reported = datetime.now(UTC)
+    hass.states.get.return_value = state
+
+    result = HVACOutputObserver(hass).observe(
+        {
+            "entity_id": "climate.ac",
+            "power_sensor_entity": "sensor.ac_power",
+            "compressor_stage_observer": "power_sensor",
+        },
+        hvac_action="cooling",
+        fan_q=0.5,
+    )
+
+    assert result.electric_power_w is None
+    assert result.stage == "unknown"
+
+
+@pytest.mark.parametrize("reported_at", [None, "invalid", "2026-01-01T12:00:00", "2999-01-01T12:00:00+00:00"])
+def test_invalid_driver_timestamp_cannot_fall_back_to_ha_publication_time(hass, reported_at):
+    """A declared but unusable observation time must stay unknown."""
+    state = _state("off", {"hvac_mode_observed_at": reported_at})
+    state.last_reported = datetime.now(UTC)
+    hass.states.get.return_value = state
+
+    assert HVACOutputObserver(hass).read_climate("climate.ac").thermal_mode is None
+
+
+def test_mode_and_action_keep_independent_report_times(hass):
+    """A fresh mode report cannot renew an old compressor action."""
+    now = datetime.now(UTC)
+    hass.states.get.return_value = _state(
+        "cool",
+        {
+            "hvac_action": "cooling",
+            "hvac_mode_observed_at": now.isoformat(),
+            "hvac_action_observed_at": (now - timedelta(seconds=MAX_SENSOR_STALENESS + 1)).isoformat(),
+        },
+    )
+
+    observation = HVACOutputObserver(hass).read_climate("climate.ac")
+
+    assert observation.hvac_mode == "cool"
+    assert observation.thermal_mode is None
+
+
+def test_fresh_driver_report_is_used_with_unchanged_power(hass):
+    """A repeated valid measurement remains usable even without a value change."""
+    state = _state("800", {"unit_of_measurement": "W", "observed_at": datetime.now(UTC).isoformat()})
+    state.last_changed = datetime.now(UTC) - timedelta(hours=1)
+    hass.states.get.return_value = state
+
+    result = HVACOutputObserver(hass).observe(
+        {"entity_id": "climate.ac", "power_sensor_entity": "sensor.ac_power"}, hvac_action=None, fan_q=0.5
+    )
+
+    assert result.electric_power_w == 800
