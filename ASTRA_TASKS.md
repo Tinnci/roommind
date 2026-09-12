@@ -59,6 +59,13 @@ Astra 在每一次演进迭代中，可自由权衡并交叉推进以下核心�
   - 硬件芯片与原生固件工程：`/Users/driezy/Downloads/EMW3080`（基于 Realtek RTL8710BN / AmebaZ 架构的 MXCHIP EMW3080 原生固件开发套件）；
   - 授权 Astra 跨越“感知硬件/嵌入式固件 -> 局域网 UDP 传输协议 -> Home Assistant 集成插件 -> RoomMind 空间大脑观测消费”的全链路，开展自顶向下与自底向上的双向归因与架构重构。
 
+### 8. 语音助手全链路、PHOSH 锁屏多模态交互与实机体验 (Voice Assistant Ecosystem & Phosh Lockscreen Experience)
+- **多仓库协同工作区**：位于 `/Users/driezy/Downloads/ha-voice-stack`，包含 `repos/phosh-ha-status`（Phosh 锁屏原生插件与交互代理）、`repos/llm-gateway`（大模型对话网关与意图裁决）、`repos/doubao-asr-for-ha`（Wyoming ASR 适配）与 `repos/hass-edge-tts`（语音合成）；
+- **人机多模态体验核心原则**：
+  1. **锁屏交互的大比例动态演进**：摒弃 30px 的狭窄局促状态条，在 10.1 寸平板屏幕上呈现富有表现力的大面积视觉转场，明确传达 ASR 录音状态（何时开始说话、何时录音截止）、LLM 思考状态流与播报波形；
+  2. **听觉反馈（Earcons）的闭环与可靠性**：严密补齐追问（Follow-up）场景下的提示音，使用户在多轮对话继续时不依靠猜测，清楚感知麦克风何时重新接管；
+  3. **实机真实部署与防崩防假死铁律**：针对直接载入 Wayland 合成器的原生 C 插件，坚决杜绝纸面空转，所有变更必须在实机 `192.168.3.120`（postmarketOS / kukui）上真实编译、部署与交互验收，确保动效优雅、多模态同频且系统绝对稳定。
+
 ---
 
 ## 演进阶段与战略导向 (Progressive Horizons & Strategic Phases)
@@ -135,10 +142,71 @@ Astra 在每一次演进迭代中，可自由权衡并交叉推进以下核心�
       - 斐讯 M1 物理机身仅搭载了 SHT20（温湿度）、攀藤颗粒物（PM2.5）和万胜 WZ-S（甲醛），并不存在物理 CO2、eCO2 或 TVOC 传感器；
       - 坚决杜绝在 Home Assistant 中暴露永远不可用或虚假估计的幽灵实体，果断从插件实体注册表（`sensor.py`）中剔除 `CO2`、`eCO2`、`TVOC`，保持物理世界的诚实与代码的极致精简。
 
-### 阶段五：实机经验印证与极简演进 (Phase 5: Real-World Experience & Codebase Pruning)
-- [ ] **Phase 5: 结合家庭实机数据演进与全局代码精简**
+### 阶段五：实机经验印证、eMMC 存储寿命治理与极简演进 (Phase 5: Real-World Experience, eMMC Longevity & Codebase Pruning)
+- [ ] **Phase 5: 结合家庭实机数据演进、精度无损的 eMMC 闪存寿命治理与全局架构精简**
   - **核心关切与开放探索空间**：
-    - 结合 192.168.3.120 的真实历史表现持续检验系统，去伪存真，大刀阔斧地清理不必要的冗余关卡与死板防线，用更少、更轻盈的代码实现更高阶的目标。
+    - **精度无损的存储寿命与写入放大治理 (Precision-Preserving Longevity & Flash Wear Mitigation)**：
+      - 实机 Home Assistant 服务器运行于 eMMC 闪存芯片（`/dev/mmcblk0`，当前底层 EXT_CSD 损耗指示为 `0x02 0x01`）。当前 SQLite 数据库（`home-assistant_v2.db`）存在严重的高频小碎片随机写放大，但**我们的目标绝非盲目粗暴地牺牲数据精度，而是精准保留所有关键物理量（真实室温、湿度、设定点、功率、阀门状态）的高保真度与必要精度**，精准剔除无物理信号价值的微小噪声与机械重复刷盘。
+    - **根本性与面向未来的系统级防护（Future-Proof Architectural Precautions Over Brittle Blacklists）**：
+      - 仅在 `configuration.yaml` 中配置静态的 `exclude` 黑名单是脆弱且局部的，一旦引入新设备或实体更名就会复发。Astra 需从架构深处探索更具未来兼容性的系统级解法：
+        1. **驱动与协调器层有效变化死区（Physical Deadband & Significant Change Filtering）**：在 RoomMind、ZM1 及 TCL AC 等驱动与协调器中，建立物理有效分辨阈值（如温度波动在传感器噪声容限 ±0.05°C 内、湿度在 ±0.5% 内且未达时间窗口），只更新内部内存快照，不向 Home Assistant 核心事件总线广播无意义的微小状态抖动，从源头掐断 `state_changed` 事件雪崩；
+        2. **诊断与派生实体的规范化治理（Entity Lifecycle & Default-Disabled Governance）**：遵循 Home Assistant 官方架构准则，将纯诊断性实体（如 `last_seen`、心跳计数、通信诊断等）默认标记为 `entity_registry_enabled_default = False`，使其在底层内存可用，但不默认激活并持续向 SQLite 写入；
+        3. **内部高频控制计算与对外持久化解耦（Decouple Control Compute from State Persistence）**：RoomMind 内部高频控制迭代、卡尔曼滤波（EKF）或热惯性预测在内存中保持高频计算，仅在产生真实控制意图、物理状态确认（Actuation Evidence）或周期保活时对外发布不可变快照，彻底打破“内部高频思考 = 存储频繁写盘”的不良耦合；
+        4. **长周期统计优先（LTS-First for Long-Term Analytical Precision）**：对需要长期趋势追踪的实体规范使用 `state_class = SensorStateClass.MEASUREMENT`，由 HA 原生统计引擎聚合 5 分钟与 1 小时统计，兼得数十天至数年的长期高精度分析能力与超低写入损耗。
+    - **实机数据印证与极简工程**：结合 192.168.3.120 的真实历史表现持续检验系统，去伪存真，大刀阔斧地清理不必要的冗余关卡与死板防线，用更少、更轻盈的代码实现更高阶的目标。
+
+### 阶段六：全生态仓库巡检、Home Assistant 标准化发布与统一 CI/CD 演进 (Phase 6: Multi-Repo Audit, HA Standardized Publishing & Unified CI/CD)
+- [ ] **Phase 6: GitHub 维护仓库全量巡检、实机已用组件发布准备与跨仓库 DevOps 标准化**
+  - **核心关切与开放探索空间**：
+    1. **全量 GitHub 维护仓库盘点与状态巡检（Cross-Repository Inventory & Health Audit）**：
+       - 全面梳理 GitHub（组织/账户 `Tinnci`）下由我们自主管理、更新与维护的所有 Home Assistant 关联生态仓库（包括 `Tinnci/roommind`、`Tinnci/ha-tcl-udp-ac`、`Tinnci/zm1`、`Tinnci/hass-edge-tts`、`Tinnci/llm-gateway`、`Tinnci/doubao-asr-for-ha` 等）；
+       - 对齐实机（`192.168.3.120`）上当前正在运行、测试、修复过的插件组件，确认哪些改动、修复与优化需要打包发布新版本；
+    2. **对齐 Home Assistant 顶级发布规范与质量基线（High-Standard HA Qualification & HACS Compliance）**：
+       - 确保每一个准备发布的组件都严格符合 Home Assistant 官方顶级规范：
+         - 完整的 `hacs.json` 与 `manifest.json` 元数据架构、严格的语义化版本控制（Semantic Versioning）；
+         - 完整的双语或多语言翻译（Translations i18n）、Brand 品牌资产与图标体系；
+         - 现代 Python 3.12+ 强类型注解、Ruff 代码规范检查，以及完备的单元测试覆盖；
+         - 严密通过官方 `home-assistant/actions/hassfest` 与 `hacs/action` 自动化合规验证；
+    3. **DevOps 历史梳理与跨仓库 CI/CD 标准化（DevOps Overhaul & Cross-Repository Pipeline Uniformity）**：
+       - 深度审查各仓库现有的 CI/CD 历史与构建工作流（分析过去不同仓库采用的碎片化 pipeline，总结经验教训与可提升点）；
+       - 统一与现代化 GitHub Actions 流水线标准模板：
+         - 统一的自动化验证流（Test, Lint, Hassfest, HACS validation）；
+         - 统一的自动化发布流（基于语义化标签或 Conventional Commits 自动生成 Release Notes、自动构建符合 HACS / HA 规范的发布归档 zip 文件）；
+         - 探索实现跨仓库的协同发布模式或共享工作流，达成全生态代码质量与发布体验的高度一致性。
+
+### 阶段七：语音助手全链路、PHOSH 锁屏交互重塑与多模态实机工程 (Phase 7: Voice Stack Overhaul, Phosh Lockscreen UI, Follow-Up Earcons & Target Grounding)
+- [ ] **Phase 7: ha-voice-stack 全链路协同、PHOSH 锁屏动态界面重构、追问听觉反馈 (Earcons) 与实机沉浸式交互闭环**
+  - **核心关切与开放探索空间**：
+    1. **语音技术栈多仓库一体化审视（Voice Stack Ecosystem & Diagnostic Audit）**：
+       - 聚焦工作区 `/Users/driezy/Downloads/ha-voice-stack`，将所有语音关联仓库统一纳入协同演进（`repos/phosh-ha-status` 锁屏与交互、`repos/llm-gateway` 大模型对话代理与 Harness、`repos/doubao-asr-for-ha` Wyoming ASR 适配、`repos/hass-edge-tts` 语音合成）；
+       - 结合实机（`192.168.3.120`）当前的 Home Assistant 语音配置、最近对话历史记录（Conversation Traces）与运行时日志，全景式复盘当前语音链路的交互卡点与体验短板。
+    2. **PHOSH 锁屏 UI 界面彻底重塑（Phosh Lockscreen UI/UX Overhaul & Dynamic Shift）**：
+       - **告别微小状态栏（Break Away from the Narrow 30px Bar）**：彻底改变当前只在屏幕极小区域（30px 条状）显示的局促设计，在 10.1 英寸平板界面上提供大胆、动态、富有表现力的全尺寸或大比例视觉展开；
+       - **明确直观的 ASR 状态机表达（Clear ASR Recording & Stop Indication）**：
+         - 当唤醒词触发或开始录音时，界面应产生显著且流畅的动态转场，清晰指引用户“开始说话”；
+         - 采用灵动的动态波形/粒子/呼吸光晕（Flowing Animations），清晰反映实时拾音动态；
+         - 明确指示 ASR 录音何时截止，消除用户“不知机器是否在听、何时停止接收”的茫然感；
+       - **思考（Thinking）与播报（Speaking）阶段的多模态映射**：在 LLM 生成与 TTS 朗读时，界面应同频呈现优雅的思考流与朗读波形，呈现浑然一体的人机交互质感。
+    3. **多轮对话追问（Follow-up / Continuation）与听觉反馈系统（Earcons System, Gain Boost & DRC）重构**：
+       - **根治追问阶段“无声录音”痛点（Follow-up Continuation Earcon）**：针对当前在助手主动发起追问、重新打开麦克风录音时用户完全听不到任何提示音的严重体验断层，补齐专用的追问提示音（Earcon）；
+       - **全音频资产动态范围控制（Dynamic Range Control - DRC）与母带级调校**：
+         - 针对小型平板微型扬声器的声学物理特性，建立严格的动态范围控制规范（峰均比 Crest Factor 控制在 6dB ~ 9dB 黄金区间）；
+         - 结合软拐点压缩（Soft-knee Compression）、前瞻限幅（Lookahead Limiting）与微共振高通滤波（High-pass Filter ~120Hz 消除低频浑浊过载），对项目中所有提示音（`awake.wav`、`done.wav`、`thinking.wav`、追问音等）实施母带级动态范围控制；
+         - 既避免过大动态导致弱音细节在室内环境底噪中淹没，又坚决杜绝突变瞬态尖峰引发扬声器破音刺耳，确保全音量段听感紧凑、清晰、穿透且亲和舒适；
+       - **音频增益放大与提示音响度优化（Audio Gain Boost & Headroom Utilization）**：
+         - 消除目前脚本中人为设置的保守音量上限（如 `wake-and-cue.sh` 中 `WAKE_CUE_VOLUME=0.68`、`KUKUI_FALLBACK_VOLUME=0.68` 导致提示音极轻极小）；
+         - 在确认 PipeWire/ALSA 硬件链路无爆音无杂音（No glitches/clipping）的前提下，合理调优 PipeWire Sink 与播放增益，对 Earcons 进行波形响度标准化（Loudness Normalization / Peak Amplification 至 -1.0 dBFS）；
+       - **构建可靠、低延迟的 Earcons 听觉设计规范**：精心调校唤醒确认音（Wake Cue）、追问开始音（Follow-up Cue）、错误/超时音，确保在 PipeWire/ALSA 链路下稳定触发、毫秒级响应、无杂音爆音；
+    4. **后市场 Linux（postmarketOS / Phosh）实机部署与防崩稳定性底线（Real-Machine Grounding & Stability Guard）**：
+       - `phosh-ha-status` 是直接以 C/GTK3 动态插件形式载入 Phosh Wayland 合成器（`mobi.phosh.Shell.service`）内部运行的原生组件，任何一处空指针或未捕获异常都将直接导致整个平板图形桌面瞬时黑屏崩溃；
+       - **坚决拒绝脱离实机的理论空转（Deploy and Verify on Real Hardware）**：所有 UI 改动、动画重构、线程安全通信与 PipeWire 声音调用，必须全量部署到实机 `192.168.3.120`（Lenovo Duet / kukui），开展真实物理触屏、远场语音交互与多轮追问闭环测试，确保代码既优雅流畅又坚若磐石。
+    5. **音频系统默认值科学重构与设置界面（Settings UI）体验飞跃**：
+       - **科学确立全场景开箱默认值（Definitive Baseline Sound Defaults）**：
+         - 彻底梳理当前设置与默认场景的失配：基于标准化峰值，将 `wake_cue_volume`（唤醒音）和 `follow_up_cue_volume`（追问音）基准默认值确立为满幅 `1.0`；白天播报 `tts_volume_day` 设为 `1.0`；夜间播报 `tts_volume_night` 设为柔和的 `0.72`；处理中提示 `processing_volume` 保持微弱背景 `0.58 ~ 0.65`；
+       - **大幅重构语音设置面板（Settings UI/UX Overhaul）**：
+         - 摒弃以往分散零碎的裸露 `input_number` 滑块与繁琐的手动“应用生效”按键（改为实时防抖自动保存与后台热应用）；
+         - **引入“试听即反馈”交互（Live Auditory Preview）**：在每一个音量滑块旁直观嵌入“试听测试音（Play Test Sound）”按钮，调节时无需猜测，所调即所听；
+         - **多端呈现优化**：在 Home Assistant 仪表板提供结构紧凑、分组清晰的高质感卡片，并在 Phosh 锁屏/侧边栏提供快速静音与夜间模式快捷微调入口。
 
 ---
 
