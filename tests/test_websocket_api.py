@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import voluptuous as vol
+from homeassistant.helpers import entity_registry as er
 
 from custom_components.roommind.const import DOMAIN
 from custom_components.roommind.room_config import (
@@ -58,9 +60,12 @@ def connection():
 
 
 @pytest.fixture
-def ws_hass(hass, store):
+def ws_hass(hass, store, monkeypatch):
     """Return a hass instance with the store wired into hass.data."""
     hass.data[DOMAIN] = {"store": store}
+    registry = MagicMock()
+    registry.async_get.return_value = None
+    monkeypatch.setattr(er, "async_get", lambda _hass: registry)
     return hass
 
 
@@ -327,6 +332,55 @@ async def test_list_rooms_after_save(ws_hass, store, connection):
     assert room["thermostats"] == ["climate.kitchen_trv"]
     assert "live" in room
     assert room["live"]["mode"] == "idle"
+
+
+@pytest.mark.asyncio
+async def test_room_list_transmits_detached_plans_observations_and_feedback(ws_hass, store, connection):
+    await store.async_load()
+    await store.async_save_room("living", {"devices": [{"entity_id": "climate.ac", "type": "ac"}]})
+    operation = {
+        "entity_id": "climate.ac",
+        "desired": {"temperature": 22.0},
+        "dispatch": "sent",
+        "application": "pending",
+    }
+    observation = {"entity_id": "climate.ac", "temperature": 25.0, "assumed_state": False}
+    coordinator = MagicMock()
+    coordinator.rooms = {
+        "living": {
+            "current_temp": 26.0,
+            "current_temp_raw": None,
+            "device_actuation_status": [operation],
+            "device_observations": [observation],
+        }
+    }
+    ws_hass.data[DOMAIN]["coordinator"] = coordinator
+
+    await _list_rooms(ws_hass, connection, {"id": 1, "type": "roommind/rooms/list"})
+
+    live = connection.send_result.call_args.args[1]["rooms"]["living"]["live"]
+    assert live["current_temp_raw"] is None
+    assert live["device_actuation_status"] == [operation]
+    assert live["device_observations"] == [observation]
+    live["device_actuation_status"][0]["desired"]["temperature"] = 30.0
+    live["device_observations"][0]["temperature"] = 30.0
+    assert operation["desired"]["temperature"] == 22.0
+    assert observation["temperature"] == 25.0
+
+
+@pytest.mark.parametrize("config_field", ["devices", "temperature_sensors"])
+async def test_renamed_room_comfort_entity_cannot_be_its_own_input(ws_hass, store, connection, config_field):
+    await store.async_load()
+    entity_id = "climate.living_comfort"
+    er.async_get(ws_hass).async_get.return_value = SimpleNamespace(platform=DOMAIN)
+    value = [{"entity_id": entity_id, "type": "ac"}] if config_field == "devices" else [entity_id]
+
+    await _save_room(
+        ws_hass, connection, {"id": 1, "type": "roommind/rooms/save", "area_id": "living", config_field: value}
+    )
+
+    assert connection.send_error.call_args.args[1] == "invalid_entity"
+    assert store.get_room("living") is None
 
 
 @pytest.mark.asyncio
@@ -2493,6 +2547,23 @@ async def test_save_settings_compressor_groups_valid(ws_hass, store, connection)
     assert len(groups) == 1
     assert groups[0]["id"] == "outdoor1"
     assert groups[0]["members"] == ["climate.ac_living", "climate.ac_bedroom"]
+
+
+@pytest.mark.parametrize("entity_id", ["climate.roommind_living_comfort", "climate.living_comfort"])
+@pytest.mark.parametrize("role", ["members", "master_entity"])
+async def test_compressor_group_cannot_command_a_room_policy_entity(ws_hass, store, connection, entity_id, role):
+    await store.async_load()
+    er.async_get(ws_hass).async_get.side_effect = lambda candidate: (
+        SimpleNamespace(platform=DOMAIN) if candidate == entity_id else None
+    )
+    group = {"id": "outdoor", "members": ["climate.physical_ac"], "master_entity": ""}
+    group[role] = [entity_id] if role == "members" else entity_id
+
+    await _save_settings(ws_hass, connection, {"id": 1, "type": "roommind/settings/save", "compressor_groups": [group]})
+
+    connection.send_error.assert_called_once()
+    assert connection.send_error.call_args.args[1] == "invalid_entity"
+    assert store.get_settings().get("compressor_groups", []) == []
 
 
 @pytest.mark.asyncio

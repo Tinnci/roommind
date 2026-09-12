@@ -7,48 +7,50 @@ export const roommindThemeStyles = css`
     --mdc-shape-medium: var(--roommind-radius-control);
     --md-filled-text-field-container-shape: var(--roommind-radius-control);
     --md-outlined-text-field-container-shape: var(--roommind-radius-control);
-    --roommind-radius-card: 8px;
-    --roommind-radius-control: 8px;
-    --roommind-radius-small: 4px;
+    --roommind-radius-card: 18px;
+    --roommind-radius-control: 10px;
+    --roommind-radius-small: 6px;
+    --roommind-motion-duration: 180ms;
+    --roommind-motion-easing: cubic-bezier(0.2, 0.8, 0.2, 1);
     --roommind-surface: var(
       --card-background-color,
       var(--secondary-background-color, var(--primary-background-color, #ffffff))
     );
     --roommind-panel-surface: color-mix(
       in srgb,
-      var(--roommind-surface) 88%,
+      var(--roommind-surface) 98%,
       var(--primary-text-color, #000000)
     );
     --roommind-dialog-surface: color-mix(
       in srgb,
-      var(--roommind-surface) 90%,
+      var(--roommind-surface) 98%,
       var(--primary-text-color, #000000)
     );
     --roommind-page-background: var(--primary-background-color, #ffffff);
     --roommind-dialog-backdrop: rgba(0, 0, 0, 0.54);
     --roommind-surface-subtle: color-mix(
       in srgb,
-      var(--roommind-surface) 82%,
+      var(--roommind-surface) 97%,
       var(--primary-text-color, #000000)
     );
     --roommind-surface-muted: color-mix(
       in srgb,
-      var(--roommind-surface) 76%,
+      var(--roommind-surface) 95%,
       var(--primary-text-color, #000000)
     );
     --roommind-surface-strong: color-mix(
       in srgb,
-      var(--roommind-surface) 68%,
+      var(--roommind-surface) 90%,
       var(--primary-text-color, #000000)
     );
     --roommind-surface-hover: color-mix(
       in srgb,
-      var(--roommind-surface) 72%,
+      var(--roommind-surface) 93%,
       var(--primary-text-color, #000000)
     );
     --roommind-surface-hover-strong: color-mix(
       in srgb,
-      var(--roommind-surface) 60%,
+      var(--roommind-surface) 88%,
       var(--primary-text-color, #000000)
     );
     --roommind-primary-subtle: color-mix(in srgb, var(--primary-color, #03a9f4) 4%, transparent);
@@ -57,7 +59,7 @@ export const roommindThemeStyles = css`
     --roommind-primary-border: color-mix(in srgb, var(--primary-color, #03a9f4) 38%, transparent);
     --roommind-border-subtle: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
     --roommind-border-faint: 1px solid var(--divider-color, rgba(0, 0, 0, 0.06));
-    --roommind-shadow-soft: 0 2px 10px rgba(0, 0, 0, 0.08);
+    --roommind-shadow-soft: 0 2px 12px rgba(0, 0, 0, 0.035);
     --roommind-shadow-dialog: 0 24px 48px rgba(0, 0, 0, 0.32);
     --roommind-header-min-height: 44px;
     --roommind-info-color: var(--info-color, #2196f3);
@@ -72,5 +74,11 @@ export const roommindThemeStyles = css`
     --roommind-success-border: color-mix(in srgb, var(--roommind-success-color) 28%, transparent);
     --roommind-warning-border: color-mix(in srgb, var(--roommind-warning-color) 28%, transparent);
     --roommind-error-border: color-mix(in srgb, var(--roommind-error-color) 28%, transparent);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :host {
+      --roommind-motion-duration: 0ms;
+    }
   }
 `;

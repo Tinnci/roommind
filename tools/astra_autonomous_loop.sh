@@ -80,8 +80,9 @@ while [ $ITERATION_COUNT -lt $ITERATION_MAX ]; do
      * HA 传感器集成插件：\`/Users/driezy/Downloads/zm1\` 与 \`/Users/driezy/Downloads/zm1_ha\`；
      * 固件底层开发环境：\`/Users/driezy/Downloads/EMW3080\`（基于 RTL0B_SDK 的原生固件工程）；
    - 针对卧室 ZM1 偶发的 UDP 超时与回传不稳定，从“固件协议栈/调度/休眠”与“HA 插件套接字时序”两端开展深刻归因与开放性质询，探寻最优传输范式与原生固件重构路径，杜绝僵尸数据与上下线振荡。
-6. 人机心智体验与 Home Assistant 实体契约质询：
-   - 深入思考人机心智模型与实体抽象边界，让前端 UI 自然呈现真实舒适意图与系统执行状态，使 HA 实体契约清晰诚实地反映多源物理事实，消除用户的失控感与认知负担。
+6. 人机心智体验、产品美学与 Home Assistant 实体契约质询：
+   - 深入思考人机心智模型与实体抽象边界，让前端 UI 自然呈现真实舒适意图与系统执行状态，使 HA 实体契约清晰诚实地反映多源物理事实，消除用户的失控感与认知负担；
+   - 追求卓越的产品美学与平静科技（Calm Technology）体验：摆脱传统工控面板与粗糙卡片的生硬感，借鉴现代高端空间产品（如 Braun、Nest、B&O）的克制优雅，精雕现代排版、呼吸感留白、冷暖气候微渐变与平滑触控微交互（Fluid Motion / Tactile Feedback），兼顾极致轻盈与深层信任。
 7. 代码行间注释使用英文（English comments），文档建议采用中英双语。
 8. 编写完毕后在本地运行测试确认功能正常（如 \`uv run pytest\` 及 \`cd frontend && bun test\`）。
 9. 完成后执行 git add 并使用规范的 git commit 提交改动，将变更推送至 GitHub 远端 (\`git push origin main\`)。

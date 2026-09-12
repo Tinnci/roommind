@@ -29,7 +29,7 @@
         "name": "{room} Zieltemperatur"
       },
       "mode": {
-        "name": "{room} Modus"
+        "name": "{room} beobachtete Aktivität"
       }
     },
     "binary_sensor": {
@@ -51,6 +51,17 @@
     "climate": {
       "override": {
         "name": "{room} Übersteuerung"
+      },
+      "comfort": {
+        "name": "{room} Raumkomfort",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "schedule": "Raumregeln folgen",
+              "hold": "Temperatur halten"
+            }
+          }
+        }
       }
     }
   }

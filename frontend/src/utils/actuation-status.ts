@@ -1,4 +1,43 @@
-import type { NightControlConfig, NightControlStatus } from "../types";
+import type { DeviceActuationStatus, NightControlConfig, NightControlStatus } from "../types";
+
+export type ActuationFeedback =
+  | DeviceActuationStatus["dispatch"]
+  | "accepted"
+  | "confirmed"
+  | "not_confirmed";
+
+export function actuationFeedback(
+  operation: Pick<DeviceActuationStatus, "dispatch" | "application" | "acceptance">,
+): ActuationFeedback {
+  if (operation.dispatch !== "sent") return operation.dispatch;
+  if (operation.application === "confirmed") return "confirmed";
+  if (operation.application === "not_confirmed") return "not_confirmed";
+  if (operation.acceptance === "accepted") return "accepted";
+  return "sent";
+}
+
+export function nightControlFeedback(
+  status: NightControlStatus,
+): ActuationFeedback | "observed" | "unknown" {
+  switch (status.outcome) {
+    case "observed":
+    case "failed":
+    case "unsupported":
+    case "skipped":
+    case "deferred":
+      return status.outcome;
+    case "sent":
+    case "pending":
+      if (status.dispatch) {
+        return actuationFeedback({
+          dispatch: status.dispatch,
+          acceptance: status.acceptance ?? "unknown",
+          application: status.application ?? "unknown",
+        });
+      }
+  }
+  return "unknown";
+}
 
 export function summarizeNightControls(
   configs: NightControlConfig[],

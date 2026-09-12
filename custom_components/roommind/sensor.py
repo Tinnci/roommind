@@ -70,7 +70,7 @@ class _RoomMindBaseSensor(CoordinatorEntity, SensorEntity):
     @property
     def native_value(self) -> float | str | None:
         """Return the sensor value from the coordinator data."""
-        room = self.coordinator.data.get("rooms", {}).get(self._area_id)
+        room = (self.coordinator.data or {}).get("rooms", {}).get(self._area_id)
         if room:
             val = room.get(self._data_key)
             return val if isinstance(val, (float, int, str)) else None
@@ -99,11 +99,11 @@ class RoomMindModeSensor(_RoomMindBaseSensor):
 
     @property
     def native_value(self) -> str | None:
-        """Return the current mode, defaulting to 'idle'."""
-        room = self.coordinator.data.get("rooms", {}).get(self._area_id)
+        """Return observed activity; missing feedback cannot establish idle."""
+        room = (self.coordinator.data or {}).get("rooms", {}).get(self._area_id)
         if room:
             if room.get("observation_status") == "unknown":
                 return None
-            val = room.get("mode", "idle")
-            return str(val) if val is not None else "idle"
-        return "idle"
+            val = room.get("observed_mode", room.get("mode"))
+            return str(val) if val in {"idle", "heating", "cooling", "fan_only"} else None
+        return None

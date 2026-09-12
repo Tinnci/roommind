@@ -6,6 +6,7 @@ import { customElement, property } from "lit/decorators.js";
 import type { HomeAssistant, CompressorGroup, ConflictResolution } from "../../types";
 import { localize } from "../../utils/localize";
 import { getSelectValue } from "../../utils/events";
+import { isRoomMindEntity } from "../../utils/room-state";
 import "../shared/rs-confirm-button";
 import { inputStyles } from "../../styles/input-styles";
 
@@ -313,7 +314,7 @@ export class RsSettingsCompressor extends LitElement {
 
   private _memberFilter = (entity: { entity_id: string }): boolean => {
     const id = entity.entity_id;
-    if (id.substring(id.indexOf(".") + 1).startsWith("roommind_")) return false;
+    if (isRoomMindEntity(id, this.hass.entities)) return false;
     for (const g of this.compressorGroups) {
       if (g.members.includes(id)) return false;
       if (g.master_entity === id) return false;
@@ -323,7 +324,7 @@ export class RsSettingsCompressor extends LitElement {
 
   private _masterFilter = (entity: { entity_id: string }): boolean => {
     const id = entity.entity_id;
-    if (id.substring(id.indexOf(".") + 1).startsWith("roommind_")) return false;
+    if (isRoomMindEntity(id, this.hass.entities)) return false;
     for (const g of this.compressorGroups) {
       if (g.members.includes(id)) return false;
       if (g.master_entity === id) return false;

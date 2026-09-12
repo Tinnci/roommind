@@ -58,6 +58,20 @@ function room(overrides: Partial<RoomConfig>): RoomConfig {
 }
 
 describe("summarizeRoomOverview", () => {
+  test("a configured room awaiting its first observation is unknown", () => {
+    const waiting = room({});
+    delete waiting.live;
+    const summary = summarizeRoomOverview([waiting], true);
+    expect(summary.unknownCount).toBe(1);
+    expect(summary.activeCount).toBe(0);
+  });
+
+  test("unknown feedback is counted separately from observed activity", () => {
+    const unknown = room({ live: { ...room({}).live!, observation_status: "unknown" } });
+    const summary = summarizeRoomOverview([unknown], true);
+    expect(summary.activeCount).toBe(0);
+    expect(summary.unknownCount).toBe(1);
+  });
   test("separates effective room overrides from stored but paused overrides", () => {
     const effective = room({
       area_id: "effective",
@@ -74,6 +88,7 @@ describe("summarizeRoomOverview", () => {
       heatingCount: 0,
       coolingCount: 1,
       externalActiveCount: 1,
+      unknownCount: 0,
       effectiveOverrideCount: 1,
       pausedOverrideCount: 1,
     });
@@ -85,6 +100,7 @@ describe("summarizeRoomOverview", () => {
       heatingCount: 0,
       coolingCount: 0,
       externalActiveCount: 1,
+      unknownCount: 0,
       effectiveOverrideCount: 0,
       pausedOverrideCount: 0,
     });

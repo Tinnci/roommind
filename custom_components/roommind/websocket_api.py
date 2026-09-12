@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import logging
 import time
+from copy import deepcopy
 from typing import TYPE_CHECKING
 
 import voluptuous as vol
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 
 from .const import (
     DEFAULT_COMFORT_COOL,
@@ -62,8 +64,17 @@ def _compute_anyone_home(hass: HomeAssistant, settings: dict) -> bool:
     return not is_presence_away(hass, {}, settings)  # all away
 
 
-def _validate_no_own_entities(config: dict, own_prefix: str) -> str | None:
-    """Verify that no RoomMind-owned entity is assigned to a room. Returns an error message or None."""
+def _validate_no_own_entities(
+    config: dict, own_prefix: str, *, registry: er.EntityRegistry | None = None
+) -> str | None:
+    """Reject room policy entities used as physical inputs or actuators."""
+
+    def is_own(entity_id: str) -> bool:
+        entry = registry.async_get(entity_id) if registry is not None and entity_id else None
+        return bool(
+            entity_id.split(".", 1)[-1].startswith(own_prefix) or (entry is not None and entry.platform == DOMAIN)
+        )
+
     for field in (
         "thermostats",
         "acs",
@@ -72,15 +83,16 @@ def _validate_no_own_entities(config: dict, own_prefix: str) -> str | None:
         "window_sensors",
         "covers",
         "occupancy_sensors",
+        "members",
     ):
         for eid in config.get(field, []):
-            if eid.split(".", 1)[-1].startswith(own_prefix):
-                return f"Cannot assign RoomMind's own entity '{eid}' to a room"
+            if is_own(eid):
+                return f"Cannot assign RoomMind's own entity '{eid}' as a physical input or actuator"
 
-    for field in ("temperature_sensor", "humidity_sensor"):
+    for field in ("temperature_sensor", "humidity_sensor", "master_entity"):
         eid = config.get(field, "")
-        if eid and eid.split(".", 1)[-1].startswith(own_prefix):
-            return f"Cannot assign RoomMind's own entity '{eid}' to a room"
+        if eid and is_own(eid):
+            return f"Cannot assign RoomMind's own entity '{eid}' as a physical input or actuator"
 
     nested_entity_fields = (
         ("devices", ("entity_id",)),
@@ -92,8 +104,8 @@ def _validate_no_own_entities(config: dict, own_prefix: str) -> str | None:
         for item in config.get(config_field, []):
             for entity_field in entity_fields:
                 eid = item.get(entity_field, "")
-                if eid and eid.split(".", 1)[-1].startswith(own_prefix):
-                    return f"Cannot assign RoomMind's own entity '{eid}' to a room"
+                if eid and is_own(eid):
+                    return f"Cannot assign RoomMind's own entity '{eid}' as a physical input or actuator"
 
     return None
 
@@ -158,59 +170,64 @@ async def websocket_list_rooms(
         else:
             learning_paused_reason = None
 
-        room_data["live"] = {
-            "current_temp": live.get("current_temp"),
-            "current_humidity": live.get("current_humidity"),
-            "target_temp": live.get("target_temp"),
-            "heat_target": live.get("heat_target"),
-            "cool_target": live.get("cool_target"),
-            "mode": live.get("mode", "idle"),
-            "observed_mode": live.get("observed_mode"),
-            "observation_status": live.get("observation_status", "unknown"),
-            "commanded_mode": live.get("commanded_mode", "idle"),
-            "requested_power": live.get("requested_power", 0),
-            "dispatch_status": live.get("dispatch_status", "unknown"),
-            "heating_power": live.get("heating_power", 0),
-            "device_setpoint": live.get("device_setpoint"),
-            "window_open": live.get("window_open", False),
-            **build_override_live(
-                room_config,
-                suppressed=is_override_suppressed(room_config, settings, live.get("presence_away", False)),
-            ),
-            "active_schedule_index": live.get("active_schedule_index", -1),
-            "confidence": live.get("confidence"),
-            "mpc_active": live.get("mpc_active", False),
-            "presence_away": live.get("presence_away", False),
-            "mold_risk_level": live.get("mold_risk_level", "ok"),
-            "mold_surface_rh": live.get("mold_surface_rh"),
-            "mold_prevention_active": live.get("mold_prevention_active", False),
-            "mold_prevention_delta": live.get("mold_prevention_delta", 0),
-            "n_observations": live.get("n_observations", 0),
-            "blind_position": live.get("blind_position"),
-            "cover_auto_paused": live.get("cover_auto_paused", False),
-            "cover_forced_reason": live.get("cover_forced_reason", ""),
-            "active_cover_schedule_index": live.get("active_cover_schedule_index", -1),
-            "active_heat_sources": live.get("active_heat_sources"),
-            "q_fan_mix": live.get("q_fan_mix", 0.0),
-            "q_vent": live.get("q_vent", 0.0),
-            "airflow_ach": live.get("airflow_ach", 0.0),
-            "perceived_temp": live.get("perceived_temp"),
-            "airflow_active": live.get("airflow_active", False),
-            "airflow_plan_level": live.get("airflow_plan_level", 0.0),
-            "airflow_mix_plan_level": live.get("airflow_mix_plan_level", 0.0),
-            "airflow_vent_plan_level": live.get("airflow_vent_plan_level", 0.0),
-            "airflow_devices_status": live.get("airflow_devices_status", []),
-            "airflow_command_status": live.get("airflow_command_status", []),
-            "sensor_conflict": live.get("sensor_conflict", 0.0),
-            "sensor_fusion_status": live.get("sensor_fusion_status", []),
-            "hvac_output_status": live.get("hvac_output_status"),
-            "night_mode": live.get("night_mode", {"active": False}),
-            "night_control_status": live.get("night_control_status", []),
-            "rapid_recovery_active": live.get("rapid_recovery_active", False),
-            "effective_control_target": live.get("effective_control_target"),
-            "coupling_status": live.get("coupling_status", []),
-            "learning_paused_reason": learning_paused_reason,
-        }
+        room_data["live"] = deepcopy(
+            {
+                "current_temp": live.get("current_temp"),
+                "current_temp_raw": live.get("current_temp_raw", live.get("current_temp")),
+                "current_humidity": live.get("current_humidity"),
+                "target_temp": live.get("target_temp"),
+                "heat_target": live.get("heat_target"),
+                "cool_target": live.get("cool_target"),
+                "mode": live.get("mode", "idle"),
+                "observed_mode": live.get("observed_mode"),
+                "observation_status": live.get("observation_status", "unknown"),
+                "commanded_mode": live.get("commanded_mode", "idle"),
+                "requested_power": live.get("requested_power", 0),
+                "dispatch_status": live.get("dispatch_status", "unknown"),
+                "heating_power": live.get("heating_power", 0),
+                "device_setpoint": live.get("device_setpoint"),
+                "device_actuation_status": live.get("device_actuation_status", []),
+                "device_observations": live.get("device_observations", []),
+                "window_open": live.get("window_open", False),
+                **build_override_live(
+                    room_config,
+                    suppressed=is_override_suppressed(room_config, settings, live.get("presence_away", False)),
+                ),
+                "active_schedule_index": live.get("active_schedule_index", -1),
+                "confidence": live.get("confidence"),
+                "mpc_active": live.get("mpc_active", False),
+                "presence_away": live.get("presence_away", False),
+                "mold_risk_level": live.get("mold_risk_level", "ok"),
+                "mold_surface_rh": live.get("mold_surface_rh"),
+                "mold_prevention_active": live.get("mold_prevention_active", False),
+                "mold_prevention_delta": live.get("mold_prevention_delta", 0),
+                "n_observations": live.get("n_observations", 0),
+                "blind_position": live.get("blind_position"),
+                "cover_auto_paused": live.get("cover_auto_paused", False),
+                "cover_forced_reason": live.get("cover_forced_reason", ""),
+                "active_cover_schedule_index": live.get("active_cover_schedule_index", -1),
+                "active_heat_sources": live.get("active_heat_sources"),
+                "q_fan_mix": live.get("q_fan_mix", 0.0),
+                "q_vent": live.get("q_vent", 0.0),
+                "airflow_ach": live.get("airflow_ach", 0.0),
+                "perceived_temp": live.get("perceived_temp"),
+                "airflow_active": live.get("airflow_active", False),
+                "airflow_plan_level": live.get("airflow_plan_level", 0.0),
+                "airflow_mix_plan_level": live.get("airflow_mix_plan_level", 0.0),
+                "airflow_vent_plan_level": live.get("airflow_vent_plan_level", 0.0),
+                "airflow_devices_status": live.get("airflow_devices_status", []),
+                "airflow_command_status": live.get("airflow_command_status", []),
+                "sensor_conflict": live.get("sensor_conflict", 0.0),
+                "sensor_fusion_status": live.get("sensor_fusion_status", []),
+                "hvac_output_status": live.get("hvac_output_status"),
+                "night_mode": live.get("night_mode", {"active": False}),
+                "night_control_status": live.get("night_control_status", []),
+                "rapid_recovery_active": live.get("rapid_recovery_active", False),
+                "effective_control_target": live.get("effective_control_target"),
+                "coupling_status": live.get("coupling_status", []),
+                "learning_paused_reason": learning_paused_reason,
+            }
+        )
         result[area_id] = room_data
 
     # Vacation state from settings
@@ -275,7 +292,7 @@ async def websocket_save_room(
 
     # Reject RoomMind's own entities to prevent self-assignment (#86)
     own_prefix = f"{DOMAIN}_"
-    err = _validate_no_own_entities(config, own_prefix)
+    err = _validate_no_own_entities(config, own_prefix, registry=er.async_get(hass))
     if err:
         connection.send_error(msg["id"], "invalid_entity", err)
         return
@@ -493,6 +510,12 @@ async def websocket_save_settings(
     except SettingsValidationError as err:
         connection.send_error(msg["id"], err.code, str(err))
         return
+
+    for group in changes.get("compressor_groups", []):
+        entity_error = _validate_no_own_entities(group, f"{DOMAIN}_", registry=er.async_get(hass))
+        if entity_error:
+            connection.send_error(msg["id"], "invalid_entity", entity_error)
+            return
 
     settings = await store.async_save_settings(changes)
     connection.send_result(msg["id"], {"settings": settings})

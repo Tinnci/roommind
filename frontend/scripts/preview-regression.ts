@@ -120,7 +120,8 @@ async function evaluate<T>(cdp: CdpSession, expression: string): Promise<T> {
     returnByValue: true,
     awaitPromise: true,
   });
-  const result = response.result as { result?: { value?: T } };
+  const result = response.result as { result?: { value?: T }; exceptionDetails?: unknown };
+  if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
   return result.result?.value as T;
 }
 
@@ -299,6 +300,105 @@ async function checkRoomSetback(cdp: CdpSession): Promise<void> {
   await screenshot(cdp, "setback-desktop");
 }
 
+async function checkComfortFeedback(cdp: CdpSession): Promise<void> {
+  const checks = await evaluate<Record<string, boolean>>(
+    cdp,
+    String.raw`(async () => {
+      const detail = document.querySelector("rs-room-detail");
+      const original = detail.config;
+      const originalHass = detail.hass;
+      const originalSnapshot = JSON.stringify(original);
+      const hero = detail.shadowRoot.querySelector("rs-hero-status");
+      const feedback = detail.shadowRoot.querySelector("rs-control-details");
+      const panel = detail.shadowRoot.querySelector("rs-temperature-control-panel");
+      const disclosure = feedback.shadowRoot.querySelector("details");
+      const checks = {
+        lazyDetails: !disclosure.open && !feedback.shadowRoot.querySelector(".body"),
+        comfortFirst: !hero.shadowRoot.textContent.includes("Planned device setpoint"),
+      };
+      feedback.shadowRoot.querySelector("summary").click();
+      await new Promise(resolve => setTimeout(resolve, 50));
+      await feedback.updateComplete;
+      checks.disclosureOpens = disclosure.open && !!feedback.shadowRoot.querySelector(".body");
+      const observed = () => feedback.shadowRoot.querySelector(".observation").textContent;
+      checks.observationSeparateFromPlan = observed().includes("20.5°C")
+        && feedback.shadowRoot.querySelector(".operations").textContent.includes("21.5°C");
+      let openedEntity = "";
+      feedback.addEventListener("hass-more-info", event => { openedEntity = event.detail.entityId; }, { once: true });
+      feedback.shadowRoot.querySelector("article button").click();
+      checks.deviceMoreInfo = openedEntity === "climate.bedroom_radiator";
+
+      const update = async patch => {
+        detail.config = { ...detail.config, live: { ...detail.config.live, ...patch } };
+        await detail.updateComplete;
+        await Promise.all([hero.updateComplete, feedback.updateComplete, panel.updateComplete]);
+      };
+      await update({ observed_mode: null, observation_status: "unknown" });
+      const before = observed();
+      await update({
+        device_actuation_status: original.live.device_actuation_status.map(operation => ({
+          ...operation, application: "confirmed",
+        })),
+      });
+      checks.confirmationIsNotActivity = hero.shadowRoot.querySelector(".mode-pill").textContent.includes("Device output unknown")
+        && hero.shadowRoot.querySelector("ha-card").dataset.activity === "unknown";
+      checks.confirmationKeepsObservation = observed() === before;
+      checks.disclosureSurvivesUpdates = disclosure === feedback.shadowRoot.querySelector("details") && disclosure.open;
+      checks.confirmedSettingsVisible = feedback.shadowRoot.querySelector(".operations").textContent.includes("Device confirmed settings");
+
+      await update({
+        override_active: true, override_type: "custom", override_temp: 19, override_until: null,
+      });
+      checks.overrideUsesLatestSnapshot = hero.shadowRoot.querySelector(".hero-target").textContent.includes("Custom");
+      await update({});
+      checks.overridePreservesEffectiveRange = hero.shadowRoot.querySelector(".hero-target-value").textContent.replace(/\s+/g, " ").trim() === "21.0 – 24.5°C";
+      await update({
+        current_temp_raw: null,
+        device_actuation_status: original.live.device_actuation_status.map(operation => ({
+          ...operation, dispatch: "failed", application: "confirmed",
+        })),
+      });
+      checks.cachedTemperatureLabel = hero.shadowRoot.textContent.includes("Last known temperature");
+      checks.failureVisibleWhenCollapsed = feedback.shadowRoot.querySelector("summary").textContent.includes("Dispatch failed");
+      await update({
+        device_actuation_status: [],
+        night_control_status: [{ entity_id: "switch.beeper", role: "beeper", active: true, outcome: "unsupported" }],
+      });
+      checks.accessoryFailureVisible = feedback.shadowRoot.querySelector("summary").textContent.includes("Unsupported operation");
+
+      const calls = [];
+      detail.hass = {
+        ...originalHass,
+        config: { ...originalHass.config, unit_system: { temperature: "°F" } },
+        callWS: async message => { calls.push(message); return { ok: true }; },
+      };
+      await update({
+        ...original.live,
+        device_actuation_status: original.live.device_actuation_status.map(operation => ({
+          ...operation,
+          ...(operation.service === "set_temperature" ? { temperature_unit: "°F", desired: { temperature: 70.7 } } : {}),
+        })),
+      });
+      checks.fahrenheitObservation = observed().includes("68.9°F");
+      checks.fahrenheitPlan = feedback.shadowRoot.querySelector(".operations").textContent.includes("70.7°F");
+      const input = panel.shadowRoot.querySelector("input");
+      input.value = "75.2";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      await panel.updateComplete;
+      panel.shadowRoot.querySelector(".action-button.primary").click();
+      await new Promise(resolve => setTimeout(resolve, 50));
+      checks.comfortWriteInCelsius = calls.some(message => message.type === "roommind/override/set" && Math.abs(message.temperature - 24) < 0.001);
+      checks.editKeepsPhysicalObservation = observed().includes("68.9°F");
+      checks.inputSnapshotUnchanged = JSON.stringify(original) === originalSnapshot;
+      return checks;
+    })()`,
+  );
+  for (const [name, passed] of Object.entries(checks)) {
+    if (!passed)
+      throw new Error("Comfort feedback regression failed: " + name + " " + JSON.stringify(checks));
+  }
+}
+
 async function run(): Promise<void> {
   await mkdir(ARTIFACT_DIR, { recursive: true });
   const profileDir = join(ARTIFACT_DIR, "chrome-profile");
@@ -351,6 +451,49 @@ async function run(): Promise<void> {
       deviceScaleFactor: 1,
       mobile: false,
     });
+    await navigate(cdp, "/dev/panel-preview.html");
+    await waitForText(cdp, "Living room");
+    const overviewChecks = await evaluate<Record<string, boolean>>(
+      cdp,
+      `(async () => {
+        const panel = document.querySelector("roommind-panel");
+        const areaId = Object.keys(panel._rooms)[0];
+        const deviceCount = panel._computeAreaInfos().find(info => info.area.area_id === areaId).climateEntityCount;
+        panel.hass = {
+          ...panel.hass,
+          entities: { ...panel.hass.entities, "climate.renamed_comfort": {
+            entity_id: "climate.renamed_comfort", area_id: areaId, platform: "roommind",
+          }},
+        };
+        panel._rooms = Object.fromEntries(Object.entries(panel._rooms).map(([id, config]) => [id, {
+          ...config, live: { ...config.live, mode: "heating", observed_mode: null, observation_status: "unknown",
+            window_open: false, mold_risk_level: "ok", learning_paused_reason: null },
+        }]));
+        await panel.updateComplete;
+        const groups = [...panel.shadowRoot.querySelectorAll("h4")].map(heading => heading.textContent);
+        const headline = panel.shadowRoot.querySelector("h2").textContent;
+        const card = panel.shadowRoot.querySelector("rs-area-card");
+        await card.updateComplete;
+        const link = card.shadowRoot.querySelector("ha-card");
+        const checks = {
+          unknownIsNotAdjusting: !groups.includes("Adjusting now") && groups.includes("Monitoring"),
+          unknownHeadline: headline.includes("awaiting device feedback"),
+          ownEntityExcluded: panel._computeAreaInfos().find(info => info.area.area_id === areaId).climateEntityCount === deviceCount,
+          keyboardLink: link.getAttribute("role") === "link" && link.tabIndex === 0,
+        };
+        link.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+        await panel.updateComplete;
+        checks.keyboardOpensRoom = panel._selectedAreaId === card.area.area_id && !!panel.shadowRoot.querySelector("rs-room-detail");
+        return checks;
+      })()`,
+    );
+    for (const [name, passed] of Object.entries(overviewChecks)) {
+      if (!passed)
+        throw new Error(
+          "Room overview regression failed: " + name + " " + JSON.stringify(overviewChecks),
+        );
+    }
+    console.log("Unknown overview grouping, entity ownership and keyboard navigation checked");
     await navigate(cdp, "/dev/settings-preview.html");
     const settingsText = await waitForText(cdp, "Advanced control tuning");
     assertIncludes(settingsText, "MPC");
@@ -364,11 +507,15 @@ async function run(): Promise<void> {
     console.log("Global setback save and reload checked");
 
     await navigate(cdp, "/dev/room-detail-preview.html");
-    const detailText = await waitForText(cdp, "Primary sensor");
-    assertIncludes(detailText, "Device setpoint");
+    const detailText = await waitForText(cdp, "Device plans and feedback");
+    assertIncludes(detailText, "Room comfort target");
     assertIncludes(detailText, "Room configuration");
     await screenshot(cdp, "room-detail-desktop", true);
     console.log("Room detail desktop checked");
+    await checkComfortFeedback(cdp);
+    console.log("Comfort target, dispatch, confirmation, observation and units checked");
+    await navigate(cdp, "/dev/room-detail-preview.html");
+    await waitForText(cdp, "Device plans and feedback");
     await checkRoomSetback(cdp);
     console.log("Room setback save, reload and inheritance checked");
 
@@ -398,6 +545,44 @@ async function run(): Promise<void> {
       deviceScaleFactor: 1,
       mobile: true,
     });
+    await navigate(cdp, "/dev/room-detail-preview.html");
+    await waitForText(cdp, "Device plans and feedback");
+    await screenshot(cdp, "room-detail-mobile", true);
+    await cdp.send("Emulation.setEmulatedMedia", {
+      features: [
+        { name: "prefers-color-scheme", value: "dark" },
+        { name: "prefers-reduced-motion", value: "reduce" },
+      ],
+    });
+    const mobileLayout = await evaluate<{
+      fits: boolean;
+      transition: string;
+      targetHeight: number;
+    }>(
+      cdp,
+      `(() => {
+        const detail = document.querySelector("rs-room-detail");
+        const panel = detail.shadowRoot.querySelector("rs-temperature-control-panel");
+        const button = panel.shadowRoot.querySelector(".step-button");
+        return {
+          fits: document.documentElement.scrollWidth <= innerWidth,
+          transition: getComputedStyle(button).transitionDuration,
+          targetHeight: button.getBoundingClientRect().height,
+        };
+      })()`,
+    );
+    if (
+      !mobileLayout.fits ||
+      mobileLayout.targetHeight < 44 ||
+      mobileLayout.transition.split(",").some((value) => value.trim() !== "0s")
+    ) {
+      throw new Error(
+        "Mobile comfort layout or reduced motion failed: " + JSON.stringify(mobileLayout),
+      );
+    }
+    await screenshot(cdp, "room-detail-mobile-dark", true);
+    console.log("Mobile comfort layout, touch targets and reduced motion checked");
+    await cdp.send("Emulation.setEmulatedMedia", { features: [] });
     await openRoomEditSection(cdp, "sensors");
     await waitForText(cdp, "Temperature source priority");
     const backdropBackground = await evaluate<string>(

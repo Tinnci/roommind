@@ -35,6 +35,7 @@
 - **Physical Feedback Provenance** - Uses device observation timestamps when available, keeps stale activity unknown, and shares one observation snapshot across planning and learning.
 - **Per-Device Setpoint Mode** - Choose proportional (boost setpoint) or direct (exact target) control per device for optimal results with different hardware.
 - **Quiet AC Actuation** - Pace small output increases, apply night accessories before climate commands, and keep dispatch, deferred adjustments and physical feedback distinct.
+- **Room Comfort Controls** - A dedicated HA comfort entity and a calm room interface separate effective comfort targets, device plans and observed feedback. Expand device details when needed.
 - **Separate Heat/Cool Targets** - Independent comfort and eco temperatures for heating and cooling in auto mode, creating a natural dead-band.
 - **Per-Room Climate Toggle** - Disable climate control for individual rooms while keeping other rooms active.
 - **Outdoor Areas** - Mark rooms as outdoor (e.g. balcony) to disable climate control while keeping monitoring.
@@ -116,13 +117,17 @@ For HA state freshness, sensor fusion, airflow modeling, and comfort diagnostics
 
 For AC output interpretation, feedback gaps, consistent observations, and dispatch evidence, see [AC Observation and Control](docs/ac-observation-and-control.md).
 
+For daily controls, the new comfort climate entity, legacy override compatibility and device feedback, see [Room Comfort and Device Feedback / 房间舒适度与设备反馈](docs/room-comfort-and-feedback.md).
+
 ## Entities Created
 
 | Entity | Description |
 |--------|-------------|
-| `sensor.roommind_{area_id}_target_temp` | Current target temperature |
-| `sensor.roommind_{area_id}_mode` | Current mode: `idle`, `heating`, or `cooling` |
-| `climate.roommind_{area_id}_override` | Manual override climate entity (controllable from dashboards, automations, voice) |
+| `climate.roommind_{area_id}_comfort` | Room comfort target with `schedule` / `hold` presets; `auto` regulation, with observed activity kept separate |
+| `switch.roommind_{area_id}_climate_control` | Enable or pause RoomMind's control of the room |
+| `sensor.roommind_{area_id}_target_temp` | Current effective room target temperature |
+| `sensor.roommind_{area_id}_mode` | Observed activity: `idle`, `heating`, `cooling`, or `fan_only`; unknown without feedback |
+| `climate.roommind_{area_id}_override` | Legacy override endpoint; `off` still resumes room policy. Disabled by default for new registrations |
 | `switch.roommind_vacation` | Global vacation mode toggle |
 | `switch.roommind_{area_id}_cover_auto` | Per-room automatic cover control toggle |
 | `binary_sensor.roommind_{area_id}_cover_paused` | On when manual cover override is detected |

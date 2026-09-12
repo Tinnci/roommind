@@ -1,10 +1,12 @@
 import type { RoomConfig } from "../types";
+import { getObservedMode } from "./room-state";
 
 export interface RoomOverviewStatus {
   activeCount: number;
   heatingCount: number;
   coolingCount: number;
   externalActiveCount: number;
+  unknownCount: number;
   effectiveOverrideCount: number;
   pausedOverrideCount: number;
 }
@@ -41,25 +43,26 @@ export function summarizeRoomOverview(
   let heatingCount = 0;
   let coolingCount = 0;
   let externalActiveCount = 0;
+  let unknownCount = 0;
   let effectiveOverrideCount = 0;
   let pausedOverrideCount = 0;
 
   for (const config of configs) {
     const live = config.live;
-    if (!live) continue;
-
     const controlEffective = isRoomControlEffective(config, climateControlActive);
-    if (controlEffective && live.mode === "heating") heatingCount += 1;
-    if (controlEffective && live.mode === "cooling") coolingCount += 1;
+    const mode = getObservedMode(live);
+    if (mode === null && hasClimateDevice(config) && !config.is_outdoor) unknownCount += 1;
+    if (controlEffective && mode === "heating") heatingCount += 1;
+    if (controlEffective && mode === "cooling") coolingCount += 1;
     if (
       !controlEffective &&
       hasClimateDevice(config) &&
-      (live.mode === "heating" || live.mode === "cooling")
+      (mode === "heating" || mode === "cooling")
     ) {
       externalActiveCount += 1;
     }
 
-    if (live.override_active) {
+    if (live?.override_active) {
       if (isOverrideEffective(config, climateControlActive)) effectiveOverrideCount += 1;
       else pausedOverrideCount += 1;
     }
@@ -70,6 +73,7 @@ export function summarizeRoomOverview(
     heatingCount,
     coolingCount,
     externalActiveCount,
+    unknownCount,
     effectiveOverrideCount,
     pausedOverrideCount,
   };

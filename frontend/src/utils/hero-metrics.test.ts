@@ -35,6 +35,33 @@ const baseLive: RoomLiveData = {
 };
 
 describe("selectHeroMetricIds", () => {
+  test("cached air temperature cannot present a fresh feels-like reading", () => {
+    expect(
+      selectHeroMetricIds({
+        isOutdoor: false,
+        climateControlActive: true,
+        roomControlEnabled: true,
+        live: { ...baseLive, current_temp_raw: null, perceived_temp: 22, current_humidity: 50 },
+      }),
+    ).toEqual(["humidity"]);
+  });
+
+  test("comfort measurements remain visible when a device plan exists", () => {
+    expect(
+      selectHeroMetricIds({
+        isOutdoor: false,
+        climateControlActive: true,
+        roomControlEnabled: true,
+        live: {
+          ...baseLive,
+          current_humidity: 58,
+          perceived_temp: 22,
+          device_setpoint: 18,
+          active_heat_sources: "both",
+        },
+      }),
+    ).toEqual(["perceivedTemp", "humidity"]);
+  });
   test("limits noisy indoor metrics to the three highest priority items", () => {
     const ids = selectHeroMetricIds({
       isOutdoor: false,

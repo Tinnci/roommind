@@ -14,7 +14,7 @@ from typing import Any
 from homeassistant.components.persistent_notification import async_create as async_create_notification
 from homeassistant.components.persistent_notification import async_dismiss as async_dismiss_notification
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
@@ -246,8 +246,10 @@ def _get_area_name(hass: HomeAssistant, area_id: str) -> str:
         return area_id
 
 
-class RoomMindCoordinator(DataUpdateCoordinator):
+class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Central coordinator for RoomMind room data and state."""
+
+    data: dict[str, Any]
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize the coordinator."""
@@ -317,11 +319,44 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         # Per-entity cache of schedule blocks; fallback when schedule.get_schedule fails (#308)
         self._schedule_blocks_cache: dict[str, dict] = {}
 
+    @callback
     def _handle_tcl_command_result(self, event: Any) -> None:
         """Reconcile TCL device evidence without coupling to its implementation."""
         data = getattr(event, "data", None)
         if isinstance(data, dict):
-            self._actuation_ledger.record_tcl_event(data)
+            evidence = self._actuation_ledger.record_tcl_event(data)
+            if evidence is None or not self.data:
+                return
+            previous = self.data.get("rooms", {})
+            rooms = {area_id: self._reconcile_room_evidence(room) for area_id, room in previous.items()}
+            if any(rooms[area_id] is not room for area_id, room in previous.items()):
+                self.rooms = rooms
+                self.data = {**self.data, "rooms": rooms}
+                # Publish evidence without restarting the scheduled Control Cycle.
+                self.async_update_listeners()
+
+    def _reconcile_room_evidence(self, room: dict[str, Any]) -> dict[str, Any]:
+        """Replace evidence fields while retaining the cycle's physical observations."""
+        updates: dict[str, Any] = {}
+        for key in ("device_actuation_status", "night_control_status"):
+            statuses = room.get(key, [])
+            reconciled = []
+            changed = False
+            for status in statuses:
+                evidence = self._actuation_ledger.get(status.get("context_id"))
+                values = (
+                    {"acceptance": evidence.acceptance.value, "application": evidence.application.value}
+                    if evidence is not None
+                    else {}
+                )
+                if any(status.get(field) != value for field, value in values.items()):
+                    reconciled.append({**status, **values})
+                    changed = True
+                else:
+                    reconciled.append(status)
+            if changed:
+                updates[key] = reconciled
+        return {**room, **updates} if updates else room
 
     async def async_shutdown(self) -> None:
         """Release event subscriptions owned by the coordinator."""
@@ -431,6 +466,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             persist_actuation=thermal_state_saved,
         )
 
+        room_states = {area_id: self._reconcile_room_evidence(room) for area_id, room in room_states.items()}
         self.rooms = room_states
         return {"rooms": room_states}
 
@@ -1737,6 +1773,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         room_state["observation_status"] = "observed" if device_action[0] is not None else "unknown"
         room_state["requested_power"] = round(power_fraction * 100) if mode != MODE_IDLE else 0
         room_state["dispatch_status"] = dispatch_status
+        room_state["device_observations"] = self._device_observation_status(observation)
         return room_state
 
     async def _observe_and_train(
@@ -1987,6 +2024,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                         "entity_id": result.entity_id,
                         "service": result.service,
                         "desired": dict(result.desired),
+                        "temperature_unit": str(self.hass.config.units.temperature_unit),
                         "dispatch": result.dispatch.value,
                         "acceptance": evidence.acceptance.value if evidence else "unknown",
                         "application": evidence.application.value if evidence else "unknown",
@@ -1994,6 +2032,29 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                         "diagnostic": result.diagnostic,
                     }
                 )
+        return statuses
+
+    def _device_observation_status(self, observation: RoomControlObservation) -> list[dict[str, Any]]:
+        """Publish detached pre-actuation device settings in canonical Celsius."""
+        statuses = []
+        for entity_id in observation.climate_devices.all_entity_ids:
+            state = observation.actuator_states.get(entity_id)
+            available = state is not None and state.state not in {"unknown", "unavailable"}
+            attrs = state.attributes if state is not None else {}
+            status: dict[str, Any] = {
+                "entity_id": entity_id,
+                "available": available,
+                "assumed_state": bool(attrs.get("assumed_state", False)),
+                "hvac_mode": state.state if state is not None and available else None,
+            }
+            for attribute in ("temperature", "target_temp_low", "target_temp_high"):
+                value = attrs.get(attribute)
+                status[attribute] = (
+                    ha_temp_to_celsius(self.hass, float(value))
+                    if available and isinstance(value, int | float)
+                    else None
+                )
+            statuses.append(status)
         return statuses
 
     def _read_device_temp(self, room: dict) -> float | None:
@@ -2128,7 +2189,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         registry = er.async_get(self.hass)
 
         # Known valid suffixes for each condition
-        always_valid = ("_target_temp", "_mode", "_override", "_climate_control")
+        always_valid = ("_target_temp", "_mode", "_override", "_comfort", "_climate_control")
         cover_only = ("_cover_auto", "_cover_paused")
         # Global entities (not per-room) that should never be cleaned up
         global_uids = {f"{DOMAIN}_vacation"}

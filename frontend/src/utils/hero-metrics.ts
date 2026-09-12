@@ -1,4 +1,5 @@
 import type { RoomLiveData } from "../types";
+import { isTemperatureCached } from "./room-state";
 
 export type HeroMetricId =
   | "moldRisk"
@@ -7,8 +8,6 @@ export type HeroMetricId =
   | "rapidRecovery"
   | "nightMode"
   | "moldPrevention"
-  | "deviceSetpoint"
-  | "activeHeatSources"
   | "perceivedTemp"
   | "humidity";
 
@@ -47,14 +46,8 @@ export function selectHeroMetricIds(input: HeroMetricSelectionInput): HeroMetric
     if (live.mold_prevention_active) {
       candidates.push("moldPrevention");
     }
-    if (live.device_setpoint != null) {
-      candidates.push("deviceSetpoint");
-    }
-    if (live.active_heat_sources && live.active_heat_sources !== "none") {
-      candidates.push("activeHeatSources");
-    }
   }
-  if (live.perceived_temp != null) {
+  if (live.perceived_temp != null && !isTemperatureCached(live)) {
     candidates.push("perceivedTemp");
   }
   if (live.current_humidity !== null) {

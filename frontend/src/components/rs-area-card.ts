@@ -1,7 +1,13 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import type { HomeAssistant, HassArea, RoomConfig } from "../types";
-import { getModeClass, formatMode } from "../utils/room-state";
+import {
+  getComfortDelta,
+  getModeClass,
+  getObservedMode,
+  formatMode,
+  isTemperatureCached,
+} from "../utils/room-state";
 import { modeStyles } from "../styles/shared-mode-styles";
 import { localize } from "../utils/localize";
 import { mdiEyeOff } from "../utils/icons";
@@ -28,24 +34,37 @@ export class RsAreaCard extends LitElement {
         display: block;
         --roommind-tile-surface: color-mix(
           in srgb,
-          var(--roommind-surface, var(--card-background-color, #ffffff)) 94%,
+          var(--roommind-surface, var(--card-background-color, #ffffff)) 97%,
           var(--primary-text-color, #000000)
         );
       }
 
       ha-card {
+        --room-glow: transparent;
         cursor: pointer;
+        touch-action: manipulation;
         transition:
-          box-shadow 0.2s ease,
-          transform 0.15s ease,
-          border-color 0.15s ease;
+          box-shadow var(--roommind-motion-duration) ease,
+          transform var(--roommind-motion-duration) var(--roommind-motion-easing),
+          border-color var(--roommind-motion-duration) ease;
         overflow: hidden;
         position: relative;
         height: 100%;
         box-sizing: border-box;
-        border-radius: 8px;
+        border-radius: var(--roommind-radius-card);
         border: var(--roommind-border-subtle);
         box-shadow: none;
+        background:
+          radial-gradient(ellipse at top right, var(--room-glow), transparent 70%),
+          var(--roommind-surface);
+      }
+
+      ha-card[data-activity="heating"] {
+        --room-glow: color-mix(in srgb, var(--roommind-warning-color) 10%, transparent);
+      }
+
+      ha-card[data-activity="cooling"] {
+        --room-glow: color-mix(in srgb, var(--roommind-info-color) 10%, transparent);
       }
 
       ha-card:hover {
@@ -54,18 +73,28 @@ export class RsAreaCard extends LitElement {
         transform: translateY(-1px);
       }
 
+      ha-card:active {
+        transform: scale(0.99);
+      }
+
+      ha-card:focus-visible {
+        outline: 2px solid var(--primary-color);
+        outline-offset: 3px;
+      }
+
       .hide-btn {
         --mdc-icon-button-size: 28px;
         --mdc-icon-size: 16px;
         color: var(--secondary-text-color);
         opacity: 0;
-        transition: opacity 0.2s ease;
+        transition: opacity var(--roommind-motion-duration) ease;
         position: absolute;
         top: 8px;
         right: 8px;
       }
 
-      ha-card:hover .hide-btn {
+      ha-card:hover .hide-btn,
+      ha-card:focus-within .hide-btn {
         opacity: 0.4;
       }
 
@@ -73,33 +102,8 @@ export class RsAreaCard extends LitElement {
         opacity: 1 !important;
       }
 
-      /* Colored left accent based on mode */
-      .accent {
-        position: absolute;
-        left: 0;
-        top: 0;
-        bottom: 0;
-        width: 4px;
-      }
-
-      .accent-heating {
-        background: var(--warning-color, #ff9800);
-      }
-
-      .accent-cooling {
-        background: var(--roommind-info-color);
-      }
-
-      .accent-idle {
-        background: var(--disabled-text-color, #bdbdbd);
-      }
-
-      .accent-unconfigured {
-        background: transparent;
-      }
-
       .card-inner {
-        padding: 18px 18px 14px;
+        padding: 22px 22px 18px;
       }
 
       /* Header row: name + badge */
@@ -112,7 +116,7 @@ export class RsAreaCard extends LitElement {
       }
 
       .area-name {
-        font-size: 15px;
+        font-size: 17px;
         font-weight: 600;
         color: var(--primary-text-color);
         margin: 0;
@@ -141,16 +145,13 @@ export class RsAreaCard extends LitElement {
         display: grid;
         grid-template-columns: minmax(0, 1.15fr) minmax(112px, 0.85fr);
         gap: 10px;
-        margin-top: 14px;
+        margin-top: 24px;
       }
 
       .metric-block {
         min-width: 0;
         min-height: 76px;
-        padding: 10px 12px;
-        border-radius: 8px;
-        background: var(--roommind-tile-surface);
-        border: var(--roommind-border-faint);
+        padding: 0;
         box-sizing: border-box;
       }
 
@@ -176,6 +177,8 @@ export class RsAreaCard extends LitElement {
       .target-temp {
         font-size: 36px;
         font-weight: 400;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.03em;
         color: var(--primary-text-color);
         line-height: 1;
       }
@@ -477,6 +480,13 @@ export class RsAreaCard extends LitElement {
           min-height: 68px;
         }
       }
+
+      @media (prefers-reduced-motion: reduce) {
+        ha-card:hover,
+        ha-card:active {
+          transform: none;
+        }
+      }
     `,
   ];
 
@@ -489,25 +499,19 @@ export class RsAreaCard extends LitElement {
     const isOutdoor = this.config?.is_outdoor ?? false;
     const isConfigured = this.config !== null && hasClimateSelected && !isOutdoor;
     const live = this.config?.live;
-    const mode = live?.mode;
-
-    const hasSensorData =
-      (!isConfigured || isOutdoor) &&
-      live &&
-      (live.current_temp !== null || live.current_humidity !== null);
-    const accentClass = isConfigured
-      ? mode === "heating"
-        ? "accent-heating"
-        : mode === "cooling"
-          ? "accent-cooling"
-          : "accent-idle"
-      : hasSensorData
-        ? "accent-idle"
-        : "accent-unconfigured";
+    const mode = getObservedMode(live);
 
     return html`
-      <ha-card @click=${this._onCardClick}>
-        <div class="accent ${accentClass}"></div>
+      <ha-card
+        data-activity=${isConfigured ? (mode ?? "unknown") : "none"}
+        role="link"
+        tabindex=${this.reordering ? -1 : 0}
+        aria-label=${this.config?.display_name || this.area.name}
+        @click=${this._onCardClick}
+        @keydown=${(event: KeyboardEvent) => {
+          if (event.target === event.currentTarget && event.key === "Enter") this._onCardClick();
+        }}
+      >
         ${!this.reordering
           ? html`<ha-icon-button
               class="hide-btn"
@@ -540,12 +544,11 @@ export class RsAreaCard extends LitElement {
             <h3 class="area-name">${this.config?.display_name || this.area.name}</h3>
             ${isConfigured && live
               ? html`
-                  <span class="mode-pill ${getModeClass(live.mode)}">
+                  <span class="mode-pill ${getModeClass(mode)}">
                     <span class="mode-dot"></span>
-                    ${live.observation_status === "unknown" ? localize("hero.output_unknown", this.hass.language) : formatMode(live.mode, this.hass.language)}${live.heating_power > 0 &&
-                    live.heating_power < 100
-                      ? html` ${live.heating_power}%`
-                      : nothing}
+                    ${mode === null
+                      ? localize("hero.output_unknown", this.hass.language)
+                      : formatMode(mode, this.hass.language)}
                   </span>
                 `
               : nothing}
@@ -576,7 +579,12 @@ export class RsAreaCard extends LitElement {
       <div class="metrics-row">
         <div class="metric-block">
           <span class="metric-label"
-            >${localize("room.temperature_panel.current", this.hass.language)}</span
+            >${localize(
+              isTemperatureCached(live)
+                ? "room.temperature_cached"
+                : "room.temperature_panel.current",
+              this.hass.language,
+            )}</span
           >
           <div class="temp-value">
             ${live.current_temp !== null
@@ -693,11 +701,8 @@ export class RsAreaCard extends LitElement {
   }
 
   private _renderDeltaLine(live: NonNullable<RoomConfig["live"]>) {
-    const current = live.current_temp;
-    const target = this._effectiveTargetTemp(live);
-    if (current === null || target === null) return nothing;
-
-    const delta = current - target;
+    const delta = getComfortDelta(live, this.config?.climate_mode ?? "auto");
+    if (delta === null) return nothing;
     const absDelta = Math.abs(toDisplayDelta(delta, this.hass));
     if (absDelta < 0.2) {
       return html`<div class="delta-line on-target">
@@ -715,16 +720,6 @@ export class RsAreaCard extends LitElement {
         unit: tempUnit(this.hass),
       })}
     </div>`;
-  }
-
-  private _effectiveTargetTemp(live: NonNullable<RoomConfig["live"]>): number | null {
-    if (live.target_temp !== null) return live.target_temp;
-    if (live.mode === "cooling" && live.cool_target !== null) return live.cool_target;
-    if (live.mode === "heating" && live.heat_target !== null) return live.heat_target;
-    if (live.heat_target !== null && live.cool_target !== null) {
-      return (live.heat_target + live.cool_target) / 2;
-    }
-    return live.heat_target ?? live.cool_target ?? null;
   }
 
   private _renderSensorOnly() {

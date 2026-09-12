@@ -1,18 +1,14 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { HomeAssistant, HassArea, RoomConfig } from "./types";
-import { getEntitiesForArea } from "./utils/room-state";
+import { getEntitiesForArea, getObservedMode, isRoomMindEntity } from "./utils/room-state";
 import { loadHaElements } from "./load-ha-elements";
 import { localize } from "./utils/localize";
 import { mdiEyeOff } from "./utils/icons";
 import { roommindThemeStyles } from "./styles/theme-styles";
 import { formatTemp, tempUnit } from "./utils/temperature";
 import { DEFAULT_CONTROL_MODE, DEFAULT_SETBACK_OFFSET } from "./utils/constants";
-import {
-  isOverrideEffective,
-  isRoomControlEffective,
-  summarizeRoomOverview,
-} from "./utils/room-overview-status";
+import { isRoomControlEffective, summarizeRoomOverview } from "./utils/room-overview-status";
 import "./components/rs-settings";
 import "./components/rs-analytics";
 
@@ -776,6 +772,7 @@ export class RoomMindPanel extends LitElement {
       heatingCount,
       coolingCount,
       externalActiveCount,
+      unknownCount,
       effectiveOverrideCount,
       pausedOverrideCount,
     } = overviewStatus;
@@ -793,13 +790,15 @@ export class RoomMindPanel extends LitElement {
           ? localize("panel.overview.active", l, { count: activeCount })
           : externalActiveCount > 0
             ? localize("panel.overview.external", l, { count: externalActiveCount })
-            : localize("panel.overview.stable", l);
+            : unknownCount > 0
+              ? localize("panel.overview.unknown", l, { count: unknownCount })
+              : localize("panel.overview.stable", l);
     const overviewIconClass =
       moldCount > 0 || windowOpenCount > 0
         ? "warning"
         : activeCount > 0
           ? "active"
-          : externalActiveCount > 0
+          : externalActiveCount > 0 || unknownCount > 0
             ? "monitoring"
             : "";
     const overviewIcon =
@@ -807,7 +806,7 @@ export class RoomMindPanel extends LitElement {
         ? "mdi:alert-circle-outline"
         : activeCount > 0
           ? "mdi:thermostat"
-          : externalActiveCount > 0
+          : externalActiveCount > 0 || unknownCount > 0
             ? "mdi:eye-outline"
             : "mdi:check-circle-outline";
     return html`
@@ -930,6 +929,12 @@ export class RoomMindPanel extends LitElement {
                   <span class="stat-value cooling">${coolingCount}</span>
                   <span class="stat-label">${localize("panel.stat.cooling", l)}</span>
                 </div>
+                ${unknownCount > 0
+                  ? html`<div class="stat">
+                      <span class="stat-value">${unknownCount}</span>
+                      <span class="stat-label">${localize("panel.stat.unknown", l)}</span>
+                    </div>`
+                  : nothing}
                 <div class="stat">
                   <span class="stat-value warning">${moldCount}</span>
                   <span class="stat-label">${localize("panel.stat.mold", l)}</span>
@@ -1050,6 +1055,7 @@ export class RoomMindPanel extends LitElement {
 
   private _areaPriorityGroupId(info: AreaInfo): AreaGroup["id"] {
     const live = info.config?.live;
+    const mode = getObservedMode(live);
     const hasClimateSelected =
       (info.config?.devices?.length ?? 0) > 0 ||
       (info.config?.thermostats?.length ?? 0) > 0 ||
@@ -1065,9 +1071,7 @@ export class RoomMindPanel extends LitElement {
     }
     if (
       isRoomControlEffective(info.config, this._climateControlActive) &&
-      (live?.mode === "heating" ||
-        live?.mode === "cooling" ||
-        isOverrideEffective(info.config, this._climateControlActive))
+      (mode === "heating" || mode === "cooling")
     ) {
       return "active";
     }
@@ -1088,10 +1092,7 @@ export class RoomMindPanel extends LitElement {
         area.area_id,
         this.hass.entities,
         this.hass.devices,
-      ).filter((e) => {
-        const idAfterDot = e.entity_id.substring(e.entity_id.indexOf(".") + 1);
-        return !idAfterDot.startsWith("roommind_");
-      });
+      ).filter((entity) => !isRoomMindEntity(entity.entity_id, this.hass.entities));
 
       const climateEntityCount = areaEntities.filter((e) =>
         e.entity_id.startsWith("climate."),

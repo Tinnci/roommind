@@ -9,6 +9,7 @@ import pytest
 from homeassistant.components.climate import HVACMode
 
 from custom_components.roommind.climate import (
+    RoomMindComfortClimate,
     RoomMindOverrideClimate,
     async_setup_entry,
     create_room_climates,
@@ -29,11 +30,12 @@ def mock_coordinator():
 
 
 def test_create_room_climates(mock_coordinator):
-    """Factory creates exactly one climate entity per room."""
+    """Factory creates the comfort endpoint and preserves the legacy endpoint."""
     coordinator, _ = mock_coordinator
     climates = create_room_climates(coordinator, "living_room")
-    assert len(climates) == 1
-    assert isinstance(climates[0], RoomMindOverrideClimate)
+    assert len(climates) == 2
+    assert isinstance(climates[0], RoomMindComfortClimate)
+    assert isinstance(climates[1], RoomMindOverrideClimate)
 
 
 def test_unique_id_and_entity_id(mock_coordinator):
@@ -264,8 +266,9 @@ async def test_async_setup_entry_creates_entities_for_all_rooms():
     )
     async_add_entities.assert_called_once()
     entities = async_add_entities.call_args[0][0]
-    assert len(entities) == 2
-    assert all(isinstance(e, RoomMindOverrideClimate) for e in entities)
+    assert len(entities) == 4
+    assert sum(isinstance(e, RoomMindComfortClimate) for e in entities) == 2
+    assert sum(isinstance(e, RoomMindOverrideClimate) for e in entities) == 2
 
 
 @pytest.mark.asyncio

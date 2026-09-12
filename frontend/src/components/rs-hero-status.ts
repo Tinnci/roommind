@@ -1,7 +1,12 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import type { HomeAssistant, HassArea, RoomConfig, OverrideType } from "../types";
-import { getModeClass, formatMode } from "../utils/room-state";
+import type { HomeAssistant, HassArea, RoomConfig } from "../types";
+import {
+  getModeClass,
+  getObservedMode,
+  formatMode,
+  isTemperatureCached,
+} from "../utils/room-state";
 import { modeStyles } from "../styles/shared-mode-styles";
 import { localize } from "../utils/localize";
 import { formatTemp, tempUnit, toDisplayDelta } from "../utils/temperature";
@@ -19,13 +24,6 @@ export class RsHeroStatus extends LitElement {
   @property({ attribute: false }) public config: RoomConfig | null = null;
   @property({ type: Boolean }) public climateControlActive = true;
   @property({ type: Boolean }) public isOutdoor = false;
-  /** Optimistic override state passed from parent for instant feedback. */
-  @property({ attribute: false }) public overrideInfo: {
-    active: boolean;
-    type: OverrideType | null;
-    temp: number | null;
-    until: number | null;
-  } | null = null;
   @state() private _countdown = "";
   @state() private _editingName = false;
   @state() private _nameInput = "";
@@ -37,49 +35,27 @@ export class RsHeroStatus extends LitElement {
     css`
       :host {
         display: block;
-        --roommind-hero-tile: color-mix(
-          in srgb,
-          var(--roommind-surface, var(--card-background-color, #ffffff)) 96%,
-          var(--primary-text-color, #000000)
-        );
       }
 
       ha-card {
-        padding: 22px 24px 20px;
+        --hero-glow: transparent;
+        padding: 28px;
         position: relative;
         overflow: hidden;
-        border-radius: 8px;
+        border-radius: var(--roommind-radius-card);
         border: var(--roommind-border-subtle);
         box-shadow: none;
-        background: var(--roommind-surface);
+        background:
+          radial-gradient(ellipse at top right, var(--hero-glow), transparent 70%),
+          var(--roommind-surface);
       }
 
-      .hero-accent {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 4px;
+      ha-card[data-activity="heating"] {
+        --hero-glow: color-mix(in srgb, var(--roommind-warning-color) 12%, transparent);
       }
 
-      .hero-accent-heating {
-        background: linear-gradient(90deg, var(--warning-color, #ff9800), #ffb74d);
-      }
-
-      .hero-accent-cooling {
-        background: linear-gradient(
-          90deg,
-          var(--roommind-info-color),
-          color-mix(in srgb, var(--roommind-info-color) 62%, white)
-        );
-      }
-
-      .hero-accent-idle {
-        background: linear-gradient(90deg, var(--disabled-text-color, #bdbdbd), #e0e0e0);
-      }
-
-      .hero-accent-none {
-        background: var(--divider-color, #e0e0e0);
+      ha-card[data-activity="cooling"] {
+        --hero-glow: color-mix(in srgb, var(--roommind-info-color) 12%, transparent);
       }
 
       .hero-header {
@@ -87,12 +63,13 @@ export class RsHeroStatus extends LitElement {
         align-items: center;
         justify-content: space-between;
         gap: 16px;
-        margin-bottom: 18px;
+        margin-bottom: 28px;
       }
 
       .area-name {
-        font-size: 22px;
-        font-weight: 600;
+        font-size: 24px;
+        font-weight: 550;
+        letter-spacing: -0.02em;
         color: var(--primary-text-color);
         margin: 0;
         line-height: 1.2;
@@ -102,11 +79,15 @@ export class RsHeroStatus extends LitElement {
         display: grid;
         grid-template-columns: minmax(0, 1fr) minmax(170px, 0.42fr);
         gap: 16px;
-        align-items: stretch;
+        align-items: center;
         min-width: 0;
       }
 
       .hero-current-wrap {
+        min-width: 0;
+      }
+
+      .hero-current-value {
         display: flex;
         align-items: baseline;
         gap: 8px;
@@ -114,8 +95,10 @@ export class RsHeroStatus extends LitElement {
       }
 
       .hero-current {
-        font-size: 54px;
-        font-weight: 300;
+        font-size: 64px;
+        font-weight: 350;
+        letter-spacing: -0.04em;
+        font-variant-numeric: tabular-nums;
         color: var(--primary-text-color);
         line-height: 1;
       }
@@ -131,24 +114,24 @@ export class RsHeroStatus extends LitElement {
         flex-direction: column;
         justify-content: center;
         min-width: 0;
-        padding: 12px 14px;
-        border-radius: 8px;
-        border: var(--roommind-border-faint);
-        background: var(--roommind-hero-tile);
+        gap: 6px;
+        padding: 4px 0 4px 24px;
+        border-left: var(--roommind-border-faint);
         text-align: left;
         box-sizing: border-box;
       }
 
       .hero-target-label {
-        font-size: 12px;
+        font-size: 13px;
         color: var(--secondary-text-color);
-        text-transform: uppercase;
-        letter-spacing: 0;
+        line-height: 1.5;
       }
 
       .hero-target-value {
-        font-size: 24px;
-        font-weight: 650;
+        font-size: 26px;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.02em;
         color: var(--primary-text-color);
         line-height: 1.15;
       }
@@ -164,11 +147,6 @@ export class RsHeroStatus extends LitElement {
 
       .hero-target-label.override-custom {
         color: var(--roommind-info-color);
-      }
-
-      .hero-target-label ha-icon {
-        --mdc-icon-size: 12px;
-        vertical-align: middle;
       }
 
       .hero-target-countdown {
@@ -187,8 +165,8 @@ export class RsHeroStatus extends LitElement {
         font-size: 13px;
         line-height: 1.25;
         color: var(--secondary-text-color);
-        background: var(--roommind-surface-muted);
-        border: var(--roommind-border-faint);
+        background: var(--roommind-surface-subtle);
+        border: 1px solid transparent;
         box-sizing: border-box;
       }
 
@@ -219,7 +197,7 @@ export class RsHeroStatus extends LitElement {
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
-        margin-top: 14px;
+        margin-top: 24px;
       }
 
       .hero-metrics:empty {
@@ -261,10 +239,11 @@ export class RsHeroStatus extends LitElement {
         --mdc-icon-size: 16px;
         color: var(--secondary-text-color);
         opacity: 0;
-        transition: opacity 0.15s;
+        transition: opacity var(--roommind-motion-duration) ease;
       }
 
-      .name-row:hover .name-edit-btn {
+      .name-row:hover .name-edit-btn,
+      .name-row:focus-within .name-edit-btn {
         opacity: 1;
       }
 
@@ -319,7 +298,7 @@ export class RsHeroStatus extends LitElement {
 
       @media (max-width: 620px) {
         ha-card {
-          padding: 20px 16px;
+          padding: 24px 20px;
         }
 
         .hero-header {
@@ -333,15 +312,36 @@ export class RsHeroStatus extends LitElement {
         }
 
         .hero-temps {
-          grid-template-columns: 1fr;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
           gap: 12px;
+        }
+
+        .hero-current-value {
+          gap: 4px;
+        }
+
+        .hero-current {
+          font-size: 48px;
+        }
+
+        .hero-unit {
+          font-size: 18px;
         }
 
         .hero-target {
           width: 100%;
+          padding-left: 16px;
+        }
+
+        .hero-target-value {
+          font-size: 22px;
         }
       }
       .control-mode-badge {
+        background: none;
+        border: 0;
+        padding: 0;
+        font-family: inherit;
         display: inline-flex;
         align-items: center;
         gap: 4px;
@@ -367,6 +367,11 @@ export class RsHeroStatus extends LitElement {
         border-radius: 8px;
       }
 
+      button:focus-visible {
+        outline: 2px solid var(--primary-color);
+        outline-offset: 4px;
+      }
+
       .learning-paused rs-info-icon {
         margin-left: 2px;
       }
@@ -385,7 +390,7 @@ export class RsHeroStatus extends LitElement {
   }
 
   override updated(changed: Map<string, unknown>): void {
-    if (changed.has("overrideInfo") || changed.has("config")) {
+    if (changed.has("config") || changed.has("climateControlActive")) {
       this._updateCountdown();
     }
   }
@@ -398,8 +403,7 @@ export class RsHeroStatus extends LitElement {
   }
 
   private _getOverrideUntil(): number | null {
-    if (this.overrideInfo?.active) return this.overrideInfo.until;
-    return null;
+    return this._getEffectiveOverride()?.until ?? null;
   }
 
   private _updateCountdown(): void {
@@ -435,7 +439,16 @@ export class RsHeroStatus extends LitElement {
   }
 
   private _getEffectiveOverride() {
-    if (this.overrideInfo?.active) return this.overrideInfo;
+    const live = this.config?.live;
+    if (
+      live?.override_active &&
+      !live.override_suppressed &&
+      this.climateControlActive &&
+      this.config?.climate_control_enabled !== false &&
+      !this.isOutdoor
+    ) {
+      return { type: live.override_type, until: live.override_until };
+    }
     return null;
   }
 
@@ -443,61 +456,46 @@ export class RsHeroStatus extends LitElement {
     const targetTemp = live.target_temp;
     const l = this.hass?.language ?? "en";
     const ov = this._getEffectiveOverride();
-
-    if (ov) {
-      const icon =
-        ov.type === "boost" ? "mdi:fire" : ov.type === "eco" ? "mdi:leaf" : "mdi:thermometer";
-      const label =
-        ov.type === "boost"
-          ? localize("override.comfort", l)
-          : ov.type === "eco"
-            ? localize("override.eco", l)
-            : localize("override.custom", l);
-      const colorClass = `override-${ov.type}`;
-      const displayTemp = ov.temp ?? targetTemp;
-
-      return html`
-        <div class="hero-target">
-          <div class="hero-target-label ${colorClass}">
-            <ha-icon icon=${icon}></ha-icon>
-            ${label} ${localize("hero.override", l)}
-          </div>
-          <div class="hero-target-value">
-            ${displayTemp !== null
-              ? html`${formatTemp(displayTemp, this.hass)}${tempUnit(this.hass)}`
-              : "--"}
-          </div>
-          ${this._countdown
-            ? html`<div class="hero-target-countdown">
-                ${localize("hero.remaining", l, { time: this._countdown })}
-              </div>`
-            : nothing}
+    const showRange =
+      (this.config?.climate_mode ?? "auto") === "auto" &&
+      live.heat_target != null &&
+      live.cool_target != null &&
+      live.heat_target !== live.cool_target;
+    if (targetTemp == null && !showRange && !ov) return nothing;
+    const display = showRange
+      ? `${formatTemp(live.heat_target!, this.hass)} – ${formatTemp(live.cool_target!, this.hass)}${tempUnit(this.hass)}`
+      : targetTemp != null
+        ? `${formatTemp(targetTemp, this.hass)}${tempUnit(this.hass)}`
+        : "--";
+    const overrideLabel = ov
+      ? localize(
+          ov.type === "boost"
+            ? "override.comfort"
+            : ov.type === "eco"
+              ? "override.eco"
+              : "override.custom",
+          l,
+        )
+      : "";
+    return html`
+      <div class="hero-target">
+        <div class="hero-target-label ${ov ? `override-${ov.type}` : ""}">
+          ${localize("hero.target", l)}
         </div>
-      `;
-    }
-
-    if (targetTemp !== null || (live.heat_target != null && live.cool_target != null)) {
-      const climateMode = this.config?.climate_mode ?? "auto";
-      const showRange =
-        climateMode === "auto" &&
-        live.heat_target != null &&
-        live.cool_target != null &&
-        live.heat_target !== live.cool_target;
-
-      const display = showRange
-        ? html`${formatTemp(live.heat_target!, this.hass)} –
-          ${formatTemp(live.cool_target!, this.hass)}${tempUnit(this.hass)}`
-        : html`${formatTemp((targetTemp ?? live.heat_target)!, this.hass)}${tempUnit(this.hass)}`;
-
-      return html`
-        <div class="hero-target">
-          <div class="hero-target-label">${localize("hero.target", l)}</div>
-          <div class="hero-target-value">${display}</div>
-        </div>
-      `;
-    }
-
-    return nothing;
+        <div class="hero-target-value">${display}</div>
+        ${live.effective_control_target === "perceived_temperature"
+          ? html`<div class="hero-target-countdown">${localize("hero.target_perceived", l)}</div>`
+          : nothing}
+        ${ov
+          ? html`<div class="hero-target-countdown">
+              ${overrideLabel} ${localize("hero.override", l)} ·
+              ${ov.until == null
+                ? localize("hero.permanent", l)
+                : localize("hero.remaining", l, { time: this._countdown })}
+            </div>`
+          : nothing}
+      </div>
+    `;
   }
 
   private _renderHeroMetric(metric: HeroMetricId, live: NonNullable<RoomConfig["live"]>) {
@@ -525,23 +523,6 @@ export class RsHeroStatus extends LitElement {
         return html`<div class="hero-metric warning">
           <ha-icon icon="mdi:rocket-launch-outline"></ha-icon>
           ${localize("hero.rapid_recovery_active", l)}
-        </div>`;
-      case "deviceSetpoint":
-        return html`<div class="hero-metric">
-          <ha-icon icon=${live.mode === "cooling" ? "mdi:snowflake" : "mdi:radiator"}></ha-icon>
-          ${localize("hero.device_setpoint", l, {
-            value: formatTemp(live.device_setpoint!, this.hass),
-            unit: tempUnit(this.hass),
-          })}
-        </div>`;
-      case "activeHeatSources":
-        return html`<div class="hero-metric">
-          <ha-icon icon="mdi:swap-horizontal"></ha-icon>
-          ${live.active_heat_sources === "primary"
-            ? localize("hero.heat_source_primary", l)
-            : live.active_heat_sources === "secondary"
-              ? localize("hero.heat_source_secondary", l)
-              : localize("hero.heat_source_both", l)}
         </div>`;
       case "moldRisk":
         return html`<div
@@ -629,18 +610,10 @@ export class RsHeroStatus extends LitElement {
 
   override render() {
     const live = this.config?.live;
-    const mode = live?.mode;
-    const accentClass = live
-      ? mode === "heating"
-        ? "hero-accent-heating"
-        : mode === "cooling"
-          ? "hero-accent-cooling"
-          : "hero-accent-idle"
-      : "hero-accent-none";
+    const mode = getObservedMode(live);
 
     return html`
-      <ha-card>
-        <div class="hero-accent ${accentClass}"></div>
+      <ha-card data-activity=${mode ?? "unknown"}>
         <div class="hero-header">
           ${this._editingName
             ? html`
@@ -680,22 +653,21 @@ export class RsHeroStatus extends LitElement {
                 <div class="hero-status-pills">
                   ${live
                     ? html`
-                        <span class="mode-pill ${getModeClass(live.mode)}">
+                        <span class="mode-pill ${getModeClass(mode)}">
                           <span class="mode-dot"></span>
-                          ${live.observation_status === "unknown"
+                          ${mode === null
                             ? localize("hero.output_unknown", this.hass?.language ?? "en")
-                            : formatMode(
-                                live.mode,
-                                this.hass?.language ?? "en",
-                              )}${live.heating_power > 0 && live.heating_power < 100
-                            ? html` ${live.heating_power}%`
-                            : nothing}
+                            : formatMode(mode, this.hass?.language ?? "en")}
                         </span>
                       `
                     : nothing}
                   ${this.config
                     ? html`
-                        <span class="control-mode-badge" @click=${this._toggleControlModeInfo}>
+                        <button
+                          class="control-mode-badge"
+                          aria-expanded=${this._controlModeInfoExpanded}
+                          @click=${this._toggleControlModeInfo}
+                        >
                           ${this.config.temperature_sensor
                             ? localize(
                                 "room.control_mode.full_control",
@@ -708,25 +680,13 @@ export class RsHeroStatus extends LitElement {
                               : ""}"
                             icon="mdi:information-outline"
                           ></ha-icon>
-                        </span>
+                        </button>
                       `
                     : nothing}
                 </div>
               `
             : nothing}
         </div>
-        ${!this.isOutdoor && live?.commanded_mode
-          ? html`<div class="control-mode-info-panel">
-              ${localize("hero.control_request", this.hass?.language ?? "en", {
-                mode: formatMode(live.commanded_mode, this.hass?.language ?? "en"),
-                power: String(live.requested_power ?? 0),
-              })}${live.dispatch_status === "failed"
-                ? html` · ${localize("hero.dispatch_failed", this.hass?.language ?? "en")}`
-                : live.dispatch_status === "deferred"
-                  ? html` · ${localize("hero.dispatch_deferred", this.hass?.language ?? "en")}`
-                  : nothing}
-            </div>`
-          : nothing}
         ${this._controlModeInfoExpanded && this.config && !this.isOutdoor
           ? html`
               <div class="control-mode-info-panel">
@@ -746,14 +706,24 @@ export class RsHeroStatus extends LitElement {
                 : nothing}
               <div class="hero-temps">
                 <div class="hero-current-wrap">
-                  ${live.current_temp !== null
-                    ? html`
-                        <span class="hero-current"
-                          >${formatTemp(live.current_temp, this.hass)}</span
-                        >
-                        <span class="hero-unit">${tempUnit(this.hass)}</span>
-                      `
-                    : html`<span class="hero-current" style="opacity: 0.3">--</span>`}
+                  <div class="hero-target-label">
+                    ${localize(
+                      isTemperatureCached(live)
+                        ? "room.temperature_cached"
+                        : "room.temperature_panel.current",
+                      this.hass.language,
+                    )}
+                  </div>
+                  <div class="hero-current-value">
+                    ${live.current_temp !== null
+                      ? html`
+                          <span class="hero-current"
+                            >${formatTemp(live.current_temp, this.hass)}</span
+                          >
+                          <span class="hero-unit">${tempUnit(this.hass)}</span>
+                        `
+                      : html`<span class="hero-current" style="opacity: 0.3">--</span>`}
+                  </div>
                 </div>
                 ${!this.isOutdoor ? this._renderTargetSection(live) : nothing}
               </div>

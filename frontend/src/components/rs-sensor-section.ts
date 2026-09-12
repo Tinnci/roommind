@@ -1,7 +1,7 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { HomeAssistant, HassArea, SensorFusionStatus } from "../types";
-import { getEntitiesForArea } from "../utils/room-state";
+import { getEntitiesForArea, isRoomMindEntity } from "../utils/room-state";
 import { localize } from "../utils/localize";
 import { openEntityInfo } from "../utils/events";
 import { tempUnit } from "../utils/temperature";
@@ -791,10 +791,7 @@ export class RsSensorSection extends LitElement {
       this.area.area_id,
       this.hass?.entities,
       this.hass?.devices,
-    ).filter((e) => {
-      const idAfterDot = e.entity_id.substring(e.entity_id.indexOf(".") + 1);
-      return !idAfterDot.startsWith("roommind_");
-    });
+    ).filter((entity) => !isRoomMindEntity(entity.entity_id, this.hass.entities));
 
     const areaTempSensors = this.hass?.states
       ? allAreaEntities.filter(
@@ -1429,8 +1426,7 @@ export class RsSensorSection extends LitElement {
 
   private _globalEntityFilter = (entity: { entity_id: string }): boolean => {
     const id = entity.entity_id;
-    const idAfterDot = id.substring(id.indexOf(".") + 1);
-    if (idAfterDot.startsWith("roommind_")) return false;
+    if (isRoomMindEntity(id, this.hass.entities)) return false;
     if (this.temperatureSensor === id) return false;
     if (this.temperatureSensors.has(id)) return false;
     if (this.humiditySensor === id) return false;

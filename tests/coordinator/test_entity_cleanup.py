@@ -33,6 +33,10 @@ class TestCoverageGaps:
         entry_valid_mode.unique_id = f"{DOMAIN}_living_room_mode"
         entry_valid_mode.entity_id = "sensor.roommind_living_room_mode"
 
+        entry_comfort = MagicMock()
+        entry_comfort.unique_id = f"{DOMAIN}_living_room_comfort"
+        entry_comfort.entity_id = "climate.roommind_living_room_comfort"
+
         entry_valid_cover_auto = MagicMock()
         entry_valid_cover_auto.unique_id = f"{DOMAIN}_living_room_cover_auto"
         entry_valid_cover_auto.entity_id = "switch.roommind_living_room_cover_auto"
@@ -60,6 +64,7 @@ class TestCoverageGaps:
         mock_registry.entities.values.return_value = [
             entry_valid_temp,
             entry_valid_mode,
+            entry_comfort,
             entry_valid_cover_auto,
             entry_valid_cover_paused,
             entry_orphaned_room,

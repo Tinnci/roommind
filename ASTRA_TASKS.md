@@ -85,13 +85,24 @@ Astra 在每一次演进迭代中，可自由权衡并交叉推进以下核心�
   - **验证 / Validation**：2,257 Python tests、61 Bun tests、277 TCL driver tests（含固定 cryptography 版本）通过；Ruff、mypy、tsgo typecheck、build、ESLint、驱动 compileall 与文档链接检查通过。
   - **边界 / Limits**：18 个模拟周期仅下发 3 次调温，依赖模拟立即反馈；该结果不代表家庭噪声、舒适度或节能实测。未部署或下发实机动作，节律参数仍待家庭验证。详见[空调设定规划与安静控制](docs/ac-setpoint-planning.md)。
 
-### 阶段三：人机心智模型、交互体验与实体边界的深层重塑 (Phase 3: Human Mental Model, UI & Entity Surface Inquiries)
-- [ ] **Phase 3: 人机认知对齐、前端体验重构与 Home Assistant 实体契约的本质演进**
+### 阶段三：人机心智模型、交互体验与实体边界的深层重塑 (Phase 3: Human Mental Model, UI & Entity Surface Inquiries) [COMPLETED]
+- [x] **Phase 3: 人机认知对齐、前端体验重构与 Home Assistant 实体契约的本质演进**（2026-09-12）
+  - **日常心智 / Daily controls**：顶部与房间卡片聚焦观测室温、体感依据和生效舒适区间；设备计划、报告、静音附件与派发/确认结果按需展开。未知反馈不再归为待机或稳定，缓存温度及其体感推算不冒充当前测量；编辑状态与生效快照分离。
+  - **实体边界 / Entity surface**：新增 `climate.roommind_{area_id}_comfort`，提供 `schedule` / `hold`，仅表达自动调节与舒适目标；观测活动独立于指令确认。旧 `_override` ID 与 OFF 恢复策略语义保留，新注册的旧入口默认禁用。房间设备与压缩机组按实体注册表归属排除重命名后的自引用。
+  - **证据与快照 / Evidence and snapshots**：房间接口补齐逐操作证据与独立设备观测，嵌套响应脱离内部状态；迟到反馈按 context ID 发布替换快照，覆盖跨房间等待与先到证据，不改变物理观测或下一控制周期计时。
+  - **交互质感 / Interaction**：统一柔和明暗表面、观测驱动的冷暖微渐变与留白；减少重复指标和配置高亮，提供键盘焦点、44px 调温触控目标及 reduced-motion 支持。
+  - **验证 / Validation**：2,287 Python tests、75 Bun tests 通过；Ruff、mypy、tsgo typecheck、build、ESLint、桌面/移动及明暗主题 browser preview regression、文档链接检查通过，含摄氏/华氏、未知活动、迟到确认与覆盖更新回归。
+  - **边界 / Limits**：本地测试与预览交付，未部署、重启或下发实机操作；不据此推断家庭舒适度、噪声或节能改善。详见[房间舒适度与设备反馈](docs/room-comfort-and-feedback.md)。
   - **开放性核心质询与探索空间（Open Questions for Astra to Explore & Resolve）**：
     - **关于人机心智模型与前端交互（The Human Mental Model & UI Inquiries）**：
       - 当人类在温控界面上操作时，他们直觉上是在设定“期望房间达到的舒适度”，还是在微观操控“空调机身的硬件旋钮”？现有的 Home Assistant 界面将这两者混杂在一起时，给真实居住者带来了怎样的心智负担与失控感？
       - 界面应该如何组织视觉与信息层级，才能让用户一眼洞悉空间的真实舒适事实，同时在需要时又能理解系统背后的执行意图与自适应状态，而不是面对互相矛盾的温度数字产生困惑？
       - 对于日常多房间高频温控与复杂高级配置，前端卡片和详情面板应如何取舍与演进，才能既极度轻盈流畅，又让用户获得笃定的掌控感与信任感？
+    - **关于产品美学与人机交互设计深度（Product Aesthetics, Calm Technology & Tactile HCI Inquiries）**：
+      - **现代高端空间产品美学（Modern Spatial & Appliance Aesthetics）**：如何彻底摆脱传统工控仪表盘与 Home Assistant 原生堆砌卡片的粗糙生硬感？若借鉴高端独立智能硬件（如 Braun 的功能美学、Nest 的温润极简、Dyson 与 B&O 的光影秩序），RoomMind 的界面应具备怎样的呼吸感、留白与精致克制？
+      - **排版、光影与自适应质感（Typography, Depth & Visual Atmosphere）**：在暗黑/明亮自适应主题、冷暖气候氛围微渐变、精致微质感（Subtle Glassmorphism / Depth / Elevation）与无衬线字体层级上，如何运用现代 Web 标准（Lit + CSS 设计系统）呈现高级视觉秩序，传达平静科技（Calm Technology）的从容，而非冰冷的数据轰炸？
+      - **操作触感与流畅微交互（Tactile Interaction & Fluid Motion）**：当居住者在调整温度目标、切换回退或快速滑动多房间状态时，弹簧动画（Spring Physics）、平滑过渡（View Transitions）与即时触控回馈应当如何精巧协作，让指尖的交互充满确定、温润而高级的物理质感？
+      - **自治透明度与美学呈现的共生（Aesthetic Transparency without Overwhelm）**：系统在幕后的自适应动态超调、风向静音抑制与物理观测事实，如何在视觉界面中以如水般自然、优雅轻巧的方式呈现，让用户在“无需关注细节的安心”与“想要洞悉全局的掌控”之间自由游刃？
     - **关于 Home Assistant 实体体系与契约边界（The Entity Architecture & Boundary Inquiries）**：
       - 在整个自适应空间气候体系中，Home Assistant 实体究竟应该扮演什么角色？哪些实体是人类日常交互的简洁抓手？哪些是系统自治时的幕后状态？哪些是用于验证系统健康的物理事实？
       - 上层空间气候大脑（`RoomMind`）与底层硬件通信驱动（`ha-tcl-udp-ac`）各自暴露给 Home Assistant 的实体表面，应该如何清晰划分职责与抽象层级，才既契合 HA 原生生态体验，又杜绝物理事实与控制意图的混淆？

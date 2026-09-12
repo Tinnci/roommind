@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "RoomMind",
-        "description": "Set up RoomMind to manage room climate. Rooms are configured in the RoomMind panel after setup."
+        "description": "Configure RoomMind to manage room climate. Configure rooms in the RoomMind panel after setup."
       }
     },
     "abort": {
@@ -18,6 +18,48 @@
           "confirm_restart": {
             "title": "Restart Home Assistant?",
             "description": "RoomMind {version} has been installed but Home Assistant is still running an older version. Restart to complete the update."
+          }
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "target_temperature": {
+        "name": "{room} target temperature"
+      },
+      "mode": {
+        "name": "{room} observed activity"
+      }
+    },
+    "binary_sensor": {
+      "cover_paused": {
+        "name": "{room} cover paused"
+      }
+    },
+    "switch": {
+      "cover_auto": {
+        "name": "{room} cover auto"
+      },
+      "climate_control": {
+        "name": "{room} climate control"
+      },
+      "vacation_mode": {
+        "name": "Vacation mode"
+      }
+    },
+    "climate": {
+      "override": {
+        "name": "{room} override"
+      },
+      "comfort": {
+        "name": "{room} comfort",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "schedule": "Follow room policy",
+              "hold": "Hold temperature"
+            }
           }
         }
       }

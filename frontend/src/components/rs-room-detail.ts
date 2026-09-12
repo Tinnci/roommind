@@ -12,13 +12,13 @@ import type {
 } from "../types";
 import "./rs-hero-status";
 import "./rs-temperature-control-panel";
+import "./rs-control-details";
 import "./rs-schedule-settings";
 import "./rs-section-card";
 import "./rs-room-configuration-hub";
 import "./rs-room-edit-dialog-router";
 import { localize } from "../utils/localize";
 import { fireSaveStatus } from "../utils/events";
-import { formatTemp, tempUnit } from "../utils/temperature";
 import { DEFAULT_SETBACK_OFFSET } from "../utils/constants";
 import { roommindThemeStyles } from "../styles/theme-styles";
 import {
@@ -39,7 +39,6 @@ import {
   type SensorConfigChangeKey,
 } from "../utils/room-config-draft";
 import type { RoomEditSection } from "../utils/room-edit-dialog";
-import type { RsTemperatureControlPanel } from "./rs-temperature-control-panel";
 
 @customElement("rs-room-detail")
 export class RsRoomDetail extends LitElement {
@@ -104,57 +103,6 @@ export class RsRoomDetail extends LitElement {
         pointer-events: auto;
       }
 
-      .status-summary {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        gap: 8px;
-        padding: 0;
-      }
-
-      .status-item {
-        display: grid;
-        grid-template-columns: 24px minmax(0, 1fr);
-        gap: 8px;
-        align-items: center;
-        min-width: 0;
-        min-height: 48px;
-        padding: 8px;
-        border-radius: var(--roommind-radius-control, 8px);
-        border: var(--roommind-border-faint);
-        background: var(--roommind-detail-tile);
-      }
-
-      .status-item ha-icon {
-        --mdc-icon-size: 20px;
-        color: var(--secondary-text-color);
-      }
-
-      .status-copy {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-        min-width: 0;
-      }
-
-      .status-label {
-        color: var(--secondary-text-color);
-        font-size: 11px;
-        line-height: 1.2;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      .status-value {
-        color: var(--primary-text-color);
-        font-size: 13px;
-        font-weight: 600;
-        line-height: 1.3;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
       @media (min-width: 1900px) {
         .detail-grid {
           grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -162,19 +110,9 @@ export class RsRoomDetail extends LitElement {
       }
 
       @media (max-width: 760px) {
-        .status-summary {
-          grid-template-columns: 1fr;
-        }
-
         .detail-grid {
           grid-template-columns: 1fr;
           gap: 12px;
-        }
-      }
-
-      @media (max-width: 420px) {
-        .status-summary {
-          display: none;
         }
       }
 
@@ -621,32 +559,6 @@ export class RsRoomDetail extends LitElement {
     this._editing = null;
   };
 
-  /** Expose effective override for hero-status via the override sub-component. */
-  private _getEffectiveOverride(): {
-    active: boolean;
-    type: import("../types").OverrideType | null;
-    temp: number | null;
-    until: number | null;
-  } {
-    const overrideEl = this.shadowRoot?.querySelector(
-      "rs-temperature-control-panel",
-    ) as RsTemperatureControlPanel | null;
-    if (overrideEl) {
-      return overrideEl.getEffectiveOverride();
-    }
-    // Fallback before sub-component mounts
-    const live = this.config?.live;
-    if (live?.override_active && live.override_type) {
-      return {
-        active: true,
-        type: live.override_type,
-        temp: live.override_temp,
-        until: live.override_until,
-      };
-    }
-    return { active: false, type: null, temp: null, until: null };
-  }
-
   private _configurationMetrics() {
     return {
       deviceCount: this._devices.length,
@@ -686,12 +598,17 @@ export class RsRoomDetail extends LitElement {
           .area=${this.area}
           .config=${this.config}
           .isOutdoor=${this._isOutdoor}
-          .overrideInfo=${this._getEffectiveOverride()}
           .climateControlActive=${this.climateControlActive && this._climateControlEnabled}
           @display-name-changed=${this._onDisplayNameChanged}
         ></rs-hero-status>
-        ${!this._isOutdoor ? this._renderStatusSummary() : nothing}
         ${!this._isOutdoor ? this._renderTemperatureControlPanel() : nothing}
+        ${!this._isOutdoor
+          ? html`<rs-control-details
+              .hass=${this.hass}
+              .config=${this.config}
+              .controlEnabled=${this.climateControlActive && this._climateControlEnabled}
+            ></rs-control-details>`
+          : nothing}
 
         <div class="detail-grid">
           ${layout.primarySections.map((section) => this._renderPrimarySection(section))}
@@ -757,48 +674,9 @@ export class RsRoomDetail extends LitElement {
     `;
   }
 
-  private _renderStatusSummary() {
-    const live = this.config?.live;
-    const unit = tempUnit(this.hass);
-    const sensorValue =
-      this._entityName(this._selectedTempSensor) ||
-      localize("room.status.not_set", this.hass.language);
-    const setpointValue =
-      live?.device_setpoint != null
-        ? `${formatTemp(live.device_setpoint, this.hass)}${unit}`
-        : localize("room.status.not_set", this.hass.language);
-
-    return html`
-      <div class="status-summary">
-        ${this._renderStatusItem(
-          "mdi:thermometer",
-          localize("room.status.primary_sensor", this.hass.language),
-          sensorValue,
-        )}
-        ${this._renderStatusItem(
-          "mdi:tune-vertical",
-          localize("room.status.device_setpoint", this.hass.language),
-          setpointValue,
-        )}
-      </div>
-    `;
-  }
-
-  private _renderStatusItem(icon: string, label: string, value: string) {
-    return html`
-      <div class="status-item">
-        <ha-icon icon=${icon}></ha-icon>
-        <span class="status-copy">
-          <span class="status-label">${label}</span>
-          <span class="status-value" title=${value}>${value}</span>
-        </span>
-      </div>
-    `;
-  }
-
   private _entityName(entityId: string): string {
     if (!entityId) return "";
-    return (this.hass.states[entityId]?.attributes?.friendly_name as string) || entityId;
+    return String(this.hass.states[entityId]?.attributes.friendly_name || entityId);
   }
 
   private _renderPrimarySection(section: PrimaryRoomSection) {

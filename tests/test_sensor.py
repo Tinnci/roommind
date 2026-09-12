@@ -130,18 +130,18 @@ def test_mode_sensor_value():
     assert sensor.native_value == "heating"
 
 
-def test_mode_sensor_defaults_to_idle():
-    """Mode sensor defaults to 'idle' when key is missing."""
+def test_mode_sensor_missing_feedback_stays_unknown():
+    """Missing feedback cannot establish physical idle."""
     coordinator = _make_coordinator({"room_a": {"target_temp": 21.0}})
     sensor = RoomMindModeSensor(coordinator, "room_a")
-    assert sensor.native_value == "idle"
+    assert sensor.native_value is None
 
 
 def test_mode_sensor_missing_room():
-    """Mode sensor returns 'idle' when room is missing."""
+    """Mode sensor remains unknown when room is missing."""
     coordinator = _make_coordinator({})
     sensor = RoomMindModeSensor(coordinator, "room_a")
-    assert sensor.native_value == "idle"
+    assert sensor.native_value is None
 
 
 def test_sensor_unique_id():

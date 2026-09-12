@@ -1,7 +1,7 @@
 import { LitElement, html, css, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { HomeAssistant, HassArea, DeviceConfig, DeviceType } from "../types";
-import { getEntitiesForArea } from "../utils/room-state";
+import { getEntitiesForArea, isRoomMindEntity } from "../utils/room-state";
 import { localize } from "../utils/localize";
 import { getSelectValue, openEntityInfo } from "../utils/events";
 import { tempUnit, toDisplayDelta, toCelsiusDelta } from "../utils/temperature";
@@ -452,10 +452,7 @@ export class RsDeviceSection extends LitElement {
       this.area.area_id,
       this.hass?.entities,
       this.hass?.devices,
-    ).filter((e) => {
-      const idAfterDot = e.entity_id.substring(e.entity_id.indexOf(".") + 1);
-      return !idAfterDot.startsWith("roommind_");
-    });
+    ).filter((entity) => !isRoomMindEntity(entity.entity_id, this.hass.entities));
 
     const areaClimateEntities = allAreaEntities.filter((e) => e.entity_id.startsWith("climate."));
     const areaClimateIds = new Set(areaClimateEntities.map((e) => e.entity_id));
@@ -1011,8 +1008,7 @@ export class RsDeviceSection extends LitElement {
 
   private _entityFilter = (entity: { entity_id: string }): boolean => {
     const id = entity.entity_id;
-    const idAfterDot = id.substring(id.indexOf(".") + 1);
-    if (idAfterDot.startsWith("roommind_")) return false;
+    if (isRoomMindEntity(id, this.hass.entities)) return false;
     if (this.devices.some((d) => d.entity_id === id)) return false;
     return id.startsWith("climate.");
   };
@@ -1022,6 +1018,7 @@ export class RsDeviceSection extends LitElement {
     const picker = e.target as HTMLElement & { value: string };
     picker.value = "";
     if (!entityId || !entityId.startsWith("climate.")) return;
+    if (isRoomMindEntity(entityId, this.hass.entities)) return;
     if (this.devices.some((d) => d.entity_id === entityId)) return;
     const detected = this._detectClimateType(entityId);
     const type: DeviceType = detected === "thermostat" ? "trv" : "ac";

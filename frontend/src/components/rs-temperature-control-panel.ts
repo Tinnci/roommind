@@ -48,15 +48,15 @@ export class RsTemperatureControlPanel extends LitElement {
         overflow: hidden;
         border-radius: var(--roommind-radius-card, 8px);
         border: var(--roommind-border-subtle);
-        background: var(--roommind-panel-surface);
+        background: var(--roommind-surface);
         color: var(--primary-text-color);
         box-shadow: var(--roommind-shadow-soft);
       }
 
       .control-card {
         display: grid;
-        gap: 16px;
-        padding: 16px;
+        gap: 24px;
+        padding: 24px;
       }
 
       .control-card.paused {
@@ -124,45 +124,44 @@ export class RsTemperatureControlPanel extends LitElement {
       .control-grid {
         display: grid;
         grid-template-columns: minmax(260px, 1.35fr) minmax(280px, 1fr);
-        gap: 14px;
+        gap: 28px;
         align-items: stretch;
       }
 
       .target-zone,
       .side-zone {
         min-width: 0;
-        border: var(--roommind-border-subtle);
-        border-radius: var(--roommind-radius-control, 8px);
-        background: var(--roommind-surface);
       }
 
       .target-zone {
         display: grid;
-        gap: 14px;
-        padding: 14px;
+        gap: 16px;
       }
 
       .side-zone {
         display: flex;
         flex-direction: column;
-        gap: 14px;
-        padding: 12px;
+        gap: 24px;
+        padding-left: 28px;
+        border-left: var(--roommind-border-faint);
       }
 
       .section-label {
         color: var(--secondary-text-color);
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0;
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 0.02em;
         line-height: 1.2;
-        text-transform: uppercase;
       }
 
       .target-editor {
         display: grid;
-        grid-template-columns: 42px minmax(140px, 1fr) 42px;
-        gap: 8px;
+        grid-template-columns: 44px minmax(140px, 1fr) 44px;
+        gap: 12px;
         align-items: center;
+        width: 100%;
+        max-width: 340px;
+        justify-self: center;
       }
 
       .step-button,
@@ -181,17 +180,29 @@ export class RsTemperatureControlPanel extends LitElement {
         color: var(--primary-text-color);
         font: inherit;
         cursor: pointer;
+        touch-action: manipulation;
         transition:
-          background 0.15s ease,
-          border-color 0.15s ease,
-          color 0.15s ease,
-          opacity 0.15s ease;
+          background var(--roommind-motion-duration) ease,
+          border-color var(--roommind-motion-duration) ease,
+          transform var(--roommind-motion-duration) var(--roommind-motion-easing);
+      }
+
+      button:focus-visible,
+      .target-input:focus-within {
+        outline: 2px solid var(--primary-color);
+        outline-offset: 3px;
+      }
+
+      button:not(:disabled):active {
+        transform: scale(0.97);
       }
 
       .step-button {
-        width: 42px;
-        height: 42px;
+        width: 44px;
+        height: 44px;
         padding: 0;
+        border-radius: 50%;
+        font-size: 24px;
       }
 
       .step-button ha-icon,
@@ -207,9 +218,9 @@ export class RsTemperatureControlPanel extends LitElement {
         grid-template-columns: minmax(0, 1fr) auto;
         align-items: baseline;
         width: 100%;
-        min-height: 42px;
+        min-height: 56px;
         box-sizing: border-box;
-        border: var(--roommind-border-subtle);
+        border: 1px solid transparent;
         border-radius: var(--roommind-radius-control, 8px);
         background: var(--roommind-surface);
         padding: 0 12px;
@@ -218,15 +229,16 @@ export class RsTemperatureControlPanel extends LitElement {
       .target-native {
         width: 100%;
         min-width: 0;
-        height: 42px;
+        height: 56px;
         box-sizing: border-box;
         border: none;
         outline: none;
         background: transparent;
         color: var(--primary-text-color);
         font: inherit;
-        font-size: 28px;
-        font-weight: 650;
+        font-size: 40px;
+        font-weight: 450;
+        letter-spacing: -0.03em;
         line-height: 1;
         text-align: center;
         font-variant-numeric: tabular-nums;
@@ -268,6 +280,7 @@ export class RsTemperatureControlPanel extends LitElement {
 
       .target-actions {
         display: flex;
+        justify-content: center;
         flex-wrap: wrap;
         gap: 8px;
       }
@@ -300,8 +313,8 @@ export class RsTemperatureControlPanel extends LitElement {
       }
 
       .action-button {
-        min-height: 38px;
-        padding: 0 12px;
+        min-height: 44px;
+        padding: 8px 14px;
         font-size: 13px;
         font-weight: 650;
       }
@@ -310,82 +323,6 @@ export class RsTemperatureControlPanel extends LitElement {
         border-color: var(--roommind-primary-border);
         background: var(--roommind-primary-strong);
         color: var(--primary-color);
-      }
-
-      .insight-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 8px;
-      }
-
-      .insight {
-        display: grid;
-        grid-template-columns: 28px minmax(0, 1fr);
-        align-items: center;
-        gap: 8px;
-        min-width: 0;
-        padding: 9px 10px;
-        border-radius: var(--roommind-radius-control, 8px);
-        background: var(--roommind-surface);
-        border: var(--roommind-border-faint);
-      }
-
-      .insight.warning {
-        border-color: var(--roommind-warning-border);
-        background: var(--roommind-warning-tint);
-      }
-
-      .insight.critical {
-        border-color: var(--roommind-error-border);
-        background: var(--roommind-error-tint);
-      }
-
-      .insight-icon {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 28px;
-        height: 28px;
-        border-radius: var(--roommind-radius-small, 4px);
-        background: var(--roommind-primary-subtle);
-        color: var(--secondary-text-color);
-      }
-
-      .insight.warning .insight-icon {
-        background: var(--roommind-warning-tint);
-        color: var(--warning-color, #ff9800);
-      }
-
-      .insight.critical .insight-icon {
-        background: var(--roommind-error-tint);
-        color: var(--error-color, #f44336);
-      }
-
-      .insight-icon ha-icon {
-        --mdc-icon-size: 17px;
-      }
-
-      .insight-label {
-        display: block;
-        color: var(--secondary-text-color);
-        font-size: 11px;
-        line-height: 1.2;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-
-      .insight-value {
-        display: block;
-        margin-top: 3px;
-        color: var(--primary-text-color);
-        font-size: 14px;
-        font-weight: 650;
-        font-variant-numeric: tabular-nums;
-        line-height: 1.25;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
       }
 
       .mode-row,
@@ -404,7 +341,7 @@ export class RsTemperatureControlPanel extends LitElement {
       .mode-button,
       .duration-button,
       .preset-button {
-        min-height: 38px;
+        min-height: 44px;
         padding: 0 9px;
         font-size: 12.5px;
         font-weight: 650;
@@ -448,12 +385,18 @@ export class RsTemperatureControlPanel extends LitElement {
         .control-grid {
           grid-template-columns: 1fr;
         }
+
+        .side-zone {
+          padding: 20px 0 0;
+          border-left: none;
+          border-top: var(--roommind-border-faint);
+        }
       }
 
       @media (max-width: 520px) {
         .control-card {
-          padding: 12px;
-          gap: 12px;
+          padding: 20px;
+          gap: 20px;
         }
 
         .control-header {
@@ -465,16 +408,20 @@ export class RsTemperatureControlPanel extends LitElement {
         }
 
         .target-editor {
-          grid-template-columns: 40px minmax(0, 1fr) 40px;
+          grid-template-columns: 44px minmax(0, 1fr) 44px;
         }
 
         .target-native {
-          font-size: 24px;
+          font-size: 36px;
         }
 
-        .insight-grid,
-        .mode-buttons {
-          grid-template-columns: 1fr;
+        .mode-button {
+          white-space: normal;
+          padding: 8px 6px;
+        }
+
+        .mode-button ha-icon {
+          display: none;
         }
 
         .duration-buttons {
@@ -483,6 +430,12 @@ export class RsTemperatureControlPanel extends LitElement {
 
         .preset-buttons {
           grid-template-columns: 1fr 1fr;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        button:not(:disabled):active {
+          transform: none;
         }
       }
     `,
@@ -570,7 +523,7 @@ export class RsTemperatureControlPanel extends LitElement {
                   ?disabled=${disabled}
                   @click=${() => this._nudgeTarget(-1)}
                 >
-                  <ha-icon icon="mdi:minus"></ha-icon>
+                  <span aria-hidden="true">−</span>
                 </button>
                 <label class="target-input">
                   <input
@@ -595,7 +548,7 @@ export class RsTemperatureControlPanel extends LitElement {
                   ?disabled=${disabled}
                   @click=${() => this._nudgeTarget(1)}
                 >
-                  <ha-icon icon="mdi:plus"></ha-icon>
+                  <span aria-hidden="true">+</span>
                 </button>
               </div>
               <div class="target-actions">
@@ -651,33 +604,6 @@ export class RsTemperatureControlPanel extends LitElement {
             </section>
 
             <section class="side-zone">
-              <span class="section-label"
-                >${localize("room.temperature_panel.dynamics", this.language)}</span
-              >
-              <div class="insight-grid">
-                ${this._renderInsight(
-                  "room.temperature_panel.current",
-                  this._formatTemp(this._currentTemp()),
-                  "mdi:thermometer",
-                )}
-                ${this._renderInsight(
-                  "room.temperature_panel.humidity",
-                  this._humidityValue(),
-                  "mdi:water-percent",
-                  this._humidityTone(),
-                )}
-                ${this._renderInsight(
-                  "room.temperature_panel.model",
-                  this._modelValue(),
-                  "mdi:brain",
-                )}
-                ${this._renderInsight(
-                  "room.temperature_panel.airflow",
-                  this._airflowValue(),
-                  "mdi:fan",
-                )}
-              </div>
-
               <div class="mode-row">
                 <span class="section-label"
                   >${localize("room.temperature_panel.mode", this.language)}</span
@@ -705,24 +631,13 @@ export class RsTemperatureControlPanel extends LitElement {
     `;
   }
 
-  private _renderInsight(labelKey: TranslationKey, value: string, icon: string, tone = "") {
-    return html`
-      <span class="insight ${tone}">
-        <span class="insight-icon"><ha-icon icon=${icon}></ha-icon></span>
-        <span class="insight-copy">
-          <span class="insight-label">${localize(labelKey, this.language)}</span>
-          <span class="insight-value" title=${value}>${value}</span>
-        </span>
-      </span>
-    `;
-  }
-
   private _renderDurationButton(hours: number, labelKey: TranslationKey, disabled: boolean) {
     return html`
       <button
         class="duration-button"
         type="button"
         ?active=${this._durationHours === hours}
+        aria-pressed=${this._durationHours === hours}
         ?disabled=${disabled}
         @click=${() => {
           this._durationHours = hours;
@@ -740,6 +655,7 @@ export class RsTemperatureControlPanel extends LitElement {
         class="mode-button"
         type="button"
         ?active=${this.climateMode === mode}
+        aria-pressed=${this.climateMode === mode}
         ?disabled=${disabled}
         @click=${() => this._onModeClick(mode)}
       >
@@ -761,6 +677,7 @@ export class RsTemperatureControlPanel extends LitElement {
         class="preset-button ${type}"
         type="button"
         ?active=${ov.active && ov.type === type}
+        aria-pressed=${ov.active && ov.type === type}
         ?disabled=${disabled}
         @click=${() => this._onPreset(type)}
       >
@@ -807,48 +724,6 @@ export class RsTemperatureControlPanel extends LitElement {
       return live?.heat_target ?? live?.target_temp ?? this.comfortHeat;
     }
     return live?.target_temp ?? live?.heat_target ?? this.comfortHeat;
-  }
-
-  private _currentTemp(): number | null {
-    const live = this.config?.live;
-    if (!live) return null;
-    if (live.effective_control_target === "perceived_temperature" && live.perceived_temp != null) {
-      return live.perceived_temp;
-    }
-    return live.current_temp;
-  }
-
-  private _humidityValue(): string {
-    const humidity = this.config?.live?.current_humidity;
-    return humidity == null
-      ? localize("room.status.not_set", this.language)
-      : `${Math.round(humidity)}%`;
-  }
-
-  private _humidityTone(): string {
-    const risk = this.config?.live?.mold_risk_level;
-    if (risk === "critical") return "critical";
-    if (risk === "warning" || this.config?.live?.mold_prevention_active) return "warning";
-    return "";
-  }
-
-  private _modelValue(): string {
-    const live = this.config?.live;
-    const label = live?.mpc_active
-      ? localize("card.mpc_active", this.language)
-      : localize("card.mpc_learning", this.language);
-    if (live?.confidence == null) return label;
-    return `${label} · ${Math.round(live.confidence * 100)}%`;
-  }
-
-  private _airflowValue(): string {
-    const live = this.config?.live;
-    if (!live || (!live.airflow_active && !live.airflow_ach)) {
-      return localize("room.temperature_panel.airflow_idle", this.language);
-    }
-    const ach = `${live.airflow_ach?.toFixed(1) ?? "0.0"} ${localize("airflow.ach", this.language)}`;
-    const plan = Math.round((live.airflow_plan_level ?? 0) * 100);
-    return plan > 0 ? `${ach} · ${plan}%` : ach;
   }
 
   private _overrideDurationText(until: number | null): string {

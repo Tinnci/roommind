@@ -5,8 +5,32 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from homeassistant.const import UnitOfTemperature
 
 from .conftest import SAMPLE_ROOM, _create_coordinator, _make_store_mock, make_mock_states_get
+
+
+def test_device_observations_use_celsius_and_preserve_assumed_state(hass, mock_config_entry):
+    hass.config.units.temperature_unit = UnitOfTemperature.FAHRENHEIT
+    hass.states.get = MagicMock(
+        side_effect=make_mock_states_get(
+            extra={
+                "climate.living_room": (
+                    "heat_cool",
+                    {"assumed_state": True, "target_temp_low": 68.0, "target_temp_high": 77.0},
+                )
+            }
+        )
+    )
+    coordinator = _create_coordinator(hass, mock_config_entry)
+    observation = coordinator._read_control_observation(SAMPLE_ROOM, SAMPLE_ROOM["area_id"])
+
+    device = coordinator._device_observation_status(observation)[0]
+
+    assert device["target_temp_low"] == 20.0
+    assert device["target_temp_high"] == 25.0
+    assert device["temperature"] is None
+    assert device["assumed_state"] is True
 
 
 async def test_quiet_accessories_precede_climate_and_share_its_observation(hass, mock_config_entry, monkeypatch):
@@ -36,6 +60,7 @@ async def test_quiet_accessories_precede_climate_and_share_its_observation(hass,
     async def dispatch(domain, service, data, **kwargs):
         if domain == "switch":
             states["climate.ac"][1]["min_temp"] = 25.0
+            states["climate.ac"][1]["temperature"] = 22.0
 
     hass.services.async_call = AsyncMock(side_effect=dispatch)
     coordinator = _create_coordinator(hass, mock_config_entry)
@@ -54,6 +79,8 @@ async def test_quiet_accessories_precede_climate_and_share_its_observation(hass,
     live = result["rooms"][room["area_id"]]
     assert live["cool_target"] == 24.0
     assert live["device_setpoint"] == 22.0
+    assert live["device_observations"][0]["temperature"] == 25.0
+    assert live["device_observations"][0]["hvac_mode"] == "cool"
 
 
 async def test_all_rooms_freeze_airflow_power_and_heat_inputs_before_dispatch(hass, mock_config_entry):

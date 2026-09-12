@@ -231,3 +231,5 @@ docs/plans/
 # Local Telemetry Data & Environment
 data/
 .env
+.playwright-cli/
+output/

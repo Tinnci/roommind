@@ -29,7 +29,7 @@
         "name": "{room} 目标温度"
       },
       "mode": {
-        "name": "{room} 模式"
+        "name": "{room} 运行反馈"
       }
     },
     "binary_sensor": {
@@ -51,6 +51,17 @@
     "climate": {
       "override": {
         "name": "{room} 手动覆盖"
+      },
+      "comfort": {
+        "name": "{room} 舒适目标",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "schedule": "跟随房间策略",
+              "hold": "保持温度"
+            }
+          }
+        }
       }
     }
   }

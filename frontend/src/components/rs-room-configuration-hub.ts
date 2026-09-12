@@ -126,18 +126,15 @@ export class RsRoomConfigurationHub extends LitElement {
       min-width: 0;
       min-height: 74px;
       box-sizing: border-box;
-      border: var(--roommind-border-subtle);
+      border: 1px solid transparent;
       border-radius: var(--roommind-radius-control, 8px);
       padding: 10px;
-      background: var(--roommind-surface);
+      background: var(--roommind-surface-subtle);
       color: var(--primary-text-color);
       font: inherit;
       text-align: left;
       cursor: pointer;
-    }
-
-    .config-group.complete {
-      border-color: var(--roommind-success-border);
+      transition: background var(--roommind-motion-duration) ease;
     }
 
     .config-group.partial {
@@ -148,10 +145,13 @@ export class RsRoomConfigurationHub extends LitElement {
       border-color: var(--roommind-error-border);
     }
 
-    .config-group:hover,
-    .config-group:focus-visible {
+    .config-group:hover {
       background: var(--roommind-surface-hover);
-      outline: none;
+    }
+
+    .config-group:focus-visible {
+      outline: 2px solid var(--primary-color);
+      outline-offset: 2px;
     }
 
     .config-row-static {
@@ -218,11 +218,6 @@ export class RsRoomConfigurationHub extends LitElement {
       line-height: 1.5;
       overflow-wrap: anywhere;
       white-space: normal;
-    }
-
-    .complete .config-status {
-      background: var(--roommind-success-tint);
-      color: var(--success-color, #4caf50);
     }
 
     .partial .config-status {

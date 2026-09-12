@@ -47,14 +47,16 @@ export interface RoomLiveData {
   requested_power?: number;
   dispatch_status?: "sent" | "skipped" | "deferred" | "failed" | "disabled" | "unknown";
   device_actuation_status?: DeviceActuationStatus[];
+  device_observations?: DeviceObservation[];
   current_temp: number | null;
+  current_temp_raw?: number | null;
   current_humidity: number | null;
   target_temp: number | null;
   heat_target: number | null;
   cool_target: number | null;
   mode: RoomMode;
   heating_power: number; // 0-100
-  device_setpoint: number | null; // Device target temp in Full Control mode
+  device_setpoint: number | null; // Planned device setting in Celsius, not feedback
   override_active: boolean;
   override_type: OverrideType | null;
   override_temp: number | null;
@@ -244,11 +246,22 @@ export interface DeviceActuationStatus {
   entity_id: string;
   service: string;
   desired: Record<string, unknown>;
+  temperature_unit?: string;
   dispatch: "sent" | "skipped" | "deferred" | "failed" | "unsupported";
   acceptance: "unknown" | "accepted" | "not_sent";
   application: "unknown" | "pending" | "confirmed" | "not_confirmed";
   context_id?: string | null;
   diagnostic?: string | null;
+}
+
+export interface DeviceObservation {
+  entity_id: string;
+  available: boolean;
+  assumed_state: boolean;
+  hvac_mode: string | null;
+  temperature: number | null;
+  target_temp_low: number | null;
+  target_temp_high: number | null;
 }
 
 export interface CouplingStatus {
