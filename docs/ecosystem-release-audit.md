@@ -1,6 +1,6 @@
 # HA ecosystem release audit / Home Assistant 生态发布审计
 
-Date / 日期：2026-09-13. Scope: release preparation and local verification.
+Date / 日期：2026-09-13. Scope: release preparation, local tests and GitHub CI.
 
 ## Inventory / 仓库盘点
 
@@ -80,6 +80,9 @@ already requires. This audit did not migrate household files.
 - **Verification:** zM1 releases use pytest, not a unittest run that misses pytest
   functions. TCL uses a locked uv environment and full repository Ruff rules; its
   failing boolean assertion and two missing lifecycle docstrings are corrected.
+  zM1's first Linux run exposed a pytest plugin-order failure in real loopback UDP
+  tests. An explicit socket fixture fixes both load orders; a regression confirms
+  that Home Assistant's external-connection restriction remains active.
 - **Automatic releases:** Edge TTS, Gateway and ASR reuse their CI before version
   mutation and tag publication. Commit/tag pushes are atomic and refuse a moved
   main branch. Gateway rebuilds its frontend from source during release using
@@ -127,7 +130,7 @@ below exclude subtests and repeated verification runs.
 |---|---:|---:|---|
 | RoomMind | 2,315 | 75 | 93.81% coverage, mypy, ESLint, Prettier, HACS ZIP |
 | TCL AC | 286 | — | Native unittest suite (283 tests), compileall, HACS ZIP |
-| zM1 | 59 | — | HACS ZIP; existing formatting drift corrected |
+| zM1 | 60 | — | HACS ZIP; both socket-plugin load orders; formatting corrected |
 | Edge TTS | 36 | — | Actual workflow ZIP command and version alignment |
 | LLM Gateway | 383 + 3 earcon-tool tests | 24 | Actual workflow ZIP command and version alignment |
 | Doubao ASR | 33 | — | Docker build, offline module imports and CLI help |
@@ -147,20 +150,37 @@ instead of GitHub transport. No validator rules were changed. This checks the
 new Gateway icon locally while preserving the distinction from repository-level
 checks against a published Git revision.
 
-Official HACS Action checks were also run against the then-published Git revisions:
-RoomMind, TCL and zM1 passed all 9 checks; Edge TTS passed 8 custom-repository checks.
-Gateway passed the same non-brand checks but the remote revision lacked its new
-local icon. The next push must rerun its enabled brand check against the new tree.
-An unpushed local commit cannot be read by GitHub's API; an old green run is not
-evidence for a new release.
+After pushing the preparation commits, all six repositories passed GitHub
+verification. All five integrations passed official Hassfest and HACS validation,
+including Gateway's restored brand check. Edge TTS and Gateway also passed the
+existing stable/beta Home Assistant configuration checks.
+
+| Repository | Verified source | Successful GitHub runs |
+|---|---|---|
+| RoomMind | `a7a7ad3` | [CI](https://github.com/Tinnci/roommind/actions/runs/34717145558) |
+| TCL AC | `63adedc` | [Test](https://github.com/Tinnci/ha-tcl-udp-ac/actions/runs/34717148542), [Lint](https://github.com/Tinnci/ha-tcl-udp-ac/actions/runs/34717148576), [Validate](https://github.com/Tinnci/ha-tcl-udp-ac/actions/runs/34717148570) |
+| zM1 | `90d3198` | [CI](https://github.com/Tinnci/zm1/actions/runs/34717804870) |
+| Edge TTS | `91e3584` | [Validate, manually dispatched](https://github.com/Tinnci/hass-edge-tts/actions/runs/34717500865) |
+| LLM Gateway | `da8eba5` | [Validate](https://github.com/Tinnci/llm-gateway/actions/runs/34717157743) |
+| Doubao ASR | `7dcee3d` | [CI](https://github.com/Tinnci/doubao-asr-for-ha/actions/runs/34717160473) |
+
+The Edge TTS push did not produce a Validate run, so its existing workflow was
+explicitly dispatched on the same `main` commit. Repository Actions and both
+workflows were active. RoomMind's CODEOWNERS API now reports no errors.
+
+The initial [zM1 Linux failure](https://github.com/Tinnci/zm1/actions/runs/34717152457)
+was reproduced locally by loading the HA pytest plugin before pytest-socket.
+Both ordinary collection and that order now pass all 60 tests. The successful
+run above includes the correction; the failed run is retained as diagnostic history.
 
 Edge TTS and Gateway retain their existing PolyForm Noncommercial license and
 upstream notices. GitHub labels that license `NOASSERTION`. Their custom-repository
 validation explicitly omits only default-index license eligibility. This does not
 claim default HACS catalogue inclusion or change the license.
 
-本轮完成本地发布准备，不创建或推送标签、不发布 GitHub Release、不部署家庭组件。
-官方仓库级校验的版本与本地验证对象分别记录，避免把旧的绿色 CI 当作本次提交的结论。
+本轮完成六个仓库的提交、推送和发布准备，共通过 3,116 个 Python 测试（含 3 个
+earcon 工具测试）及 99 个 Bun 测试。上表记录本次源码提交的官方校验，不把历史绿色
+CI 当作本次提交的结论。未创建或推送发布标签、发布 GitHub Release 或部署家庭组件。
 
 ## Per-repository release instructions / 各仓库发布说明
 

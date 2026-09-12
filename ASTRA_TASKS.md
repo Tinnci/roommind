@@ -161,8 +161,13 @@ Astra 在每一次演进迭代中，可自由权衡并交叉推进以下核心�
         4. **长周期统计优先（LTS-First for Long-Term Analytical Precision）**：对需要长期趋势追踪的实体规范使用 `state_class = SensorStateClass.MEASUREMENT`，由 HA 原生统计引擎聚合 5 分钟与 1 小时统计，兼得数十天至数年的长期高精度分析能力与超低写入损耗。
     - **实机数据印证与极简工程**：结合 192.168.3.120 的真实历史表现持续检验系统，去伪存真，大刀阔斧地清理不必要的冗余关卡与死板防线，用更少、更轻盈的代码实现更高阶的目标。
 
-### 阶段六：全生态仓库巡检、Home Assistant 标准化发布与统一 CI/CD 演进 (Phase 6: Multi-Repo Audit, HA Standardized Publishing & Unified CI/CD)
-- [ ] **Phase 6: GitHub 维护仓库全量巡检、实机已用组件发布准备与跨仓库 DevOps 标准化**
+### 阶段六：全生态仓库巡检、Home Assistant 标准化发布与统一 CI/CD 演进 (Phase 6: Multi-Repo Audit, HA Standardized Publishing & Unified CI/CD) [COMPLETED]
+- [x] **Phase 6: GitHub 维护仓库全量巡检、实机已用组件发布准备与跨仓库 DevOps 标准化**（2026-09-13）
+  - **巡检 / Inventory**：盘点 Tinnci 全部 225 个仓库，识别 14 个相关项目；只读核对家庭 HA 2026.6.3、已装组件、源码差异及 CI/Release 历史。各项目的发布决定和验证链接见[生态发布审计](docs/ecosystem-release-audit.md)。
+  - **发布准备 / Release readiness**：准备 RoomMind 1.8.0、TCL 0.11.0、zM1 0.3.0；Edge TTS 0.9.0、Gateway 0.4.0、ASR 0.1.9 由既有自动发布入口升版。五个 HACS 归档实际构建并验证，补齐品牌资产、维护入口和双语发布说明；保留既有许可证与上游归属。
+  - **DevOps / Delivery**：统一 uv 锁定依赖和 Bun/tsgo 验证，发布选定标签源码、复用各仓库 CI、原子推送版本提交与标签；修复 zM1 ZIP 层级、手动发布源码错配、遗漏 pytest、Linux socket 插件顺序和失效 CODEOWNERS。
+  - **验证 / Validation**：3,116 Python tests、99 Bun tests 通过；Ruff、格式、Actionlint、锁文件检查及前端构建通过，RoomMind 覆盖率 93.81% 并通过 mypy。六仓库提交推送后的 CI/Validate 全部通过，五个集成通过官方 Hassfest 与 HACS 自定义仓库校验；ASR 镜像构建及离线 CLI 检查通过。
+  - **边界 / Limits**：本阶段完成发布准备与验证，未创建发布标签、发布 Release 或部署家庭组件；物理确认、传感器可靠性和语音体验继续依赖实机观测。Phosh 原生发布随 Phase 7 实机验收推进，Xiaomi Home 独立发行待实体迁移验证。
   - **核心关切与开放探索空间**：
     1. **全量 GitHub 维护仓库盘点与状态巡检（Cross-Repository Inventory & Health Audit）**：
        - 全面梳理 GitHub（组织/账户 `Tinnci`）下由我们自主管理、更新与维护的所有 Home Assistant 关联生态仓库（包括 `Tinnci/roommind`、`Tinnci/ha-tcl-udp-ac`、`Tinnci/zm1`、`Tinnci/hass-edge-tts`、`Tinnci/llm-gateway`、`Tinnci/doubao-asr-for-ha` 等）；
