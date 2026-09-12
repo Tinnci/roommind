@@ -7,7 +7,20 @@ import { customElement, property } from "lit/decorators.js";
 import type { HomeAssistant } from "../../types";
 import { localize } from "../../utils/localize";
 import { getSelectValue } from "../../utils/events";
-import { toDisplay, toCelsius, tempUnit, tempStep, tempRange } from "../../utils/temperature";
+import {
+  toDisplay,
+  toCelsius,
+  toDisplayDelta,
+  toCelsiusDelta,
+  tempUnit,
+  tempStep,
+  tempRange,
+} from "../../utils/temperature";
+import {
+  DEFAULT_SETBACK_OFFSET,
+  MIN_SETBACK_OFFSET,
+  MAX_SETBACK_OFFSET,
+} from "../../utils/constants";
 
 const CONTROL_DOCS_URL =
   "https://github.com/snazzybean/roommind/blob/main/docs/control-and-devices.md";
@@ -17,6 +30,7 @@ export class RsSettingsControl extends RsSettingsBase {
   @property({ attribute: false }) public hass!: HomeAssistant;
   @property({ type: String }) public controlMode: "mpc" | "bangbang" = "mpc";
   @property({ type: Number }) public comfortWeight = 70;
+  @property({ type: Number }) public setbackOffset = DEFAULT_SETBACK_OFFSET;
   @property({ type: Number }) public outdoorCoolingMin = 16;
   @property({ type: Number }) public outdoorHeatingMax = 22;
   @property({ type: Boolean }) public predictionEnabled = true;
@@ -100,6 +114,31 @@ export class RsSettingsControl extends RsSettingsBase {
             <span class="field-hint">${localize("settings.outdoor_heating_max_hint", l)}</span>
           </div>
         </div>
+      </div>
+
+      <div class="settings-section threshold-field">
+        <ha-textfield
+          .value=${toDisplayDelta(this.setbackOffset, this.hass).toFixed(1)}
+          .label=${localize("settings.setback_offset", l)}
+          .suffix=${tempUnit(this.hass)}
+          type="number"
+          min=${toDisplayDelta(MIN_SETBACK_OFFSET, this.hass)}
+          max=${toDisplayDelta(MAX_SETBACK_OFFSET, this.hass)}
+          step=${toDisplayDelta(0.5, this.hass)}
+          @change=${(e: Event) => {
+            const input = (e.target as HTMLInputElement).value;
+            const offset = toCelsiusDelta(Number(input), this.hass);
+            if (
+              input.trim() &&
+              Number.isFinite(offset) &&
+              offset >= MIN_SETBACK_OFFSET &&
+              offset <= MAX_SETBACK_OFFSET
+            ) {
+              this._fire("setbackOffset", offset);
+            }
+          }}
+        ></ha-textfield>
+        <span class="field-hint">${localize("settings.setback_offset_hint", l)}</span>
       </div>
 
       <div class="settings-section">

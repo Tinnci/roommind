@@ -15,6 +15,7 @@ import "./rs-presence-section";
 import "./rs-covers-section";
 import "./rs-heat-source-section";
 import "../components/shared/rs-edit-dialog";
+import { DEFAULT_SETBACK_OFFSET } from "../utils/constants";
 
 const CONTROL_DOCS_URL =
   "https://github.com/snazzybean/roommind/blob/main/docs/control-and-devices.md";
@@ -29,6 +30,7 @@ export class RsRoomEditDialogRouter extends LitElement {
   @property({ type: Boolean }) public presenceEnabled = false;
   @property({ attribute: false }) public presencePersons: string[] = [];
   @property({ type: Boolean }) public valveProtectionEnabled = false;
+  @property({ type: Number }) public globalSetbackOffset = DEFAULT_SETBACK_OFFSET;
 
   protected override createRenderRoot() {
     return this;
@@ -218,10 +220,13 @@ export class RsRoomEditDialogRouter extends LitElement {
           .area=${this.area}
           .editing=${true}
           .devices=${draft.devices}
+          .setbackOffset=${draft.setbackOffset}
+          .globalSetbackOffset=${this.globalSetbackOffset}
           .selectedTempSensor=${draft.selectedTempSensor}
           .valveProtectionExclude=${draft.valveProtectionExclude}
           .valveProtectionEnabled=${this.valveProtectionEnabled}
           @device-changed=${this._forward("device-changed")}
+          @setback-offset-changed=${this._forward("setback-offset-changed")}
           @valve-protection-exclude-toggle=${this._forward("valve-protection-exclude-toggle")}
         ></rs-device-section>`;
       case "sensors":

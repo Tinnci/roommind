@@ -19,6 +19,7 @@ import "./rs-room-edit-dialog-router";
 import { localize } from "../utils/localize";
 import { fireSaveStatus } from "../utils/events";
 import { formatTemp, tempUnit } from "../utils/temperature";
+import { DEFAULT_SETBACK_OFFSET } from "../utils/constants";
 import { roommindThemeStyles } from "../styles/theme-styles";
 import {
   getRoomDetailLayout,
@@ -50,6 +51,7 @@ export class RsRoomDetail extends LitElement {
   @property({ type: Boolean }) public climateControlActive = true;
 
   @property({ type: Boolean }) public valveProtectionEnabled = false;
+  @property({ type: Number }) public globalSetbackOffset = DEFAULT_SETBACK_OFFSET;
 
   @state() private _draft: RoomConfigDraft = createEmptyRoomConfigDraft();
   @state() private _error = "";
@@ -712,6 +714,7 @@ export class RsRoomDetail extends LitElement {
           .presenceEnabled=${this.presenceEnabled}
           .presencePersons=${this.presencePersons}
           .valveProtectionEnabled=${this.valveProtectionEnabled}
+          .globalSetbackOffset=${this.globalSetbackOffset}
           @edit-closed=${this._closeEdit}
           @schedules-changed=${this._onSchedulesChanged}
           @schedule-selector-changed=${this._onScheduleSelectorChanged}
@@ -720,6 +723,7 @@ export class RsRoomDetail extends LitElement {
           @eco-heat-changed=${this._onEcoHeatChanged}
           @eco-cool-changed=${this._onEcoCoolChanged}
           @device-changed=${this._onDeviceChanged}
+          @setback-offset-changed=${this._onSetbackOffsetChanged}
           @valve-protection-exclude-toggle=${this._onValveProtectionExcludeToggle}
           @sensor-changed=${this._onSensorChanged}
           @airflow-devices-changed=${this._onAirflowDevicesChanged}
@@ -884,6 +888,11 @@ export class RsRoomDetail extends LitElement {
     this._autoSave();
   }
 
+  private _onSetbackOffsetChanged(e: CustomEvent<{ value: number | null }>) {
+    this._patchDraft({ setbackOffset: e.detail.value });
+    this._autoSave();
+  }
+
   private _onAirflowDevicesChanged(e: CustomEvent<{ devices: AirflowDeviceConfig[] }>) {
     this._airflowDevices = e.detail.devices;
     this._autoSave();
@@ -900,7 +909,8 @@ export class RsRoomDetail extends LitElement {
     else if (key === "night_controls") this._nightControls = value as RoomConfig["night_controls"];
     else if (key === "night_allow_rapid_recovery") this._nightAllowRapidRecovery = value as boolean;
     else if (key === "rapid_recovery_delta_c") this._rapidRecoveryDeltaC = value as number;
-    else if (key === "rapid_recovery_enabled") this._patchDraft({ rapidRecoveryEnabled: value as boolean });
+    else if (key === "rapid_recovery_enabled")
+      this._patchDraft({ rapidRecoveryEnabled: value as boolean });
     else if (key === "max_fan_level_night") this._maxFanLevelNight = value as number;
     else if (key === "sleep_temp_ramp_c") this._sleepTempRampC = value as number;
     else if (key === "adjacent_rooms") this._adjacentRooms = value as RoomConfig["adjacent_rooms"];

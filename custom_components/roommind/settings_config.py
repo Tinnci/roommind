@@ -10,6 +10,7 @@ from .const import (
     DEFAULT_COMPRESSOR_MIN_RUN_MINUTES,
     DEFAULT_CONFLICT_RESOLUTION,
 )
+from .room_config import validate_setback_offset
 
 _NOTIFICATION_TARGET_SCHEMA = {
     vol.Required("entity_id"): str,
@@ -20,6 +21,7 @@ _NOTIFICATION_TARGET_SCHEMA = {
 DEFAULT_CONTROL_MODE = "bangbang"
 
 SETTINGS_SCHEMA: dict[vol.Marker, object] = {
+    vol.Optional("setback_offset"): validate_setback_offset,
     vol.Optional("outdoor_temp_sensor"): str,
     vol.Optional("outdoor_humidity_sensor"): str,
     vol.Optional("outdoor_cooling_min"): vol.Coerce(float),

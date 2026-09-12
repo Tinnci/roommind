@@ -100,15 +100,37 @@ Useful when you want:
 
 RoomMind keeps the current HVAC mode active, but moves the target away from the room target:
 
-- heating setback = `heat target - 2°C`
-- cooling setback = `cool target + 2°C`
+- heating setback = `heat target - setback_offset`
+- cooling setback = `cool target + setback_offset`
 
 This lets the device back off instead of shutting off completely.
 
-Important:
+Set the default offset under **Settings → Control**. In a room's **Devices** editor, select
+**When idle → Setback** to override the offset for that room, or select **Use global default**
+to restore inheritance. All Setback devices in the room share the room's offset.
 
-- the setback offset is fixed at `2°C`
-- it is **not configurable** in the current UI
+The supported range is **1–5°C**, with a backward-compatible default of **2°C**.
+The UI displays temperature differences in your Home Assistant units (1.8–9°F).
+RoomMind lowers the heating target or raises the cooling target, then respects the device's
+temperature limits and step size. Compressor minimum-run protection continues to use the
+Effective Target Plan's heat/cool target. Off, Fan only, TRV Low, and vacation temperatures keep their existing behavior.
+
+**中文：** 可在 **设置 → 控制** 中修改默认节能回退偏移量。在房间的 **设备** 编辑器中选择
+**空闲时动作 → 节能回退** 后，可单独设置该房间的偏移量；勾选 **使用全局默认值** 可恢复继承。
+同一房间内使用节能回退的设备共用此值。范围为 **1–5°C**，兼容旧配置的默认值为 **2°C**。
+供暖目标降低此温差，制冷目标升高此温差，并继续遵守设备温度范围、步长和压缩机最短运行保护。
+
+The WebSocket `roommind/settings/save` and `roommind/rooms/save` commands accept `setback_offset`
+in Celsius. A missing room field or explicit `null` inherits the global setting; omitting it from
+a partial save preserves the previous choice. Saving `null` clears a room override. Values survive
+restarts through the existing serialized storage transaction, without a storage-version migration.
+The offset is captured for each Control Cycle; a successful service call remains dispatch evidence,
+with physical confirmation tracked separately.
+
+**中文：** WebSocket 保存协议中的 `setback_offset` 始终使用摄氏温差。房间字段缺失或为 `null`
+时继承全局设置；局部保存省略此字段会保留原值，显式保存 `null` 则清除房间覆盖。配置通过现有
+串行存储事务持久化，重启后仍然保留，无需迁移存储版本。每个控制周期使用已捕获的偏移量，
+服务调用完成仅表示已下发，设备物理确认仍单独记录。
 
 ## Idle Behavior for Thermostats: Off, Low
 

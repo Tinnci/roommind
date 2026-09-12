@@ -6,6 +6,22 @@ from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any, Self
 
+from ..const import TargetTemps
+
+
+def plan_setback_temperature(
+    hvac_mode: str | None,
+    targets: TargetTemps | None,
+    offset: float,
+) -> float | None:
+    """Plan an idle setpoint in Celsius without changing effective targets."""
+    if targets is not None:
+        if hvac_mode == "heat" and targets.heat is not None:
+            return targets.heat - offset
+        if hvac_mode == "cool" and targets.cool is not None:
+            return targets.cool + offset
+    return None
+
 
 class DispatchStatus(StrEnum):
     """Describe what happened while dispatching a device operation."""

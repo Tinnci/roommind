@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+import voluptuous as vol
 
 from custom_components.roommind.const import DOMAIN
 from custom_components.roommind.room_config import (
@@ -80,6 +81,43 @@ def test_settings_save_schema_matches_configuration_field_catalog():
     assert {marker.schema for marker in SETTINGS_SCHEMA} == set(SETTINGS_FIELDS)
 
 
+@pytest.mark.parametrize("offset", [1.0, 2.0, 3.5, 5.0, None])
+async def test_setback_room_websocket_roundtrip(ws_hass, store, connection, offset):
+    await store.async_load()
+    msg = websocket_save_room._ws_schema(
+        {"id": 1, "type": "roommind/rooms/save", "area_id": "living", "setback_offset": offset}
+    )
+    await _save_room(ws_hass, connection, msg)
+    assert connection.send_result.call_args.args[1]["room"]["setback_offset"] == offset
+
+    await _save_room(
+        ws_hass, connection, {"id": 2, "type": "roommind/rooms/save", "area_id": "living", "comfort_heat": 22.0}
+    )
+    await _list_rooms(ws_hass, connection, {"id": 3, "type": "roommind/rooms/list"})
+    assert connection.send_result.call_args.args[1]["rooms"]["living"]["setback_offset"] == offset
+
+
+@pytest.mark.parametrize("offset", [0, -1, 0.99, 5.01, float("nan"), float("inf"), "invalid", True, False])
+@pytest.mark.parametrize("room_scope", [True, False])
+def test_setback_websocket_rejects_invalid_offsets(offset, room_scope):
+    handler = websocket_save_room if room_scope else websocket_save_settings
+    msg = {"id": 1, "type": "roommind/rooms/save" if room_scope else "roommind/settings/save", "setback_offset": offset}
+    if room_scope:
+        msg["area_id"] = "living"
+    with pytest.raises(vol.Invalid):
+        handler._ws_schema(msg)
+
+
+async def test_setback_global_websocket_roundtrip(ws_hass, store, connection):
+    await store.async_load()
+    msg = websocket_save_settings._ws_schema({"id": 1, "type": "roommind/settings/save", "setback_offset": 3.5})
+    await _save_settings(ws_hass, connection, msg)
+    await _get_settings(ws_hass, connection, {"id": 2, "type": "roommind/settings/get"})
+    assert connection.send_result.call_args.args[1]["settings"]["setback_offset"] == 3.5
+    await _list_rooms(ws_hass, connection, {"id": 3, "type": "roommind/rooms/list"})
+    assert connection.send_result.call_args.args[1]["setback_offset"] == 3.5
+
+
 @pytest.mark.asyncio
 async def test_list_rooms_empty(ws_hass, store, connection):
     """Listing rooms on a fresh store returns an empty dict."""
@@ -111,6 +149,7 @@ async def test_list_rooms_empty(ws_hass, store, connection):
             "anyone_home": True,
             "valve_protection_enabled": False,
             "compressor_groups": [],
+            "setback_offset": 2.0,
         },
     )
 

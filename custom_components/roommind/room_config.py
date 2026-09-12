@@ -18,6 +18,9 @@ from .const import (
     DEFAULT_HEAT_SOURCE_PRIMARY_DELTA,
 )
 from .utils.device_utils import (
+    DEFAULT_IDLE_SETBACK_OFFSET,
+    MAX_IDLE_SETBACK_OFFSET,
+    MIN_IDLE_SETBACK_OFFSET,
     devices_to_legacy,
     ensure_room_has_devices,
     get_room_heating_system_type,
@@ -27,6 +30,7 @@ from .utils.device_utils import (
 
 ROOM_CONFIG_DEFAULTS: dict[str, object] = {
     "devices": [],
+    "setback_offset": None,
     "thermostats": [],
     "acs": [],
     "temperature_sensor": "",
@@ -94,7 +98,33 @@ def validate_device_idle_action(device: dict) -> dict:
     return device
 
 
+def validate_setback_offset(value: object) -> float:
+    """Accept a finite Celsius delta within the supported idle range."""
+    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+        raise vol.Invalid("setback_offset must be a number")
+    try:
+        offset = float(value)
+    except ValueError as err:
+        raise vol.Invalid("setback_offset must be a number") from err
+    if not MIN_IDLE_SETBACK_OFFSET <= offset <= MAX_IDLE_SETBACK_OFFSET:
+        raise vol.Invalid("setback_offset must be between 1.0 and 5.0 °C")
+    return offset
+
+
+def resolve_setback_offset(room: dict, settings: dict) -> float:
+    """Resolve a room override, inherited global value, or the legacy default."""
+    for value in (room.get("setback_offset"), settings.get("setback_offset")):
+        if value is not None:
+            try:
+                return validate_setback_offset(value)
+            except vol.Invalid:
+                # Older or manually edited storage must not produce unsafe targets.
+                continue
+    return DEFAULT_IDLE_SETBACK_OFFSET
+
+
 ROOM_CONFIG_SCHEMA: dict[vol.Marker, object] = {
+    vol.Optional("setback_offset"): vol.Any(None, validate_setback_offset),
     vol.Optional("thermostats"): [str],
     vol.Optional("acs"): [str],
     vol.Optional("devices"): [

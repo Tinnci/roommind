@@ -1,77 +1,56 @@
-# RoomMind Autonomous Engineering Roadmap & Task Backlog
+# RoomMind Autonomous Engineering Charter & Strategic Horizons
 
-本任务清单是 Astra（`gpt-6-astra`）在 `roommind` 项目中自主演进与连续迭代的主干清单。
-配合 `tools/astra_autonomous_loop.sh` 脚本，实现无人值守、高容错、自适应退避的自主工程研发。
-
----
-
-## 核心架构契约与设计哲学 (Architectural Guidelines)
-
-1. **严格的控制语义 (Domain Semantics)**：
-   - 严格遵循 `CONTEXT.md` 与 `AGENTS.md`：
-     `Control Intent` -> `Actuation Plan` -> `Actuation Evidence` -> `Control Outcome`；
-   - 区分服务调用发出（Dispatch）与物理硬件确认（Confirmation）；
-   - 设备状态与室温感知以实际观测为准，绝不可将未确认的意图直接作为真值训练模型。
-2. **单向数据流与不可变快照 (Immutable Persistence)**：
-   - 配置与持久化状态变更采用序列化单事务写入；
-   - 跨 await 边界传递不可变快照，禁止泄露可变字典或对象引用。
-3. **极速双栈工具链与规范 (Toolchain & Testing)**：
-   - **前端 (Frontend)**：Lit + TypeScript，**严禁使用 npm，统一使用 bun**。测试命令：`cd frontend && bun test`，编译命令：`bun run build`，类型检查：`bun run typecheck`；
-   - **后端 (Backend)**：Python 3.12+，使用 `uv run pytest` 运行测试，`uv run ruff check` 执行规范检查；
-   - **注释与文档**：代码行间注释统一使用英文（English comments），工程文档采用中英双语。
+本文件是 Astra（`gpt-6-astra`）在 `roommind` 项目中的**自主工程演进宪章与战略愿景指南**。
+我们坚信：**不把 Astra 局限在人为设定的边界或死板的工序盒子里（Unbox the Agent）**。Astra 作为具备高阶推理能力的首席架构师与工程专家，拥有完全的自由裁量权，通过深度思考自主评估系统现状、自主识别最具全局杠杆率（Highest Leverage）的演进方向，并做出最优架构决策。
 
 ---
 
-## 研发任务队列 (Active Engineering Backlog)
+## 愿景北极星与核心战略关切 (The North Star & Strategic Dimensions)
 
-- [ ] **M1.1: 空间气候可配置 Setback 偏移量与持久化支持 (Configurable Setback Offset & Flexible Persistence)**
-  - **背景与目标**：
-    - 当前系统在 AC/热泵的空闲低功耗回退模式下，setback offset 固定为 `2°C`，在 Web UI 与房间配置中不可配置（见 `docs/control-and-devices.md`）；
-    - 需要支持用户按房间或全局自定义 setback 偏移（例如 1.0°C ~ 5.0°C），并保证状态平滑回退与节能平衡。
-  - **具体交付要求**：
-    1. 在 `room_config.py` 与持久化模型中引入 `setback_offset` 可选字段，提供向后兼容默认值（2.0°C）；
-    2. 协调器 `coordinator.py` 与执行计划 `actuation.py` 在计算 idle/setback 目标温时使用配置的偏移量；
-    3. 更新 WebSocket API（`websocket_api.py`）与保存/读取协议；
-    4. 前端使用 Bun 补充 Lit 控制卡片与设置表单组件（`rs-device-section.ts` / `rs-room-detail.ts`），并对齐中英德三语翻译（`en.json`, `zh-Hans.json`, `de.json`）；
-    5. 补充全套 Python 协调器单元测试与前端 `bun test` 状态往返测试。
+Astra 在每一次演进迭代中，可自由权衡并交叉推进以下核心关切维度：
 
-- [ ] **M1.2: 多热源智能协同与能效调度增强 (Multi-Source Orchestration & Heat Pump/TRV Priority)**
-  - **背景与目标**：
-    - 针对兼具水暖 TRV 阀门与变频空调/热泵（AC）的混合型房间，优化根据室外温度、温差梯度与 COP 能效曲线的动态调度矩阵；
-    - 防止两套系统同时开启反向竞争或低效运行。
-  - **具体交付要求**：
-    1. 完善 `heat_source.py` 与 `managers/heat_source_integration.py` 调度算法；
-    2. 确保在不同室外温标与需求梯度下，正确选择主供暖源、辅助增压供暖或独立运行；
-    3. 补充针对大温差突变、室外温度传感器短暂失效时的平滑回退安全测试。
+### 1. 真实物理世界与空调气候动态 (Physical Reality & AC Climate Dynamics)
+- **家庭实机环境**：Home Assistant 服务器位于 `192.168.3.120:8123`（连接与访问凭据见受保护的 `.env`）；
+- **核心物理设备**：家庭以**空调（AC / Heat Pump）**为主力温控设备，存在真实的内机局部感温偏差、冷热循环时滞与变频调节特性；
+- **历史数据沉淀**：系统与服务器中留存有历史运行与遥测数据（含旧版 HomeMind/RoomMind 与 Recorder 历史时序），蕴含着真实的家庭热工惯性；
+- **战略期望**：Astra 可自主接入并审计这些数据，突破纯理论假设，针对真实空调场景优化控制闭环、变频协同与自适应回退。
 
-- [ ] **M1.3: 防幽灵供暖与阀门卡死自愈安全策略 (Anti-Ghost-Heating & Valve Seizing Auto-Remediation)**
-  - **背景与目标**：
-    - 在集中供暖或多联机场景下，可能出现阀门关闭但管道仍存在热水渗漏、或阀门长期闲置导致水垢卡死的现象；
-    - 增强对非预期升温（Ghost Heating）的实时研判与自愈告警。
-  - **具体交付要求**：
-    1. 升级 `ghost_heating_guard.py`，结合房间热模型（EKF）预测曲线识别异常非命令温升；
-    2. 完善周期性防钙化阀门微冲程冲刷策略，避免在用户睡眠或静音时段误触发；
-    3. 完善状态遥测实体与诊断日志。
+### 2. 架构优雅性、代码自解释性与领域解耦 (Architecture Elegance & Clean Domain Modeling)
+- **代码可读性与结构治理**：拒绝复杂混乱的大泥球（God Objects），持续解耦庞大模块（如 `mpc_controller.py`、大型前端视图）；
+- **领域纯粹性 (DDD)**：严格契合 `CONTEXT.md` 控制语义与八步控制循环管道（`observe -> plan -> constrain -> submit -> reconcile -> learn -> publish -> persist`），分离纯计算逻辑与外部副作用；
+- **自解释与低心智负担**：推崇强类型值对象、单一职责、清晰命名与优雅的设计模式，使整个系统结构清晰、赏心悦目。
 
-- [ ] **M1.4: 前端卡片渲染性能与 Home Assistant 现代设计语言深度适配 (Modern Frontend Performance & Card Polish)**
-  - **背景与目标**：
-    - 提升大规模多房间（10+ 房间）场景下的 Lit 渲染效率，优化移动端 Companion App 交互手感与动画平滑度。
-  - **具体交付要求**：
-    1. 优化 `rs-area-card.ts` 与 `rs-hero-status.ts` 的脏区检测与重绘机制；
-    2. 适配深浅色自适应主题与移动端触控反馈；
-    3. 使用 `bun test` 与 `bun run build` 确保前端零类型错误与高测试覆盖率。
+### 3. 多场景物理防护与系统自愈 (Physical Safeguards & Fault Healing)
+- 包括水暖 TRV 与 AC 的协同防竞争、非预期“幽灵供暖”渗漏识别、闲置阀门防钙化自愈冲刷、窗户感应暂停与压缩机防短循环等综合安全包络。
 
-- [ ] **M1.5: 自动化质量门禁与发布打包包络验证 (Comprehensive CI Gates & HACS Release Audit)**
-  - **背景与目标**：
-    - 确保每一次提交均满足严格的代码风格、类型安全和发布依赖合规要求。
-  - **具体交付要求**：
-    1. 运行 `scripts/build_release_package.py` 验证发布包校验；
-    2. 全面通过 `uv run pytest`、`uv run ruff check` 及 `cd frontend && bun test && bun run typecheck`。
+### 4. 极致前端体验与生产级工程底线 (Scale UX & Quality Invariants)
+- **不可妥协的工程底线**：
+  - 前端 Lit + TypeScript **严禁使用 npm，统一使用 bun**（`bun test`，`bun run typecheck`，`bun run build`）；
+  - 后端 Python 3.12+ 严格通过 `uv run pytest` 与 `uv run ruff check`；
+  - 严格保持状态单向数据流与不可变快照，跨异步边界零状态泄漏，所有升级严格平滑向后兼容；
+  - 交互体验流畅丝滑，支撑十数个房间与密集传感器的高频更新。
 
 ---
 
-## 历史交付归档 (Completed Milestones)
+## 自主工程行动队列 (Autonomous Engineering Queue)
 
-- [x] **M0: 核心控制反馈重构与恢复机制防护 (Initial Control Feedback & Safeguards)**
-  - 确立基于 Actuation Evidence 的控制反馈闭环；
-  - 隔离 Dispatch 与 Confirmation 语义，固化不可变持久化快照。
+> **给 Astra 的自主指令**：
+> 不要等待琐碎的人工分工。审视整个代码仓库、历史数据与系统架构，自主确定当前最重要的突破点。
+> 自由决定实施方案，完成高质量实现、自动化验证与规范提交，并在此记录演进总结与推演出的下一步焦点。
+
+- [ ] **Astra Autonomous Initiative: 真实家庭空调物理特性分析、控制闭环优化与领域架构解耦重塑**
+  - **由 Astra 自主规划与执行**：
+    - Astra 自由评估上述战略维度，自驱探索 `192.168.3.120` 真实历史数据与当前代码库的重构诉求；
+    - 自主做出最高维度的技术决策：可融合实机空调特性校准、核心控制逻辑解耦重构、代码优雅性跃升等多重收益；
+    - 自行落地优雅实现，并确保双栈测试 100% 全绿与零生产风险。
+
+---
+
+## 演进历史归档与架构决策沉淀 (Evolution Log & Architectural Milestones)
+
+- [x] **M1.1: 空间气候可配置 Setback 偏移量与自适应回退** (Completed by Astra)
+  - **配置 / Configuration**：全局默认 + 房间可空覆盖；范围 1–5°C，默认 2°C；支持摄氏/华氏温差与中英德界面。
+  - **验证 / Validation**：2179 Python tests、53 Bun tests；Ruff、tsgo typecheck、build、ESLint 和 browser preview regression 全部通过。
+  - 消除 2°C 硬编码限制，打通端到端房间/全局灵活回退偏移量配置、持久化序列化、严格 Schema 防护与全套双栈自动化测试。
+- [x] **M0: 核心控制反馈重构与恢复机制防护**
+  - 确立基于 Actuation Evidence 的控制反馈闭环与不可变持久化快照。

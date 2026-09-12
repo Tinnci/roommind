@@ -7,7 +7,7 @@ import { localize } from "./utils/localize";
 import { mdiEyeOff } from "./utils/icons";
 import { roommindThemeStyles } from "./styles/theme-styles";
 import { formatTemp, tempUnit } from "./utils/temperature";
-import { DEFAULT_CONTROL_MODE } from "./utils/constants";
+import { DEFAULT_CONTROL_MODE, DEFAULT_SETBACK_OFFSET } from "./utils/constants";
 import {
   isOverrideEffective,
   isRoomControlEffective,
@@ -66,6 +66,7 @@ export class RoomMindPanel extends LitElement {
   @state() private _climateControlActive = true;
   @state() private _presenceEnabled = false;
   @state() private _valveProtectionEnabled = false;
+  @state() private _setbackOffset = DEFAULT_SETBACK_OFFSET;
   @state() private _anyoneHome = true;
   @state() private _presencePersons: string[] = [];
   @state() private _presenceAwayAction: "eco" | "off" = "eco";
@@ -733,6 +734,7 @@ export class RoomMindPanel extends LitElement {
             .presencePersons=${this._presencePersons}
             .climateControlActive=${this._climateControlActive}
             .valveProtectionEnabled=${this._valveProtectionEnabled}
+            .globalSetbackOffset=${this._setbackOffset}
             @back-clicked=${this._onBackFromDetail}
             @room-updated=${this._onRoomUpdated}
           ></rs-room-detail>
@@ -1187,6 +1189,7 @@ export class RoomMindPanel extends LitElement {
         presence_away_action: "eco" | "off";
         schedule_off_action: "eco" | "off";
         valve_protection_enabled: boolean;
+        setback_offset?: number;
       }>({
         type: "roommind/rooms/list",
       });
@@ -1201,6 +1204,7 @@ export class RoomMindPanel extends LitElement {
       this._climateControlActive = result.climate_control_active ?? true;
       this._presenceEnabled = result.presence_enabled ?? false;
       this._valveProtectionEnabled = result.valve_protection_enabled ?? false;
+      this._setbackOffset = result.setback_offset ?? DEFAULT_SETBACK_OFFSET;
       this._anyoneHome = result.anyone_home ?? true;
       this._presencePersons = result.presence_persons ?? [];
       this._presenceAwayAction = result.presence_away_action ?? "eco";

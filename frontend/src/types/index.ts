@@ -262,6 +262,7 @@ export interface RoomConfig {
   thermostats: string[];
   acs: string[];
   devices?: DeviceConfig[];
+  setback_offset?: number | null;
   airflow_devices?: AirflowDeviceConfig[];
   room_volume_m3?: number | null;
   control_target?: "air_temperature" | "perceived_temperature";
@@ -342,6 +343,7 @@ export interface NightControlConfig {
 }
 
 export interface GlobalSettings {
+  setback_offset?: number;
   outdoor_temp_sensor: string;
   outdoor_humidity_sensor: string;
   outdoor_cooling_min?: number;

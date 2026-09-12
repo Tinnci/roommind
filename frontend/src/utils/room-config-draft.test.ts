@@ -33,11 +33,43 @@ const baseConfig: RoomConfig = {
 };
 
 describe("room config draft", () => {
+  test.each([undefined, null, 1, 3.5, 5])(
+    "preserves setback override %s through edit, save and reload",
+    (offset) => {
+      const config: RoomConfig = {
+        ...baseConfig,
+        ...(offset === undefined ? {} : { setback_offset: offset }),
+      };
+      const draft = createRoomConfigDraft(config);
+      const edited = patchRoomConfigDraft(draft, { displayName: "Bedroom" });
+      const payload = buildRoomSavePayload("living_room", edited);
+      const reloaded = createRoomConfigDraft({ ...config, ...payload });
+
+      expect(payload.setback_offset).toBe(offset ?? null);
+      expect(reloaded.setbackOffset).toBe(offset ?? null);
+      expect(config.setback_offset).toBe(offset);
+    },
+  );
+
+  test("clears a room setback override explicitly to restore global inheritance", () => {
+    const config = { ...baseConfig, setback_offset: 4 };
+    const draft = createRoomConfigDraft(config);
+    const reset = patchRoomConfigDraft(draft, { setbackOffset: null });
+    const payload = buildRoomSavePayload("living_room", reset);
+
+    expect(payload.setback_offset).toBeNull();
+    expect(draft.setbackOffset).toBe(4);
+    expect(config.setback_offset).toBe(4);
+    expect(createEmptyRoomConfigDraft().setbackOffset).toBeNull();
+  });
+
   test("preserves disabled recovery and a zero Overdrive limit when saving", () => {
     const draft = createRoomConfigDraft({
       ...baseConfig,
       rapid_recovery_enabled: false,
-      devices: [{ entity_id: "climate.radiator", type: "trv", role: "auto", max_setpoint_offset_c: 0 }],
+      devices: [
+        { entity_id: "climate.radiator", type: "trv", role: "auto", max_setpoint_offset_c: 0 },
+      ],
     });
     const payload = buildRoomSavePayload("living_room", draft);
     expect(payload.rapid_recovery_enabled).toBe(false);

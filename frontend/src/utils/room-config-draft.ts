@@ -11,6 +11,7 @@ import type {
 
 export interface RoomConfigDraft {
   devices: DeviceConfig[];
+  setbackOffset: number | null;
   airflowDevices: AirflowDeviceConfig[];
   roomVolumeM3: number | null;
   controlTarget: "air_temperature" | "perceived_temperature";
@@ -68,6 +69,7 @@ export interface RoomConfigDraft {
 export function createEmptyRoomConfigDraft(): RoomConfigDraft {
   return {
     devices: [],
+    setbackOffset: null,
     airflowDevices: [],
     roomVolumeM3: null,
     controlTarget: "air_temperature",
@@ -143,6 +145,7 @@ export function createRoomConfigDraft(config: RoomConfig | null): RoomConfigDraf
         })),
       ];
   draft.airflowDevices = [...(config.airflow_devices ?? [])];
+  draft.setbackOffset = config.setback_offset ?? null;
   draft.roomVolumeM3 = config.room_volume_m3 ?? null;
   draft.controlTarget = config.control_target ?? "air_temperature";
   draft.quietHours = config.quiet_hours ?? null;
@@ -386,6 +389,7 @@ export function buildRoomSavePayload(
     type: "roommind/rooms/save",
     area_id: areaId,
     devices: draft.devices,
+    setback_offset: draft.setbackOffset,
     airflow_devices: draft.airflowDevices,
     room_volume_m3: draft.roomVolumeM3,
     control_target: draft.controlTarget,

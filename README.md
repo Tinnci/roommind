@@ -29,7 +29,7 @@
 - **Valve Protection** - Periodic cycling of idle TRV valves to prevent seizing and calcification.
 - **Heat Source Orchestration** - Rooms with both TRVs and ACs automatically route heating demand to the most efficient device based on temperature gap and outdoor conditions.
 - **Compressor Group Protection** - Define groups of climate devices sharing an outdoor compressor. Enforces minimum run and off times to prevent short-cycling.
-- **Fan-only & Setback Idle Modes** - AC and heat pump devices can switch to fan-only or setback mode instead of turning off, keeping air circulation or low-load operation active.
+- **Fan-only & Setback Idle Modes** - AC and heat pump devices can switch to fan-only or setback mode instead of turning off, keeping air circulation or low-load operation active. Setback offsets are configurable globally or per room from 1–5°C (default 2°C).
 - **Airflow-Aware Comfort** - Circulation, ventilation, and HVAC fan devices feed the thermal model, perceived temperature, and sensor disagreement analysis.
 - **Multi-Sensor Fusion Diagnostics** - Temperature sensors expose freshness, bias correction, variance, and conflict status in the room interface.
 - **Per-Device Setpoint Mode** - Choose proportional (boost setpoint) or direct (exact target) control per device for optimal results with different hardware.

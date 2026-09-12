@@ -14,7 +14,11 @@ import type {
 } from "../types";
 import { localize } from "../utils/localize";
 import { fireSaveStatus } from "../utils/events";
-import { DEFAULT_CONTROL_MODE, VACATION_SENTINEL } from "../utils/constants";
+import {
+  DEFAULT_CONTROL_MODE,
+  DEFAULT_SETBACK_OFFSET,
+  VACATION_SENTINEL,
+} from "../utils/constants";
 import { roommindThemeStyles } from "../styles/theme-styles";
 import { tempUnit, toDisplay } from "../utils/temperature";
 import "./settings/rs-settings-panel";
@@ -45,6 +49,7 @@ export class RsSettings extends LitElement {
   @state() private _controlMode: "mpc" | "bangbang" = DEFAULT_CONTROL_MODE;
   @state() private _optimizerStrategy: "greedy" | "horizon_search" = "greedy";
   @state() private _comfortWeight = 70;
+  @state() private _setbackOffset = DEFAULT_SETBACK_OFFSET;
   @state() private _weatherEntity = "";
   @state() private _outdoorUnavailableNotify = true;
   @state() private _predictionEnabled = true;
@@ -99,6 +104,7 @@ export class RsSettings extends LitElement {
       this._controlMode = s.control_mode ?? DEFAULT_CONTROL_MODE;
       this._optimizerStrategy = s.optimizer_strategy ?? "greedy";
       this._comfortWeight = s.comfort_weight ?? 70;
+      this._setbackOffset = s.setback_offset ?? DEFAULT_SETBACK_OFFSET;
       this._weatherEntity = s.weather_entity ?? "";
       this._outdoorUnavailableNotify = s.outdoor_unavailable_notify ?? true;
       this._predictionEnabled = s.prediction_enabled ?? true;
@@ -187,6 +193,7 @@ export class RsSettings extends LitElement {
           .controlMode=${this._controlMode}
           .optimizerStrategy=${this._optimizerStrategy}
           .comfortWeight=${this._comfortWeight}
+          .setbackOffset=${this._setbackOffset}
           .outdoorCoolingMin=${this._outdoorCoolingMin}
           .outdoorHeatingMax=${this._outdoorHeatingMax}
           .predictionEnabled=${this._predictionEnabled}
@@ -500,6 +507,7 @@ export class RsSettings extends LitElement {
         control_mode: this._controlMode,
         optimizer_strategy: this._optimizerStrategy,
         comfort_weight: this._comfortWeight,
+        setback_offset: this._setbackOffset,
         weather_entity: this._weatherEntity,
         outdoor_unavailable_notify: this._outdoorUnavailableNotify,
         prediction_enabled: this._predictionEnabled,

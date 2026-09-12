@@ -4,7 +4,8 @@ import type { HomeAssistant, HassArea, DeviceConfig, DeviceType } from "../types
 import { getEntitiesForArea } from "../utils/room-state";
 import { localize } from "../utils/localize";
 import { getSelectValue, openEntityInfo } from "../utils/events";
-import { tempUnit } from "../utils/temperature";
+import { tempUnit, toDisplayDelta, toCelsiusDelta } from "../utils/temperature";
+import { DEFAULT_SETBACK_OFFSET, MIN_SETBACK_OFFSET, MAX_SETBACK_OFFSET } from "../utils/constants";
 import { resolveHeatingSystemType } from "../utils/device-utils";
 import { masterDetailStyles } from "../styles/master-detail-styles";
 import { inputStyles } from "../styles/input-styles";
@@ -16,6 +17,8 @@ export class RsDeviceSection extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
   @property({ attribute: false }) public area!: HassArea;
   @property({ attribute: false }) public devices: DeviceConfig[] = [];
+  @property({ attribute: false }) public setbackOffset: number | null = null;
+  @property({ type: Number }) public globalSetbackOffset = DEFAULT_SETBACK_OFFSET;
   @property({ type: String }) public selectedTempSensor = "";
   @property({ attribute: false }) public valveProtectionExclude: Set<string> = new Set();
   @property({ type: Boolean }) public valveProtectionEnabled = false;
@@ -288,6 +291,21 @@ export class RsDeviceSection extends LitElement {
         --mdc-icon-size: 12px;
       }
 
+      .setback-inherit {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+        font-size: 13px;
+      }
+
+      .setback-hint {
+        color: var(--secondary-text-color);
+        font-size: 12px;
+        line-height: 1.5;
+        margin: 6px 0 0;
+      }
+
       /* View mode styles */
       .view-row {
         display: flex;
@@ -410,7 +428,7 @@ export class RsDeviceSection extends LitElement {
                     : nothing}`
                 : device!.idle_action === "low"
                   ? localize("devices.idle_action_low", this.hass.language)
-                  : localize("devices.idle_action_setback", this.hass.language)}
+                  : `${localize("devices.idle_action_setback", this.hass.language)} (${toDisplayDelta(this.setbackOffset ?? this.globalSetbackOffset, this.hass).toFixed(1)}${tempUnit(this.hass)})`}
             </span>`
           : nothing}
         ${showDirectBadge
@@ -720,6 +738,7 @@ export class RsDeviceSection extends LitElement {
                   </ha-select>
                 </div>`
               : nothing}
+            ${device.idle_action === "setback" ? this._renderSetbackOffset() : nothing}
           `
         : nothing}
       ${isThermostat
@@ -780,21 +799,34 @@ export class RsDeviceSection extends LitElement {
               </ha-select>
               <rs-info-icon .text=${localize("devices.setpoint_mode_hint", lang)}></rs-info-icon>
             </div>
-            ${(device.setpoint_mode ?? "proportional") === "proportional" ? html`
-              <div class="detail-field with-info">
-                <ha-textfield
-                  type="number" min="0" max="10" step="0.5"
-                  .label=${localize("devices.max_setpoint_offset", lang)}
-                  .value=${device.max_setpoint_offset_c == null ? "" : String(device.max_setpoint_offset_c)}
-                  @change=${(e: Event) => {
-                    const raw = (e.target as HTMLInputElement).value;
-                    const value = raw === "" ? null : Number(raw);
-                    if (value !== null && (!Number.isFinite(value) || value < 0 || value > 10)) return;
-                    this._fireDeviceChanged(this.devices.map((d) => d.entity_id === entityId ? { ...d, max_setpoint_offset_c: value } : d));
-                  }}
-                ></ha-textfield>
-                <rs-info-icon .text=${localize("devices.max_setpoint_offset_hint", lang)}></rs-info-icon>
-              </div>` : nothing}
+            ${(device.setpoint_mode ?? "proportional") === "proportional"
+              ? html` <div class="detail-field with-info">
+                  <ha-textfield
+                    type="number"
+                    min="0"
+                    max="10"
+                    step="0.5"
+                    .label=${localize("devices.max_setpoint_offset", lang)}
+                    .value=${device.max_setpoint_offset_c == null
+                      ? ""
+                      : String(device.max_setpoint_offset_c)}
+                    @change=${(e: Event) => {
+                      const raw = (e.target as HTMLInputElement).value;
+                      const value = raw === "" ? null : Number(raw);
+                      if (value !== null && (!Number.isFinite(value) || value < 0 || value > 10))
+                        return;
+                      this._fireDeviceChanged(
+                        this.devices.map((d) =>
+                          d.entity_id === entityId ? { ...d, max_setpoint_offset_c: value } : d,
+                        ),
+                      );
+                    }}
+                  ></ha-textfield>
+                  <rs-info-icon
+                    .text=${localize("devices.max_setpoint_offset_hint", lang)}
+                  ></rs-info-icon>
+                </div>`
+              : nothing}
           `
         : nothing}
       ${isThermostat && this.valveProtectionEnabled
@@ -886,6 +918,61 @@ export class RsDeviceSection extends LitElement {
       return updated;
     });
     this._fireDeviceChanged(newDevices);
+  }
+
+  private _renderSetbackOffset() {
+    const lang = this.hass.language;
+    const inherited = this.setbackOffset === null;
+    return html`
+      <div class="detail-field">
+        <label class="setback-inherit">
+          <ha-checkbox
+            .checked=${inherited}
+            @change=${(e: Event) =>
+              this._fireSetbackOffset(
+                (e.target as HTMLInputElement).checked ? null : this.globalSetbackOffset,
+              )}
+          ></ha-checkbox>
+          ${localize("devices.setback_offset_inherit", lang)}
+        </label>
+        <ha-textfield
+          .label=${localize("devices.setback_offset", lang)}
+          .suffix=${tempUnit(this.hass)}
+          .value=${toDisplayDelta(
+            this.setbackOffset ?? this.globalSetbackOffset,
+            this.hass,
+          ).toFixed(1)}
+          .disabled=${inherited}
+          type="number"
+          min=${toDisplayDelta(MIN_SETBACK_OFFSET, this.hass)}
+          max=${toDisplayDelta(MAX_SETBACK_OFFSET, this.hass)}
+          step=${toDisplayDelta(0.5, this.hass)}
+          @change=${(e: Event) => {
+            const input = (e.target as HTMLInputElement).value;
+            const offset = toCelsiusDelta(Number(input), this.hass);
+            if (
+              input.trim() &&
+              Number.isFinite(offset) &&
+              offset >= MIN_SETBACK_OFFSET &&
+              offset <= MAX_SETBACK_OFFSET
+            ) {
+              this._fireSetbackOffset(offset);
+            }
+          }}
+        ></ha-textfield>
+        <p class="setback-hint">${localize("devices.setback_offset_hint", lang)}</p>
+      </div>
+    `;
+  }
+
+  private _fireSetbackOffset(value: number | null) {
+    this.dispatchEvent(
+      new CustomEvent("setback-offset-changed", {
+        detail: { value },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   private _onIdleFanModeChange(entityId: string, fanMode: string): void {

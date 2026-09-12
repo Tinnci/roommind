@@ -94,6 +94,7 @@ from .managers.sensor_fusion_manager import SensorFusionManager
 from .managers.valve_manager import ValveManager
 from .managers.weather_manager import WeatherManager
 from .managers.window_manager import WindowManager
+from .room_config import resolve_setback_offset
 from .settings_config import mpc_control_enabled
 from .store import RoomMindStore
 from .utils.device_utils import (
@@ -1337,6 +1338,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             outdoor_temp=self.outdoor_temp_effective,
             outdoor_forecast=outdoor_forecast,
             settings=settings,
+            setback_offset=resolve_setback_offset(room, settings),
             previous_mode=self._previous_modes.get(area_id, MODE_IDLE),
             mode_on_since=self._mode_on_since.get(area_id),
             has_external_sensor=has_external_sensor,

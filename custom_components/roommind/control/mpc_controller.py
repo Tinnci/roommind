@@ -29,6 +29,7 @@ from ..const import (
     is_override_active,
     make_roommind_context,
 )
+from ..room_config import resolve_setback_offset
 from ..settings_config import mpc_control_enabled
 from ..utils.device_utils import (
     DEFAULT_IDLE_SETBACK_OFFSET,
@@ -42,7 +43,7 @@ from ..utils.device_utils import (
     has_reliable_hvac_modes,
 )
 from ..utils.temp_utils import celsius_to_ha_temp
-from .actuation import ActuationLedger, DeviceActuationResult, DispatchStatus
+from .actuation import ActuationLedger, DeviceActuationResult, DispatchStatus, plan_setback_temperature
 from .forecast_series import build_outdoor_temperature_series
 from .mpc_optimizer import MPCOptimizer, MPCPlan
 from .rapid_recovery import resolve_rapid_recovery_mode
@@ -608,11 +609,13 @@ async def _async_idle_setback(
     area_id: str,
     targets: TargetTemps | None,
     fallback_temp: float | None,
-) -> None:
+    setback_offset: float,
+) -> DeviceActuationResult | None:
     """Shift the active heat or cool target away from the comfort band."""
     state = hass.states.get(entity_id)
     current_hvac = state.state if state else None
-    if current_hvac not in ("heat", "cool") or targets is None:
+    setback_temp = plan_setback_temperature(current_hvac, targets, setback_offset)
+    if state is None or targets is None or setback_temp is None:
         _LOGGER.debug(
             "Area '%s': setback not applicable for '%s' (hvac=%s, targets=%s), falling back to off",
             area_id,
@@ -620,14 +623,6 @@ async def _async_idle_setback(
             current_hvac,
             targets,
         )
-        await async_turn_off_climate(hass, entity_id, area_id=area_id, fallback_setpoint=fallback_temp)
-        return
-
-    if current_hvac == "heat" and targets.heat is not None:
-        setback_temp = targets.heat - DEFAULT_IDLE_SETBACK_OFFSET
-    elif current_hvac == "cool" and targets.cool is not None:
-        setback_temp = targets.cool + DEFAULT_IDLE_SETBACK_OFFSET
-    else:
         await async_turn_off_climate(hass, entity_id, area_id=area_id, fallback_setpoint=fallback_temp)
         return
 
@@ -646,13 +641,14 @@ async def _async_idle_setback(
         if max_t is not None:
             ha_t = min(ha_t, float(max_t))
 
+    desired = {"entity_id": entity_id, "temperature": ha_t}
     current_temp_attr = state.attributes.get("temperature")
     if current_temp_attr is not None and abs(float(current_temp_attr) - ha_t) < 0.1:
-        return
+        return DeviceActuationResult(entity_id, DispatchStatus.SKIPPED, "set_temperature", desired)
     if _should_use_cache(state):
         cached = _last_commands.get(entity_id)
         if cached and cached.get("service") == "set_temperature" and cached.get("temperature") == ha_t:
-            return
+            return DeviceActuationResult(entity_id, DispatchStatus.SKIPPED, "set_temperature", desired)
 
     _LOGGER.debug(
         "Area '%s': setback on '%s' — target %.1f → %.1f",
@@ -661,22 +657,34 @@ async def _async_idle_setback(
         targets.heat if current_hvac == "heat" else targets.cool,
         ha_t,
     )
+    call_context = make_roommind_context()
     try:
         await hass.services.async_call(
             "climate",
             "set_temperature",
-            {"entity_id": entity_id, "temperature": ha_t},
+            desired,
             blocking=True,
-            context=make_roommind_context(),
+            context=call_context,
         )
         _last_commands[entity_id] = _cache_entry("set_temperature", {"temperature": ha_t})
-    except Exception:  # noqa: BLE001
+        return DeviceActuationResult(
+            entity_id, DispatchStatus.SENT, "set_temperature", desired, context_id=call_context.id
+        )
+    except Exception as err:  # noqa: BLE001
         _LOGGER.warning(
             "Area '%s': climate.set_temperature(%.1f) failed on '%s'",
             area_id,
             ha_t,
             entity_id,
             exc_info=True,
+        )
+        return DeviceActuationResult(
+            entity_id,
+            DispatchStatus.FAILED,
+            "set_temperature",
+            desired,
+            diagnostic=str(err),
+            context_id=call_context.id,
         )
 
 
@@ -765,7 +773,8 @@ async def async_idle_device(
     *,
     area_id: str = "unknown",
     targets: TargetTemps | None = None,
-) -> None:
+    setback_offset: float = DEFAULT_IDLE_SETBACK_OFFSET,
+) -> DeviceActuationResult | None:
     """Idle a climate device per its configured idle_action.
 
     "off"      -> async_turn_off_climate() (existing behavior)
@@ -792,14 +801,14 @@ async def async_idle_device(
         return
 
     if idle_action == IDLE_ACTION_SETBACK:
-        await _async_idle_setback(
+        return await _async_idle_setback(
             hass,
             entity_id,
             area_id=area_id,
             targets=targets,
             fallback_temp=fallback_temp,
+            setback_offset=setback_offset,
         )
-        return
 
     if idle_action != IDLE_ACTION_FAN_ONLY:
         await async_turn_off_climate(hass, entity_id, area_id=area_id, fallback_setpoint=fallback_temp)
@@ -962,6 +971,7 @@ class MPCController:
         outdoor_temp: float | None = None,
         outdoor_forecast: list[dict] | None = None,
         settings: dict | None = None,
+        setback_offset: float | None = None,
         previous_mode: str = MODE_IDLE,
         has_external_sensor: bool = True,
         target_resolver: Callable[[float], TargetTemps | float] | None = None,
@@ -1039,6 +1049,7 @@ class MPCController:
 
         s = settings or {}
         self._settings = s
+        self._setback_offset = setback_offset if setback_offset is not None else resolve_setback_offset(room_config, s)
         self.outdoor_cooling_min = s.get("outdoor_cooling_min", DEFAULT_OUTDOOR_COOLING_MIN)
         self.outdoor_heating_max = s.get("outdoor_heating_max", DEFAULT_OUTDOOR_HEATING_MAX)
 
@@ -1526,8 +1537,7 @@ class MPCController:
 
         for eid in thermostats:
             if eid in forced_off:
-                await async_idle_device(self.hass, eid, self._devices, area_id=self._area_id, targets=targets)
-                report.mark_inactive(eid)
+                await self._async_idle_device(eid, targets=targets, report=report)
                 continue
             if can_heat and ha_heat_target is not None:
                 mode_result = await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "heat"})
@@ -1542,20 +1552,17 @@ class MPCController:
                     operations=(mode_result, temperature_result),
                 )
             else:
-                await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "off"})
-                report.mark_inactive(eid)
+                await self._async_idle_device(eid, targets=self._idle_targets, report=report)
 
         for eid in self.acs:
             if eid in forced_off:
-                await async_idle_device(self.hass, eid, self._devices, area_id=self._area_id, targets=targets)
-                report.mark_inactive(eid)
+                await self._async_idle_device(eid, targets=targets, report=report)
                 continue
             ac_state = self.hass.states.get(eid)
             ac_modes = _effective_ac_modes(ac_state)
             ac_heat_target = ha_heat_target if ha_heat_target is not None else ha_cool_target
             if selected_target is None:
-                await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "off"})
-                report.mark_inactive(eid)
+                await self._async_idle_device(eid, targets=self._idle_targets, report=report)
             elif "heat_cool" in ac_modes:
                 await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "heat_cool"})
                 ac_state_now = self.hass.states.get(eid)
@@ -1620,8 +1627,7 @@ class MPCController:
                 )
                 report.mark_active(eid)
             else:
-                await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "off"})
-                report.mark_inactive(eid)
+                await self._async_idle_device(eid, targets=self._idle_targets, report=report)
         return report
 
     async def _async_apply_heat_source_plan(
@@ -1675,14 +1681,7 @@ class MPCController:
                     report.mark_active(cmd.entity_id)
                 continue
             if cmd.entity_id in context.forced_off and cmd.active:
-                await async_idle_device(
-                    self.hass,
-                    cmd.entity_id,
-                    self._devices,
-                    area_id=self._area_id,
-                    targets=targets,
-                )
-                report.mark_inactive(cmd.entity_id)
+                await self._async_idle_device(cmd.entity_id, targets=targets, report=report)
                 continue
             if cmd.active:
                 if cmd.device_type == "thermostat":
@@ -1735,23 +1734,14 @@ class MPCController:
                         )
                         report.mark_active(cmd.entity_id)
                     else:
-                        await self._call("set_hvac_mode", {"entity_id": cmd.entity_id, "hvac_mode": "off"})
-                        report.mark_inactive(cmd.entity_id)
+                        await self._async_idle_device(cmd.entity_id, targets=self._idle_targets, report=report)
             elif cmd.device_type == "thermostat":
                 # Idle inactive TRVs via the configured idle_action. Keeping
                 # them at current_temp can reopen a stepped valve on sensor
                 # fluctuation and cause mechanical twitching (#168).
-                await async_idle_device(
-                    self.hass,
-                    cmd.entity_id,
-                    self._devices,
-                    area_id=self._area_id,
-                    targets=targets,
-                )
-                report.mark_inactive(cmd.entity_id)
+                await self._async_idle_device(cmd.entity_id, targets=targets, report=report)
             else:
-                await self._call("set_hvac_mode", {"entity_id": cmd.entity_id, "hvac_mode": "off"})
-                report.mark_inactive(cmd.entity_id)
+                await self._async_idle_device(cmd.entity_id, targets=self._idle_targets, report=report)
         return report
 
     async def _async_apply_standard(self, context: DeviceApplyContext) -> AppliedCommandReport:
@@ -1782,14 +1772,7 @@ class MPCController:
             ha_trv_direct = celsius_to_ha_temp(self.hass, context.effective_target)
             for eid in context.thermostats:
                 if eid in context.forced_off:
-                    await async_idle_device(
-                        self.hass,
-                        eid,
-                        self._devices,
-                        area_id=self._area_id,
-                        targets=targets,
-                    )
-                    report.mark_inactive(eid)
+                    await self._async_idle_device(eid, targets=targets, report=report)
                     continue
                 ha_t = ha_trv_direct if eid in self._direct_eids else ha_trv
                 mode_result = await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "heat"})
@@ -1817,14 +1800,7 @@ class MPCController:
             ha_ac_direct = celsius_to_ha_temp(self.hass, context.effective_target)
             for eid in self.acs:
                 if eid in context.forced_off:
-                    await async_idle_device(
-                        self.hass,
-                        eid,
-                        self._devices,
-                        area_id=self._area_id,
-                        targets=targets,
-                    )
-                    report.mark_inactive(eid)
+                    await self._async_idle_device(eid, targets=targets, report=report)
                     continue
                 ha_t = ha_ac_direct if eid in self._direct_eids else ha_ac_target
                 ac_state = self.hass.states.get(eid)
@@ -1850,8 +1826,7 @@ class MPCController:
                         operations=(mode_result, temperature_result),
                     )
                 else:
-                    await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "off"})
-                    report.mark_inactive(eid)
+                    await self._async_idle_device(eid, targets=self._idle_targets, report=report)
         return report
 
     async def _async_apply_cooling(self, context: DeviceApplyContext) -> AppliedCommandReport:
@@ -1870,14 +1845,7 @@ class MPCController:
         ha_cool_direct = celsius_to_ha_temp(self.hass, context.effective_target)
         for eid in self.acs:
             if eid in context.forced_off:
-                await async_idle_device(
-                    self.hass,
-                    eid,
-                    self._devices,
-                    area_id=self._area_id,
-                    targets=context.targets,
-                )
-                report.mark_inactive(eid)
+                await self._async_idle_device(eid, targets=context.targets, report=report)
                 continue
             ha_t = ha_cool_direct if eid in self._direct_eids else ha_target
             mode_result = await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "cool"})
@@ -1893,17 +1861,9 @@ class MPCController:
             )
         for eid in context.thermostats:
             if eid in context.forced_off:
-                await async_idle_device(
-                    self.hass,
-                    eid,
-                    self._devices,
-                    area_id=self._area_id,
-                    targets=context.targets,
-                )
-                report.mark_inactive(eid)
+                await self._async_idle_device(eid, targets=context.targets, report=report)
                 continue
-            await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "off"})
-            report.mark_inactive(eid)
+            await self._async_idle_device(eid, targets=self._idle_targets, report=report)
         return report
 
     async def _async_apply_idle(self, context: DeviceApplyContext) -> AppliedCommandReport:
@@ -1950,14 +1910,7 @@ class MPCController:
                 )
                 report.mark_active(eid)
                 continue
-            await async_idle_device(
-                self.hass,
-                eid,
-                self._devices,
-                area_id=self._area_id,
-                targets=targets,
-            )
-            report.mark_inactive(eid)
+            await self._async_idle_device(eid, targets=targets, report=report)
         return report
 
     async def async_apply(
@@ -2056,13 +2009,40 @@ class MPCController:
             if operations:
                 report.record(entity_id, active=True, operations=operations)
 
+    async def _async_idle_device(
+        self,
+        entity_id: str,
+        *,
+        targets: TargetTemps | None,
+        report: AppliedCommandReport | None = None,
+    ) -> DeviceActuationResult | None:
+        """Submit idle work with the cycle's offset and retain available evidence."""
+        result = await async_idle_device(
+            self.hass,
+            entity_id,
+            self._devices,
+            area_id=self._area_id,
+            targets=targets,
+            setback_offset=self._setback_offset,
+        )
+        if result is not None:
+            self._record_dispatch_result(result)
+        if report is not None:
+            if result is not None:
+                report.record(entity_id, active=False, operations=(result,))
+            else:
+                report.mark_inactive(entity_id)
+        return result
+
     async def _call(self, service: str, data: dict, *, temp_intent: str = "") -> DeviceActuationResult:
         eid = data.get("entity_id")
         state = self.hass.states.get(eid) if eid else None
 
         # Delegate "turn off" to fallback-aware helper (handles heat-only TRVs)
         if service == "set_hvac_mode" and data.get("hvac_mode") == "off" and eid:
-            await async_idle_device(self.hass, eid, self._devices, area_id=self._area_id, targets=self._idle_targets)
+            result = await self._async_idle_device(eid, targets=self._idle_targets)
+            if result is not None:
+                return result
             return self._record_dispatch_result(
                 DeviceActuationResult(
                     entity_id=eid,

@@ -197,13 +197,123 @@ async function waitForText(cdp: CdpSession, label: string, timeoutMs = 6_000): P
   return text;
 }
 
+async function checkGlobalSetback(cdp: CdpSession): Promise<void> {
+  const result = await evaluate<{ saved: number; reloaded: string; invalidIgnored: boolean }>(
+    cdp,
+    `(async () => {
+      const settings = document.querySelector("rs-settings");
+      const control = settings.shadowRoot.querySelector("rs-settings-control");
+      const field = [...control.shadowRoot.querySelectorAll("ha-textfield")]
+        .find(field => field.label === "Default setback offset");
+      field.value = "3.5";
+      field.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise(resolve => setTimeout(resolve, 650));
+      const saved = (await settings.hass.callWS({ type: "roommind/settings/get" })).settings.setback_offset;
+      await settings._loadSettings();
+      await settings.updateComplete;
+      await control.updateComplete;
+      const reloaded = field.value;
+      field.value = "0";
+      field.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise(resolve => setTimeout(resolve, 650));
+      const invalidIgnored = (await settings.hass.callWS({ type: "roommind/settings/get" })).settings.setback_offset === saved;
+      field.value = reloaded;
+      return { saved, reloaded, invalidIgnored };
+    })()`,
+  );
+  if (result?.saved !== 3.5 || result.reloaded !== "3.5" || !result.invalidIgnored) {
+    throw new Error(`Global setback round-trip failed: ${JSON.stringify(result)}`);
+  }
+}
+
+async function checkRoomSetback(cdp: CdpSession): Promise<void> {
+  await openRoomEditSection(cdp, "devices");
+  const result = await evaluate<{
+    saved: number;
+    reloaded: string;
+    reset: number | null;
+    inherited: string;
+    disabled: boolean;
+    invalidIgnored: boolean;
+  }>(
+    cdp,
+    `(async () => {
+      const detail = document.querySelector("rs-room-detail");
+      const saved = [];
+      const callWS = detail.hass.callWS;
+      detail.hass = { ...detail.hass, callWS: async msg => {
+        if (msg.type === "roommind/rooms/save") saved.push(structuredClone(msg));
+        return callWS(msg);
+      } };
+      detail.globalSetbackOffset = 3;
+      const router = detail.shadowRoot.querySelector("rs-room-edit-dialog-router");
+      const devices = router.querySelector("rs-device-section");
+      const settle = async () => {
+        await detail.updateComplete;
+        await router.updateComplete;
+        await devices.updateComplete;
+      };
+      devices._selectedForEdit = devices.devices.find(device => device.type === "ac").entity_id;
+      await settle();
+      const idle = [...devices.shadowRoot.querySelectorAll("ha-select")]
+        .find(field => field.label === "When idle");
+      idle.dispatchEvent(new CustomEvent("selected", { detail: { value: "setback" } }));
+      await settle();
+      const checkbox = devices.shadowRoot.querySelector(".setback-inherit ha-checkbox");
+      const field = [...devices.shadowRoot.querySelectorAll("ha-textfield")]
+        .find(field => field.label === "Room setback offset");
+      checkbox.checked = false;
+      checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+      await settle();
+      field.value = "3.5";
+      field.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise(resolve => setTimeout(resolve, 650));
+      const savedOffset = saved.at(-1).setback_offset;
+      detail.config = { ...detail.config, ...saved.at(-1) };
+      await settle();
+      const reloaded = field.value;
+      const count = saved.length;
+      field.value = "0";
+      field.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise(resolve => setTimeout(resolve, 650));
+      const invalidIgnored = saved.length === count;
+      checkbox.checked = true;
+      checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise(resolve => setTimeout(resolve, 650));
+      detail.globalSetbackOffset = 4;
+      await settle();
+      return { saved: savedOffset, reloaded, reset: saved.at(-1).setback_offset,
+        inherited: field.value, disabled: field.disabled, invalidIgnored };
+    })()`,
+  );
+  if (
+    result?.saved !== 3.5 ||
+    result.reloaded !== "3.5" ||
+    result.reset !== null ||
+    result.inherited !== "4.0" ||
+    !result.disabled ||
+    !result.invalidIgnored
+  ) {
+    throw new Error(`Room setback round-trip failed: ${JSON.stringify(result)}`);
+  }
+  await screenshot(cdp, "setback-desktop");
+}
+
 async function run(): Promise<void> {
   await mkdir(ARTIFACT_DIR, { recursive: true });
   const profileDir = join(ARTIFACT_DIR, "chrome-profile");
   await rm(profileDir, { recursive: true, force: true });
 
   const vite = Bun.spawn(
-    ["bun", "--bun", "vite", "--host", HOST, "--port", String(VITE_PORT), "--strictPort"],
+    [
+      process.execPath,
+      join(import.meta.dir, "..", "node_modules/vite/bin/vite.js"),
+      "--host",
+      HOST,
+      "--port",
+      String(VITE_PORT),
+      "--strictPort",
+    ],
     {
       cwd: join(import.meta.dir, ".."),
       stdout: "ignore",
@@ -250,13 +360,17 @@ async function run(): Promise<void> {
     await openAllDetails(cdp);
     await screenshot(cdp, "settings-desktop", true);
     console.log("Settings preview checked");
+    await checkGlobalSetback(cdp);
+    console.log("Global setback save and reload checked");
 
     await navigate(cdp, "/dev/room-detail-preview.html");
     const detailText = await waitForText(cdp, "Primary sensor");
     assertIncludes(detailText, "Device setpoint");
-    assertIncludes(detailText, "Configuration");
+    assertIncludes(detailText, "Room configuration");
     await screenshot(cdp, "room-detail-desktop", true);
     console.log("Room detail desktop checked");
+    await checkRoomSetback(cdp);
+    console.log("Room setback save, reload and inheritance checked");
 
     await openRoomEditSection(cdp, "sensors");
     const sensorsText = await waitForText(cdp, "Temperature source priority");

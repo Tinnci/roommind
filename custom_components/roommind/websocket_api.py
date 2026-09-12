@@ -20,7 +20,7 @@ from .const import (
     build_override_live,
     is_override_suppressed,
 )
-from .room_config import ROOM_CONFIG_FIELDS, ROOM_CONFIG_SCHEMA
+from .room_config import ROOM_CONFIG_FIELDS, ROOM_CONFIG_SCHEMA, resolve_setback_offset
 from .services.analytics_service import (
     _compute_target_forecast,  # noqa: F401 - re-exported for tests
     _csv_to_points,  # noqa: F401 - re-exported for tests
@@ -240,6 +240,7 @@ async def websocket_list_rooms(
             "anyone_home": _compute_anyone_home(hass, settings),
             "valve_protection_enabled": settings.get("valve_protection_enabled", False),
             "compressor_groups": settings.get("compressor_groups", []),
+            "setback_offset": resolve_setback_offset({}, settings),
         },
     )
 
