@@ -146,6 +146,45 @@ tar czf - \
   "${SSH_CMD[@]}" "${SSH_USER}@${HA_IP}" "sh -c ${REMOTE_EXTRACT_SCRIPT_Q} deploy-extract ${REMOTE_CONFIG_Q}"
 echo "    OK"
 
+# 3. Deploy companion driver if present (tcl_udp_ac)
+TCL_LOCAL_DIR="${TCL_LOCAL_DIR:-/Users/driezy/ha-tcl-udp-ac/custom_components/tcl_udp_ac}"
+if [[ -d "${TCL_LOCAL_DIR}" ]]; then
+  echo "--- Deploying companion driver (tcl_udp_ac) ---"
+  TCL_DEST="${REMOTE_CONFIG}/custom_components/tcl_udp_ac"
+  "${SSH_CMD[@]}" "${SSH_USER}@${HA_IP}" "mkdir -p '${TCL_DEST}'"
+  tar czf - \
+    --exclude='__pycache__' \
+    --exclude='*.pyc' \
+    --exclude='*.pyo' \
+    --exclude='.DS_Store' \
+    -C "${TCL_LOCAL_DIR}" . | \
+    "${SSH_CMD[@]}" "${SSH_USER}@${HA_IP}" "tar xzof - -C '${TCL_DEST}'"
+  echo "    OK"
+fi
+
+# 3b. Deploy companion sensor integration if present (zm1)
+ZM1_LOCAL_DIR="${ZM1_LOCAL_DIR:-/Users/driezy/Downloads/zm1/custom_components/zm1}"
+if [[ -d "${ZM1_LOCAL_DIR}" ]]; then
+  echo "--- Deploying companion sensor integration (zm1) ---"
+  ZM1_DEST="${REMOTE_CONFIG}/custom_components/zm1"
+  "${SSH_CMD[@]}" "${SSH_USER}@${HA_IP}" "mkdir -p '${ZM1_DEST}'"
+  tar czf - \
+    --exclude='__pycache__' \
+    --exclude='*.pyc' \
+    --exclude='*.pyo' \
+    --exclude='.DS_Store' \
+    -C "${ZM1_LOCAL_DIR}" . | \
+    "${SSH_CMD[@]}" "${SSH_USER}@${HA_IP}" "tar xzof - -C '${ZM1_DEST}'"
+  echo "    OK"
+fi
+
+# 4. Restart Home Assistant container on 192.168.3.120 if requested
+if [[ "${RESTART_HA:-1}" == "1" ]]; then
+  echo "--- Restarting Home Assistant container on ${HA_IP} ---"
+  "${SSH_CMD[@]}" "${SSH_USER}@${HA_IP}" "docker restart homeassistant || true"
+  echo "    OK"
+fi
+
 echo ""
 echo "==> Done! Next steps:"
 echo "    - Python changes:        Settings → Integrations → RoomMind → ⋮ → Reload"

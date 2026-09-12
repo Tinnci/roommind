@@ -44,6 +44,21 @@ Astra 在每一次演进迭代中，可自由权衡并交叉推进以下核心�
 - **做减法与优先级排序（Prioritize the Necessary vs the Redundant）**：明确区分“真正不可或缺的核心逻辑”与“多余繁琐的冗余关卡”。主动审视现有代码与函数，剔除那些无实际收益的过度防御、重复校验与繁琐门禁。
 - **真实数据与真实经验驱动（Real-World Data & Experience）**：深入分析已采集的设备与家庭环境真实数据，去伪存真，区分有用真实的物理信号与虚假无意义的噪声。一切优化必须扎根于真实空调的物理特性、家庭热工惯性与实际居住体验，而非闭门造车式的理论空转。
 
+### 6. 持续交付闭环：代码提交推送与实机部署 (Continuous Delivery: Commit, Push & Deployment to 192.168.3.120)
+- **双端代码仓库规范推送 (Git Commit & Push)**：
+  - 本地两个代码仓库（`roommind` 与 `/Users/driezy/ha-tcl-udp-ac`）在通过全套自动化测试（Python + Bun + 驱动 unittest）后，必须执行规范的 Git 提交并推送至各自的 GitHub 远程仓库（`git push origin main`）；
+- **实机无缝部署与容器验证 (Deploy to 192.168.3.120)**：
+  - 使用项目根目录下的 `./deploy.sh` 部署脚本，将最新的 `roommind` 及其配套驱动 `tcl_udp_ac` 同步部署到实机 `192.168.3.120` 的 Home Assistant 配置目录（`/home/user/homeassistant/config/custom_components/`）；
+  - 自动触发 Home Assistant 容器重启（`docker restart homeassistant`），并在第一线真实家庭环境中验证组件加载、实体注册与后台运行无异常。
+
+### 7. 空间环境感知源头与传感器软硬件/固件协同 (Perception Grounding: Phicomm M1 / EMW3080 & zM1 Firmware/Protocol Co-Design)
+- **物理观测源头不可伪造**：RoomMind 的一切控制决策与自适应学习，完全建立在以卧室悟空 M1 / ZM1 为代表的物理环境传感器真实读数之上。传感器回传抖动、UDP 超时与不可用闪烁，将直接动摇整个气候系统的单周期观测纯粹性与决策信心。
+- **关联工程仓库授权与全链路协同**：
+  - 当前实机运行固件项目：[`a2633063/zM1`](https://github.com/a2633063/zM1)（卧室设备当前搭载的第三方固件发布源，主要以 Release 二进制形式分发）；
+  - Home Assistant 集成驱动：`/Users/driezy/Downloads/zm1` 与 `/Users/driezy/Downloads/zm1_ha`；
+  - 硬件芯片与原生固件工程：`/Users/driezy/Downloads/EMW3080`（基于 Realtek RTL8710BN / AmebaZ 架构的 MXCHIP EMW3080 原生固件开发套件）；
+  - 授权 Astra 跨越“感知硬件/嵌入式固件 -> 局域网 UDP 传输协议 -> Home Assistant 集成插件 -> RoomMind 空间大脑观测消费”的全链路，开展自顶向下与自底向上的双向归因与架构重构。
+
 ---
 
 ## 演进阶段与战略导向 (Progressive Horizons & Strategic Phases)
@@ -82,10 +97,26 @@ Astra 在每一次演进迭代中，可自由权衡并交叉推进以下核心�
       - 上层空间气候大脑（`RoomMind`）与底层硬件通信驱动（`ha-tcl-udp-ac`）各自暴露给 Home Assistant 的实体表面，应该如何清晰划分职责与抽象层级，才既契合 HA 原生生态体验，又杜绝物理事实与控制意图的混淆？
       - 对于真实空调存在的蜂鸣声、亮屏等物理副反应，以及系统在多源融合中提取出的数据血统与真实状态，应该如何在实体契约层建立诚实、严密且不扰人的表达？
 
+### 阶段四：空间环境感知源头重塑、固件协议分析与 UDP 传输可靠性 (Phase 4: Environmental Sensing Grounding, M1/EMW3080 Firmware & Transport Inquiries)
+- [ ] **Phase 4: 悟空 M1 / ZM1 (EMW3080) 固件协议逆向、UDP 通信可靠性与全链路传感器观测链重构**
+  - **开放性核心质询与探索空间（Open Questions for Astra to Explore & Resolve）**：
+    - **固件底层 vs 插件传输的超时根因质询（The Root-Cause Inquiry: Firmware Stack vs. Integration Protocol）**：
+      - 真实卧室中使用的 ZM1 传感器（基于 EMW3080 模块，当前运行第三方固件项目 [`a2633063/zM1`](https://github.com/a2633063/zM1)）偶发的 UDP 超时与回传不稳定，其物理与协议根源究竟在何处？
+      - 是芯片端第三方固件在 FreeRTOS / lwIP 任务调度中的阻塞、cJSON 动态内存碎片与泄漏、Wi-Fi 节能睡眠（Modem Sleep / DTIM）唤醒延迟，还是固件内部传感器（如温湿度、PM2.5、甲醛等总线读取）造成的单线程耗时？
+      - 抑或是 Home Assistant 插件端（`zm1`）在每次轮询时采用短生命周期临时套接字（Ephemeral Socket）绑定 `10181` 端口并立即销毁，与固件不可预测的异步主动上报（Unsolicited Reports）之间存在天然的时序错位与内核丢包？
+    - **传输范式与网络拓扑质询（The Transport Paradigm & Reporting Cadence Inquiries）**：
+      - 在空间气候自治的真实场景中，主动轮询（Pull: Central Controller Request/Response）与事件驱动主动上报（Push: Unsolicited Broadcast / Unicast / MQTT）两种通信范式，哪一种对资源受限的嵌入式传感器更为友好且健壮？
+      - 如果维持 UDP 传输，集成端是否应建立常驻异步套接字监听器（Persistent Async Datagram Listener）以捕获所有在途心跳？对于控制与查询，如何设计轻量级的事务 Sequence/Nonce 与自适应退避重试，彻底消除“超时即标记不可用”的闪烁？
+      - 或者，设备支持的本地 MQTT 协议是否比不可靠的裸 UDP 能提供更确定、无连接断档且天生解耦的双向状态流？
+    - **自研原生固件演进路径质询（The Native Firmware Reconstruction Inquiry）**：
+      - 面对第三方黑盒固件可能隐藏的固件级 bug，基于 `/Users/driezy/Downloads/EMW3080`（Realtek `RTL0B_SDK`）从源码打造极简、纯粹且健壮的 M1 原生固件，其关键路径应当如何展开？
+      - 如何基于清晰的 FreeRTOS 架构组织任务划分（网络通信、传感器采样、看门狗喂狗、显示调光），彻底杜绝内存碎片与协议锁死，从根源上实现微秒级响应与确定性回传速率？
+    - **空间大脑对感知衰减的韧性契约（The RoomMind Perception Staleness & Resilience Contract）**：
+      - 当物理传感器不可避免地经历局域网瞬态抖动或单次超时，RoomMind 与上层协调器应如何定义数据陈旧度（Staleness）与平滑退化规则？
+      - 如何既能防止因单次 UDP 超时导致实体频繁上下线（Flapping）造成控制策略混乱，又能坚决避免系统在传感器彻底断联数小时后仍使用“僵尸温度”驱动空调超额制冷/制热？
 
-
-### 阶段四：实机经验印证与极简演进 (Phase 4: Real-World Experience & Codebase Pruning)
-- [ ] **Phase 4: 结合家庭实机数据演进与全局代码精简**
+### 阶段五：实机经验印证与极简演进 (Phase 5: Real-World Experience & Codebase Pruning)
+- [ ] **Phase 5: 结合家庭实机数据演进与全局代码精简**
   - **核心关切与开放探索空间**：
     - 结合 192.168.3.120 的真实历史表现持续检验系统，去伪存真，大刀阔斧地清理不必要的冗余关卡与死板防线，用更少、更轻盈的代码实现更高阶的目标。
 
