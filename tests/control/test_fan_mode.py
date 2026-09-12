@@ -844,7 +844,7 @@ async def test_async_idle_device_setback_no_state():
 
 @pytest.mark.asyncio
 async def test_async_idle_device_setback_auto_mode_fallback():
-    """Setback with device in 'auto' hvac mode falls back to off + defense-in-depth set_temperature."""
+    """Setback with device in 'auto' hvac mode falls back to off without an extra setpoint write."""
     clear_command_cache()
     hass = build_hass()
     state = MagicMock()
@@ -863,7 +863,7 @@ async def test_async_idle_device_setback_auto_mode_fallback():
     targets = TargetTemps(heat=21.0, cool=24.0)
     await async_idle_device(hass, "climate.ac1", devices, area_id="living_room", targets=targets)
 
-    assert hass.services.async_call.call_count == 2
+    assert hass.services.async_call.call_count == 1
     hass.services.async_call.assert_any_call(
         "climate",
         "set_hvac_mode",
@@ -899,7 +899,7 @@ async def test_async_idle_device_setback_no_targets():
 
 @pytest.mark.asyncio
 async def test_async_idle_device_setback_heat_mode_no_heat_target():
-    """Setback in heat mode but targets.heat=None (cooling-only room) falls back to off + defense-in-depth."""
+    """Setback in heat mode but targets.heat=None (cooling-only room) falls back to off without an extra setpoint write."""
     clear_command_cache()
     hass = build_hass()
     state = MagicMock()
@@ -919,7 +919,7 @@ async def test_async_idle_device_setback_heat_mode_no_heat_target():
     targets = TargetTemps(heat=None, cool=24.0)
     await async_idle_device(hass, "climate.ac1", devices, area_id="living_room", targets=targets)
 
-    assert hass.services.async_call.call_count == 2
+    assert hass.services.async_call.call_count == 1
     hass.services.async_call.assert_any_call(
         "climate",
         "set_hvac_mode",

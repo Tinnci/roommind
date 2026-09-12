@@ -20,6 +20,17 @@ For a proportional device, `Devices -> Maximum setpoint offset` caps the device 
 
 Set the offset to 0 to send the room target, or leave it empty to preserve the existing device-range behavior. This limit bounds the command, not physical room-temperature overshoot. Thermal inertia, delayed feedback, and a device's internal controller can still cause overshoot. Existing installations retain their previous setpoint behavior until an offset is configured.
 
+The offset defines the proportional modulation endpoint before interpolation. For a
+26°C room and 24°C cooling target with a 2°C offset, 50%, 75% and 100% demand produce
+24°C, 23°C and 22°C setpoints. Small AC output increases are paced for 120 seconds
+(300 seconds during quiet hours); reductions and protection commands remain immediate.
+See [AC Setpoint Planning and Quiet Control](ac-setpoint-planning.md) for exceptions,
+night accessory restoration and the distinction between a plan and device feedback.
+
+**中文：** 偏移量先限制比例调节端点，再按需求插值。小幅加力指令在日间按 120 秒、
+安静时段按 300 秒合并；降负载和保护动作立即处理。设备计划设定、服务下发和物理反馈
+分别表达，完整规则见[空调设定规划与安静控制](ac-setpoint-planning.md)。
+
 ## What the Priority Slider Does
 
 In `Settings -> Control -> Priority`, the slider balances comfort against runtime/energy use for MPC.
@@ -52,11 +63,12 @@ This matters for the options below.
 
 ## Setpoint Mode: Proportional vs Direct
 
-`Setpoint mode` is relevant for thermostat/TRV devices in `Full Control` rooms.
+`Setpoint mode` applies to thermostats/TRVs and ACs in `Full Control` rooms.
 
 ### Proportional
 
-RoomMind calculates the required heating power, then sends a boosted device setpoint to achieve roughly that output.
+RoomMind translates control demand into a device setpoint, higher for heating or
+lower for cooling. The device's response still requires observation.
 
 Example:
 
@@ -85,7 +97,8 @@ Best for:
 
 ### Turn off
 
-RoomMind turns the device off. If the device does not support a true off state, RoomMind uses the device's minimum or off-like behavior.
+RoomMind turns an AC off without first changing its setpoint. If the device does
+not support a true off state, RoomMind uses a neutral setpoint or off-like behavior.
 
 ### Fan only
 

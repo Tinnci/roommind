@@ -682,10 +682,12 @@ export class RsHeroStatus extends LitElement {
                     ? html`
                         <span class="mode-pill ${getModeClass(live.mode)}">
                           <span class="mode-dot"></span>
-                          ${live.observation_status === "unknown" ? localize("hero.output_unknown", this.hass?.language ?? "en") : formatMode(
-                            live.mode,
-                            this.hass?.language ?? "en",
-                          )}${live.heating_power > 0 && live.heating_power < 100
+                          ${live.observation_status === "unknown"
+                            ? localize("hero.output_unknown", this.hass?.language ?? "en")
+                            : formatMode(
+                                live.mode,
+                                this.hass?.language ?? "en",
+                              )}${live.heating_power > 0 && live.heating_power < 100
                             ? html` ${live.heating_power}%`
                             : nothing}
                         </span>
@@ -714,10 +716,16 @@ export class RsHeroStatus extends LitElement {
             : nothing}
         </div>
         ${!this.isOutdoor && live?.commanded_mode
-          ? html`<div class="control-mode-info-panel">${localize("hero.control_request", this.hass?.language ?? "en", {
-              mode: formatMode(live.commanded_mode, this.hass?.language ?? "en"),
-              power: String(live.requested_power ?? 0),
-            })}${live.dispatch_status === "failed" ? html` · ${localize("hero.dispatch_failed", this.hass?.language ?? "en")}` : nothing}</div>`
+          ? html`<div class="control-mode-info-panel">
+              ${localize("hero.control_request", this.hass?.language ?? "en", {
+                mode: formatMode(live.commanded_mode, this.hass?.language ?? "en"),
+                power: String(live.requested_power ?? 0),
+              })}${live.dispatch_status === "failed"
+                ? html` · ${localize("hero.dispatch_failed", this.hass?.language ?? "en")}`
+                : live.dispatch_status === "deferred"
+                  ? html` · ${localize("hero.dispatch_deferred", this.hass?.language ?? "en")}`
+                  : nothing}
+            </div>`
           : nothing}
         ${this._controlModeInfoExpanded && this.config && !this.isOutdoor
           ? html`

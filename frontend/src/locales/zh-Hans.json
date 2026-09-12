@@ -81,7 +81,7 @@
   "room.status.target": "目标",
   "room.status.night": "夜间策略",
   "room.status.primary_sensor": "主传感器",
-  "room.status.device_setpoint": "设备设定值",
+  "room.status.device_setpoint": "设备计划设定值",
   "room.status.night_active": "当前生效",
   "room.status.night_scheduled": "{hours}",
   "room.status.not_set": "未设置",
@@ -144,7 +144,7 @@
   "hero.override": "临时覆盖",
   "hero.remaining": "剩余 {time}",
   "hero.humidity": "湿度 {value}%",
-  "hero.device_setpoint": "设备设置为 {value}{unit}",
+  "hero.device_setpoint": "设备计划设定：{value}{unit}",
   "hero.heat_source_primary": "供暖设备：散热器恒温阀",
   "hero.heat_source_secondary": "供暖设备：空调",
   "hero.heat_source_both": "供暖设备：暖气阀 + 空调",
@@ -303,7 +303,7 @@
   "devices.setpoint_mode": "设定值控制模式",
   "devices.setpoint_mode_proportional": "比例控制（阀门开度调节）",
   "devices.setpoint_mode_direct": "直接控制（设备自行调节）",
-  "devices.setpoint_mode_hint": "“直接控制”会将实际房间目标发送至设备 —— 最适合能够自我调节的温控器和空间加热器。“比例控制”则向设备发送一个朝向最高温度的过载提升设定值 —— 最适合散热器恒温阀（TRV）。",
+  "devices.setpoint_mode_hint": "直接控制发送房间舒适目标，并适配设备步长。比例控制在最大偏移范围内提高供暖设定或降低制冷设定，以请求更大输出；设备实际输出单独观测。",
   "devices.valve_protection_excluded": "不参与阀门保护",
   "devices.valve_protection_exclude_hint": "此实体将不会被阀门保护程序循环触发（例如虚拟锅炉实体）",
   "devices.info.types_title": "设备类型",
@@ -856,5 +856,8 @@
   "comfort.info_night_title": "夜间模式",
   "comfort.info_night_body": "安静时段可以限制风速、选择睡眠预设、关闭设备 LED/显示屏/提示音，并在早上恢复。",
   "comfort.info_coupling_title": "房间耦合",
-  "comfort.info_coupling_body": "相邻房间和门传感器让模型估计开门串冷/串热，而不是把每个房间都当成孤立系统。"
+  "comfort.info_coupling_body": "相邻房间和门传感器让模型估计开门串冷/串热，而不是把每个房间都当成孤立系统。",
+  "hero.dispatch_deferred": "调节等待中",
+  "comfort.night_controls_observed": "{count}/{total} 已观测匹配",
+  "comfort.night_controls_pending": "{count} 项等待设备反馈"
 }

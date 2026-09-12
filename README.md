@@ -34,6 +34,7 @@
 - **Multi-Sensor Fusion Diagnostics** - Temperature sensors expose freshness, bias correction, variance, and conflict status in the room interface.
 - **Physical Feedback Provenance** - Uses device observation timestamps when available, keeps stale activity unknown, and shares one observation snapshot across planning and learning.
 - **Per-Device Setpoint Mode** - Choose proportional (boost setpoint) or direct (exact target) control per device for optimal results with different hardware.
+- **Quiet AC Actuation** - Pace small output increases, apply night accessories before climate commands, and keep dispatch, deferred adjustments and physical feedback distinct.
 - **Separate Heat/Cool Targets** - Independent comfort and eco temperatures for heating and cooling in auto mode, creating a natural dead-band.
 - **Per-Room Climate Toggle** - Disable climate control for individual rooms while keeping other rooms active.
 - **Outdoor Areas** - Mark rooms as outdoor (e.g. balcony) to disable climate control while keeping monitoring.
@@ -93,10 +94,15 @@ An external temperature sensor unlocks the full potential of the thermal model, 
 |---|---|---|
 | **When** | External temperature sensor assigned | No external sensor |
 | **How** | RoomMind decides heating/cooling/idle | Device self-regulates |
-| **Setpoints** | Proportional boost (e.g. 28°C to force heating at 80% power) | Exact target sent to device |
+| **Setpoints** | Proportional device setpoint within configured overdrive limits | Room target adapted to device steps |
 | **Thermal model** | EKF learns room behavior, MPC optimizes | No learning, no optimization |
 
-In **Full Control**, RoomMind dynamically calculates device setpoints based on MPC power output. Instead of sending 22°C to a TRV or AC, it can send 28°C to force the device to heat at full capacity. This solves common issues where devices with inaccurate internal sensors or built-in deadbands do not turn on. Each room shows its current mode ("Full Control" or "Managed") in the detail view.
+In **Full Control**, RoomMind translates control demand into dynamic device setpoints.
+A TRV or AC can receive a higher heating setpoint or lower cooling setpoint than
+the room's comfort target, within the configured maximum offset. The device's
+actual output is observed separately. Each room shows its current mode ("Full
+Control" or "Managed") in the detail view. See [AC Setpoint Planning and Quiet
+Control](docs/ac-setpoint-planning.md) for modulation, quiet hours and feedback.
 
 ### MPC Climate Control
 

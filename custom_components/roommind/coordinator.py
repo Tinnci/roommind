@@ -19,13 +19,10 @@ from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import (
-    AC_COOLING_BOOST_TARGET,
-    AC_HEATING_BOOST_TARGET,
     CLIMATE_MODE_COOL_ONLY,
     CLIMATE_MODE_HEAT_ONLY,
     DEFAULT_OUTDOOR_HEATING_MAX,
     DOMAIN,
-    HEATING_BOOST_TARGET,
     HISTORY_ROTATE_CYCLES,
     HISTORY_WRITE_CYCLES,
     MAX_PREDICTION_DELTA,
@@ -85,7 +82,7 @@ from .managers.environmental_factor_manager import (
     EnvironmentalFactorManager,
     airflow_sensor_conflict,
 )
-from .managers.heat_source_orchestrator import HeatSourcePlan, evaluate_heat_sources
+from .managers.heat_source_orchestrator import evaluate_heat_sources
 from .managers.hvac_output_observer import HVACOutputObserver
 from .managers.mold_manager import MoldManager
 from .managers.night_mode_manager import NightModeManager
@@ -102,10 +99,10 @@ from .utils.device_utils import (
     build_rooms_devices_map,
     get_ac_eids,
     get_all_entity_ids,
-    get_direct_setpoint_eids,
     get_trv_eids,
     room_contributes_to_group,
 )
+from .utils.entity_snapshot import EntitySnapshots, capture_entity_snapshots
 from .utils.history_store import HistoryStore
 from .utils.i18n import get_translation
 from .utils.notification_payloads import build_outdoor_unavailable_payload
@@ -230,6 +227,7 @@ class RoomControlObservation:
 
     sensors: RoomSensorSnapshot
     climate_devices: ClimateDeviceSnapshot
+    actuator_states: EntitySnapshots
     device_action: tuple[str | None, float]
     airflow: AirflowFactors
     hvac_output: HVACOutputObservation | None
@@ -299,7 +297,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         self._environmental_factors = EnvironmentalFactorManager(hass)
         self._airflow_control = AirflowControlManager(hass)
         self._hvac_output_observer = HVACOutputObserver(hass)
-        self._night_mode_manager = NightModeManager(hass)
+        self._night_mode_manager = NightModeManager(hass, actuation_ledger=self._actuation_ledger)
         self._room_coupling = RoomCouplingManager()
         self._room_coupling_last_temps: dict[str, tuple[float, float]] = {}
         # Cover/blind automatic control
@@ -1205,6 +1203,17 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         return RoomControlObservation(
             sensors=sensors,
             climate_devices=climate_devices,
+            actuator_states=capture_entity_snapshots(
+                self.hass,
+                (
+                    *climate_devices.all_entity_ids,
+                    *(
+                        config["entity_id"]
+                        for config in room.get("night_controls", []) or []
+                        if config.get("entity_id")
+                    ),
+                ),
+            ),
             device_action=self._observe_device_action(room),
             airflow=airflow,
             hvac_output=self._observe_hvac_output(room, airflow),
@@ -1352,6 +1361,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             room,
             model_manager=self._model_manager,
             actuation_ledger=self._actuation_ledger,
+            actuator_observations=observation.actuator_states,
             outdoor_temp=self.outdoor_temp_effective,
             outdoor_forecast=outdoor_forecast,
             settings=settings,
@@ -1530,9 +1540,19 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 q_residual=q_residual,
             )
 
+        # Accessory observations belong to the same cycle; mute before any
+        # climate or fan command can beep or illuminate a bedroom display.
+        night_control_status: list[dict[str, Any]] = []
+        try:
+            night_control_status = await self._night_mode_manager.async_apply(
+                area_id, room, active=night_mode_active, observations=observation.actuator_states
+            )
+        except Exception:  # noqa: BLE001
+            _LOGGER.warning("Room '%s': night-mode accessory control failed", area_id, exc_info=True)
+
         dispatch_status = "disabled"
+        applied_report: AppliedCommandReport | None = None
         if climate_active:
-            applied_report: AppliedCommandReport | None = None
             try:
                 applied_report = await controller.async_apply(
                     mode,
@@ -1546,11 +1566,14 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                     heat_source_plan=heat_source_plan,
                     compressor_forced_on=compressor_forced_on or None,
                     compressor_forced_off=compressor_forced_off or None,
+                    urgent=rapid_recovery_active,
                 )
                 results = tuple(applied_report.results.values())
                 dispatch_status = (
                     "failed"
                     if applied_report.failed_eids
+                    else "deferred"
+                    if applied_report.deferred_eids
                     else "sent"
                     if any(result.dispatch == "sent" for result in results)
                     else "skipped"
@@ -1614,16 +1637,6 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 mode=MODE_IDLE,
                 context=airflow_context,
             )
-
-        night_control_status: list[dict[str, Any]] = []
-        try:
-            night_control_status = await self._night_mode_manager.async_apply(
-                area_id,
-                room,
-                active=night_mode_active,
-            )
-        except Exception:  # noqa: BLE001
-            _LOGGER.warning("Room '%s': night-mode accessory control failed", area_id, exc_info=True)
 
         # --- Cover/blind automatic control ---
         has_override = is_override_active(room)
@@ -1691,11 +1704,9 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             target_plan=target_plan,
             display_mode=display_mode,
             display_pf=display_pf,
-            heat_source_plan=heat_source_plan,
-            device_snapshot=device_snapshot,
+            applied_report=applied_report,
             window_open=window_open,
             mode=mode,
-            power_fraction=power_fraction,
             mold_risk_level=mold_risk_level,
             mold_surface_rh=mold_surface_rh,
             mold_prevention_active_room=mold_prevention_active_room,
@@ -1817,11 +1828,9 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         target_plan: ControlTargetPlan,
         display_mode: str,
         display_pf: float,
-        heat_source_plan: HeatSourcePlan | None,
-        device_snapshot: ClimateDeviceSnapshot,
+        applied_report: AppliedCommandReport | None,
         window_open: bool,
         mode: str,
-        power_fraction: float,
         mold_risk_level: str | None,
         mold_surface_rh: float | None,
         mold_prevention_active_room: bool,
@@ -1850,10 +1859,6 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         q_fan_mix = airflow.q_fan_mix
         q_vent = airflow.q_vent
         cover_eids = room.get("covers", [])
-        _room_devices = room.get("devices", [])
-        _direct_eids = get_direct_setpoint_eids(_room_devices)
-        _devs_with_eid = [d for d in _room_devices if d.get("entity_id")]
-        _all_direct = bool(_devs_with_eid) and len(_direct_eids) == len(_devs_with_eid)
         temperature_sources = [
             status.get("entity_id", "") for status in sensor_fusion_status if status.get("entity_id")
         ]
@@ -1868,27 +1873,10 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             "mode": display_mode,
             "commanded_mode": mode,
             "heating_power": round(display_pf * 100) if display_mode != MODE_IDLE else 0,
-            "device_setpoint": self._compute_device_setpoint_orchestrated(
-                heat_source_plan,
-                current_temp,
-                target_temp,
-                device_snapshot.heating_boost_target,
-                device_snapshot.ac_heating_boost_target,
-                direct_eids=_direct_eids,
-            )
-            if heat_source_plan is not None
-            else self._compute_device_setpoint(
-                mode,
-                power_fraction,
-                current_temp,
-                target_temp,
-                sensor_snapshot.has_external_sensor,
-                device_max_temp=device_snapshot.heating_boost_target,
-                device_min_temp=device_snapshot.cooling_boost_target,
-                has_thermostats=bool(device_snapshot.trv_entity_ids),
-                has_acs=bool(device_snapshot.ac_entity_ids),
-                all_direct=_all_direct,
-            ),
+            "device_setpoint": self._planned_device_setpoint(applied_report, mode)
+            if sensor_snapshot.has_external_sensor
+            else None,
+            "device_actuation_status": self._device_actuation_status(applied_report),
             "window_open": window_open,
             **build_override_live(
                 room,
@@ -1969,72 +1957,44 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             )
         return None
 
-    @staticmethod
-    def _compute_device_setpoint_orchestrated(
-        heat_source_plan: HeatSourcePlan,
-        current_temp: float | None,
-        target_temp: float | None,
-        device_max_temp: float | None,
-        ac_device_max_temp: float | None,
-        direct_eids: set[str] | None = None,
-    ) -> float | None:
-        """Compute device setpoint from the orchestrated heat source plan."""
-        if current_temp is None or target_temp is None:
+    def _planned_device_setpoint(self, report: AppliedCommandReport | None, mode: str) -> float | None:
+        """Summarize an actual device plan after offsets, limits and step rounding."""
+        if report is None or mode == MODE_IDLE:
             return None
-        # Find the most representative active command
-        active_cmds = [c for c in heat_source_plan.commands if c.active]
-        if not active_cmds:
-            return None
-        # Pick the first active command (primary preferred, then secondary)
-        cmd = active_cmds[0]
-        if direct_eids and cmd.entity_id in direct_eids:
-            return target_temp
-        if cmd.device_type == "thermostat":
-            boost = device_max_temp if device_max_temp is not None else HEATING_BOOST_TARGET
-        else:
-            boost = ac_device_max_temp if ac_device_max_temp is not None else AC_HEATING_BOOST_TARGET
-        sp = round(current_temp + cmd.power_fraction * (boost - current_temp), 1)
-        sp = max(target_temp, sp)
-        sp = min(boost, sp)
-        return sp
-
-    @staticmethod
-    def _compute_device_setpoint(
-        mode: str,
-        power_fraction: float,
-        current_temp: float | None,
-        target_temp: float | None,
-        has_external_sensor: bool,
-        device_max_temp: float | None = None,
-        device_min_temp: float | None = None,
-        has_thermostats: bool = True,
-        has_acs: bool = False,
-        all_direct: bool = False,
-    ) -> float | None:
-        """Compute the device setpoint for UI display (Full Control only)."""
-        if not has_external_sensor or current_temp is None or target_temp is None:
-            return None
-        if all_direct:
-            return target_temp
-
-        if mode == MODE_HEATING:
-            default_boost = HEATING_BOOST_TARGET if has_thermostats else AC_HEATING_BOOST_TARGET
-            boost = device_max_temp if device_max_temp is not None else default_boost
-            if not has_thermostats and not has_acs:
-                return None
-            sp = round(current_temp + power_fraction * (boost - current_temp), 1)
-            sp = max(target_temp, sp)
-            sp = min(boost, sp)
-            return sp
-
-        if mode == MODE_COOLING and has_acs:
-            boost = device_min_temp if device_min_temp is not None else AC_COOLING_BOOST_TARGET
-            sp = round(current_temp - power_fraction * (current_temp - boost), 1)
-            sp = max(boost, sp)
-            sp = min(target_temp, sp)
-            return sp
-
+        for entity_id, operations in report.operation_results.items():
+            if entity_id in report.failed_eids or entity_id in report.inactive_eids:
+                continue
+            for result in reversed(operations):
+                if result.service != "set_temperature":
+                    continue
+                temperature = result.desired.get("temperature")
+                if temperature is None:
+                    temperature = result.desired.get("target_temp_low" if mode == MODE_HEATING else "target_temp_high")
+                if temperature is not None:
+                    return round(ha_temp_to_celsius(self.hass, float(temperature)), 1)
         return None
+
+    def _device_actuation_status(self, report: AppliedCommandReport | None) -> list[dict[str, Any]]:
+        """Publish every operation's plan and evidence without reconstructing commands."""
+        if report is None:
+            return []
+        statuses = []
+        for operations in report.operation_results.values():
+            for result in operations:
+                evidence = self._actuation_ledger.get(result.context_id)
+                statuses.append(
+                    {
+                        "entity_id": result.entity_id,
+                        "service": result.service,
+                        "desired": dict(result.desired),
+                        "dispatch": result.dispatch.value,
+                        "acceptance": evidence.acceptance.value if evidence else "unknown",
+                        "application": evidence.application.value if evidence else "unknown",
+                        "context_id": result.context_id,
+                        "diagnostic": result.diagnostic,
+                    }
+                )
+        return statuses
 
     def _read_device_temp(self, room: dict) -> float | None:
         """Read current_temperature from the first thermostat or AC entity."""

@@ -59,11 +59,16 @@ Astra 在每一次演进迭代中，可自由权衡并交叉推进以下核心�
   - **核验与边界 / Measurement and limits**：16:20 再次只读核对家庭 Recorder 与线上驱动；线上仍使用旧温差启发式。历史状态变化不等于逐次设备报告，不能从现有记录校准压缩机启动时滞或容量。本阶段完成观测基础、回归验证和可证实的数据分析；部署后反馈、容量与时滞实验留在 Phase 4 实机核验。未部署或下发实机动作。详见[补充核验](docs/household-ac-analysis-2026-09-12.md)及[观测规则](docs/ac-observation-and-control.md)。
   - **验证 / Validation**：2,229 Python tests、59 Bun tests、268 TCL driver tests（含固定 cryptography 版本）通过；Ruff、mypy、tsgo typecheck、build、ESLint、驱动 compileall 与文档链接检查通过。
 
-### 阶段二：控制行为重塑与舒适防扰 (Phase 2: Control Behavior & Disturbance Shield) [NEXT]
-- [ ] **Phase 2: 温度目标与执行手段重构、动态调节能力与设备防打扰**
+### 阶段二：控制行为重塑与舒适防扰 (Phase 2: Control Behavior & Disturbance Shield) [COMPLETED]
+- [x] **Phase 2: 温度目标与执行手段重构、动态调节能力与设备防打扰**（2026-09-12）
   - **核心关切与开放探索空间**：
     - **目标与手段的张力**：人类追求的是体感舒适，空调有自身的机身设定。如何让控制系统具备灵活动态调节（包括必要时的适度超调）以克服环境滞后，同时保持逻辑的清晰与自洽？
     - **物理设备副反应**：真实空调在频繁接收指令时会产生蜂鸣、亮屏等机械与声光干扰（尤其在夜间或静默时段）。控制行为应如何自适应收敛，既维持舒适，又保护家庭生活的安宁？
+  - **目标与执行 / Planning**：统一比例设定规划，最大偏移在插值前约束调节端点，保留 Direct 模式、设备范围及步长保护；界面展示约束后的真实计划，舒适目标保持独立。执行器与附件观测在全房间动作前冻结，派发、延后、接收与物理确认分别发布。
+  - **设备防扰 / Quiet actuation**：空调直接关机，保留 TRV 关阀保护；小幅加力按日间 120 秒、夜间 300 秒合并，降负载、目标变化、快速恢复及压缩机保护及时执行。夜间先静音再处理显示与空调；附件使用有界退避和基于观测的恢复，兼容提前确认与迟到的夜间指令。
+  - **驱动协同 / Driver**：同模式独立调温避免重置风速；模式切换同时确认温度，Legacy 编码容差与原生摄氏步长贯通规划及反馈比较，附件按自身报告过期。配套驱动提交：`ec40bb7`。
+  - **验证 / Validation**：2,257 Python tests、61 Bun tests、277 TCL driver tests（含固定 cryptography 版本）通过；Ruff、mypy、tsgo typecheck、build、ESLint、驱动 compileall 与文档链接检查通过。
+  - **边界 / Limits**：18 个模拟周期仅下发 3 次调温，依赖模拟立即反馈；该结果不代表家庭噪声、舒适度或节能实测。未部署或下发实机动作，节律参数仍待家庭验证。详见[空调设定规划与安静控制](docs/ac-setpoint-planning.md)。
 
 ### 阶段三：人机心智模型、交互体验与实体边界的深层重塑 (Phase 3: Human Mental Model, UI & Entity Surface Inquiries)
 - [ ] **Phase 3: 人机认知对齐、前端体验重构与 Home Assistant 实体契约的本质演进**

@@ -13,6 +13,7 @@ from custom_components.roommind.control.solar import SolarExposure
 from custom_components.roommind.control.thermal_model import TemperatureObservation
 from custom_components.roommind.coordinator import HumiditySensorSnapshot, RoomControlObservation, RoomSensorSnapshot
 from custom_components.roommind.managers.environmental_factor_manager import AirflowFactors
+from custom_components.roommind.utils.entity_snapshot import capture_entity_snapshots
 
 from .conftest import (
     MANAGED_ROOM,
@@ -120,6 +121,7 @@ async def test_observe_and_train_uses_calibrated_temperature_observations(hass, 
                 temperature_observations=tuple(raw_observations),
             ),
             climate_devices=coordinator._read_climate_device_snapshot(SAMPLE_ROOM),
+            actuator_states=capture_entity_snapshots(hass, (device["entity_id"] for device in SAMPLE_ROOM["devices"])),
             device_action=("heating", 1.0),
             airflow=AirflowFactors(),
             hvac_output=None,

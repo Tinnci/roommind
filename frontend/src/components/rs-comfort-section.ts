@@ -12,6 +12,7 @@ import type {
 import { inputStyles } from "../styles/input-styles";
 import { getSelectValue, openEntityInfo } from "../utils/events";
 import { localize, type TranslationKey } from "../utils/localize";
+import { summarizeNightControls } from "../utils/actuation-status";
 
 const DEFAULT_QUIET_HOURS = {
   start: "22:00",
@@ -300,9 +301,7 @@ export class RsComfortSection extends LitElement {
         ? localize("comfort.control_target_perceived", lang)
         : localize("comfort.control_target_air", lang);
     const couplingCount = this.couplingStatus.filter((item) => item.gate > 0 && item.k > 0).length;
-    const nightApplied = this.nightControlStatus.filter(
-      (item) => item.outcome === "applied",
-    ).length;
+    const nightControls = summarizeNightControls(this.nightControls, this.nightControlStatus);
 
     return html`
       <div class="summary-grid">
@@ -332,7 +331,19 @@ export class RsComfortSection extends LitElement {
         </div>
         <div class="summary-item">
           <div class="summary-label">${localize("comfort.night_controls", lang)}</div>
-          <div class="summary-value">${nightApplied}/${this.nightControls.length}</div>
+          <div class="summary-value">
+            ${localize("comfort.night_controls_observed", lang, {
+              count: String(nightControls.observed),
+              total: String(nightControls.total),
+            })}
+          </div>
+          ${nightControls.pending > 0
+            ? html`<div class="muted">
+                ${localize("comfort.night_controls_pending", lang, {
+                  count: String(nightControls.pending),
+                })}
+              </div>`
+            : nothing}
         </div>
         <div class="summary-item">
           <div class="summary-label">${localize("comfort.room_coupling", lang)}</div>
@@ -432,7 +443,8 @@ export class RsComfortSection extends LitElement {
             <ha-switch
               .checked=${this.rapidRecoveryEnabled}
               aria-label=${localize("comfort.rapid_recovery", lang)}
-              @change=${(e: Event) => this._emit("rapid_recovery_enabled", (e.target as HTMLInputElement).checked)}
+              @change=${(e: Event) =>
+                this._emit("rapid_recovery_enabled", (e.target as HTMLInputElement).checked)}
             ></ha-switch>
           </div>
           <div class="field-row">

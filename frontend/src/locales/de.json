@@ -81,7 +81,7 @@
   "room.status.target": "Ziel",
   "room.status.night": "Nacht",
   "room.status.primary_sensor": "Primärsensor",
-  "room.status.device_setpoint": "Geräte-Setpoint",
+  "room.status.device_setpoint": "Geplanter Geräte-Sollwert",
   "room.status.night_active": "Jetzt aktiv",
   "room.status.night_scheduled": "{hours}",
   "room.status.not_set": "Nicht gesetzt",
@@ -144,7 +144,7 @@
   "hero.override": "Override",
   "hero.remaining": "noch {time}",
   "hero.humidity": "{value}% Luftfeuchtigkeit",
-  "hero.device_setpoint": "Gerät auf {value}{unit}",
+  "hero.device_setpoint": "Geplanter Geräte-Sollwert: {value}{unit}",
   "hero.heat_source_primary": "Heizung: TRV",
   "hero.heat_source_secondary": "Heizung: AC",
   "hero.heat_source_both": "Heizung: TRV + AC",
@@ -303,7 +303,7 @@
   "devices.setpoint_mode": "Sollwert-Modus",
   "devices.setpoint_mode_proportional": "Proportional (Ventilsteuerung)",
   "devices.setpoint_mode_direct": "Direkt (Gerät regelt selbst)",
-  "devices.setpoint_mode_hint": "Direkt sendet die tatsächliche Raum-Zieltemperatur ans Gerät — geeignet für Thermostate und Heizlüfter mit eigener Regelung. Proportional sendet einen erhöhten Sollwert Richtung Geräte-max_temp — geeignet für Heizkörperventile (TRVs).",
+  "devices.setpoint_mode_hint": "Direkt sendet das Raum-Komfortziel, angepasst an die Geräteschritte. Proportional erhöht den Heiz- oder senkt den Kühl-Sollwert innerhalb des maximalen Versatzes, um mehr Leistung anzufordern. Die tatsächliche Ausgabe wird separat beobachtet.",
   "devices.valve_protection_excluded": "Vom Ventilschutz ausgenommen",
   "devices.valve_protection_exclude_hint": "Dieses Gerät wird nicht vom Ventilschutz bewegt (z.B. virtuelle Kessel-Entitäten)",
   "devices.info.types_title": "Gerätetypen",
@@ -856,5 +856,8 @@
   "comfort.info_night_title": "Nachtmodus",
   "comfort.info_night_body": "In der Ruhezeit kann RoomMind Lüfter begrenzen, Schlaf-Presets wählen und LEDs, Displays sowie Pieptöne ausschalten und morgens wiederherstellen.",
   "comfort.info_coupling_title": "Raumkopplung",
-  "comfort.info_coupling_body": "Nachbarräume und Türsensoren helfen, geliehene Kühlung oder Heizung zu schätzen, statt Räume isoliert zu betrachten."
+  "comfort.info_coupling_body": "Nachbarräume und Türsensoren helfen, geliehene Kühlung oder Heizung zu schätzen, statt Räume isoliert zu betrachten.",
+  "hero.dispatch_deferred": "Anpassung wartet",
+  "comfort.night_controls_observed": "{count}/{total} beobachtet",
+  "comfort.night_controls_pending": "{count} warten auf Rückmeldung"
 }

@@ -2,11 +2,37 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any, Self
 
 from ..const import TargetTemps
+from ..utils.entity_snapshot import freeze_mapping
+
+
+def plan_active_temperature(
+    *,
+    target: float,
+    current_temp: float | None,
+    demand: float,
+    limit: float,
+    heating: bool,
+    direct: bool,
+    max_offset: float | None = None,
+) -> float:
+    """Translate comfort and demand into a device setpoint in Celsius.
+
+    An offset bounds the modulation endpoint before interpolation, so partial
+    demand can relax overdrive. This is a control signal, not compressor power.
+    """
+    if direct:
+        return target
+    if max_offset is not None:
+        bound = target + max_offset if heating else target - max_offset
+        limit = min(limit, bound) if heating else max(limit, bound)
+    value = limit if current_temp is None else current_temp + max(0.0, min(1.0, demand)) * (limit - current_temp)
+    return min(limit, max(target, value)) if heating else max(limit, min(target, value))
 
 
 def plan_setback_temperature(
@@ -27,6 +53,7 @@ class DispatchStatus(StrEnum):
     """Describe what happened while dispatching a device operation."""
 
     SKIPPED = "skipped"
+    DEFERRED = "deferred"
     SENT = "sent"
     UNSUPPORTED = "unsupported"
     FAILED = "failed"
@@ -56,13 +83,16 @@ class DeviceActuationResult:
     entity_id: str
     dispatch: DispatchStatus
     service: str
-    desired: dict[str, Any]
+    desired: Mapping[str, Any]
     diagnostic: str | None = None
     context_id: str | None = None
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "desired", freeze_mapping(self.desired))
+
     @property
     def effective(self) -> bool:
-        """Return whether the desired operation was already true or dispatched."""
+        """Return whether dispatch succeeded or a repeat operation was skipped."""
         return self.dispatch in (DispatchStatus.SKIPPED, DispatchStatus.SENT)
 
     @classmethod
@@ -85,6 +115,9 @@ class DeviceActuationResult:
         )
         if unsupported is not None:
             return unsupported
+        deferred = next((result for result in results if result.dispatch is DispatchStatus.DEFERRED), None)
+        if deferred is not None:
+            return deferred
         dispatch = (
             DispatchStatus.SENT
             if any(result.dispatch is DispatchStatus.SENT for result in results)
@@ -160,6 +193,10 @@ class ActuationLedger:
     def snapshot(self) -> tuple[ActuationEvidence, ...]:
         """Return an immutable ordered evidence snapshot."""
         return tuple(self._evidence.values())
+
+    def get(self, context_id: str | None) -> ActuationEvidence | None:
+        """Read the latest evidence for a pending operation."""
+        return self._evidence.get(context_id) if context_id else None
 
     @staticmethod
     def _apply_tcl_event(

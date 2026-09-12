@@ -45,7 +45,8 @@ export interface RoomLiveData {
   observation_status?: "observed" | "unknown";
   commanded_mode?: RoomMode;
   requested_power?: number;
-  dispatch_status?: "sent" | "skipped" | "failed" | "disabled" | "unknown";
+  dispatch_status?: "sent" | "skipped" | "deferred" | "failed" | "disabled" | "unknown";
+  device_actuation_status?: DeviceActuationStatus[];
   current_temp: number | null;
   current_humidity: number | null;
   target_temp: number | null;
@@ -231,6 +232,23 @@ export interface NightControlStatus {
   previous_value?: string | number | boolean | null;
   restore_after_night?: boolean;
   last_service?: string | null;
+  dispatch?: DeviceActuationStatus["dispatch"];
+  acceptance?: DeviceActuationStatus["acceptance"];
+  application?: DeviceActuationStatus["application"];
+  context_id?: string | null;
+  observed_value?: string | number | boolean | null;
+  retry_after_seconds?: number;
+}
+
+export interface DeviceActuationStatus {
+  entity_id: string;
+  service: string;
+  desired: Record<string, unknown>;
+  dispatch: "sent" | "skipped" | "deferred" | "failed" | "unsupported";
+  acceptance: "unknown" | "accepted" | "not_sent";
+  application: "unknown" | "pending" | "confirmed" | "not_confirmed";
+  context_id?: string | null;
+  diagnostic?: string | null;
 }
 
 export interface CouplingStatus {

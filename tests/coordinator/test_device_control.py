@@ -56,209 +56,65 @@ def test_climate_device_snapshot_captures_inventory_and_conservative_limits(hass
     assert snapshot.cooling_boost_target == 18.0
 
 
-class TestComputeDeviceSetpoint:
-    """Tests for _compute_device_setpoint static method."""
+@pytest.mark.parametrize(
+    "mode,device_type,current,power,bounds,options,expected",
+    [
+        ("heating", "trv", 20.0, 0.5, {"max_temp": 30.0}, {}, 25.0),
+        ("heating", "trv", 20.0, 0.01, {"max_temp": 30.0}, {}, 21.0),
+        ("heating", "trv", 20.0, 0.5, {"max_temp": 25.0}, {}, 22.5),
+        ("heating", "trv", 20.0, 1.0, {"max_temp": 25.0}, {}, 25.0),
+        ("heating", "ac", 20.0, 0.5, {"max_temp": 30.0}, {}, 25.0),
+        ("cooling", "ac", 26.0, 0.5, {"min_temp": 16.0}, {}, 21.0),
+        ("cooling", "ac", 26.0, 0.5, {"min_temp": 18.0}, {}, 22.0),
+        ("cooling", "ac", 26.0, 1.0, {"min_temp": 18.0}, {}, 18.0),
+        ("heating", "trv", 20.0, 1.0, {}, {"setpoint_mode": "direct"}, 21.0),
+        ("cooling", "ac", 26.0, 1.0, {}, {"setpoint_mode": "direct"}, 24.0),
+        ("heating", "ac", 19.0, 0.75, {}, {"max_setpoint_offset_c": 2.0}, 22.0),
+        ("cooling", "ac", 26.0, 0.75, {}, {"max_setpoint_offset_c": 2.0}, 23.0),
+        ("heating", "trv", 20.0, 0.73, {"target_temp_step": 1.0}, {"max_setpoint_offset_c": 2.4}, 22.0),
+    ],
+)
+async def test_published_setpoint_comes_from_the_actual_device_plan(
+    hass, mock_config_entry, monkeypatch, mode, device_type, current, power, bounds, options, expected
+):
+    from custom_components.roommind.control.mpc_controller import MPCController
 
-    def test_idle_returns_none(self, hass, mock_config_entry):
-        coordinator = _create_coordinator(hass, mock_config_entry)
-        result = coordinator._compute_device_setpoint("idle", 0.5, 20.0, 21.0, True)
-        assert result is None
-
-    def test_no_external_sensor_returns_none(self, hass, mock_config_entry):
-        coordinator = _create_coordinator(hass, mock_config_entry)
-        result = coordinator._compute_device_setpoint("heating", 0.5, 20.0, 21.0, False)
-        assert result is None
-
-    def test_none_current_temp_returns_none(self, hass, mock_config_entry):
-        coordinator = _create_coordinator(hass, mock_config_entry)
-        result = coordinator._compute_device_setpoint("heating", 0.5, None, 21.0, True)
-        assert result is None
-
-    def test_heating_computes_setpoint(self, hass, mock_config_entry):
-        coordinator = _create_coordinator(hass, mock_config_entry)
-        # power_fraction=0.5, current=20, target=21, boost=30
-        # sp = 20 + 0.5 * (30 - 20) = 25.0
-        result = coordinator._compute_device_setpoint("heating", 0.5, 20.0, 21.0, True)
-        assert result == 25.0
-
-    def test_heating_floor_at_target(self, hass, mock_config_entry):
-        coordinator = _create_coordinator(hass, mock_config_entry)
-        # power_fraction=0.01, current=20, target=21
-        # sp = 20 + 0.01 * (30 - 20) = 20.1 -> clamped to target 21.0
-        result = coordinator._compute_device_setpoint("heating", 0.01, 20.0, 21.0, True)
-        assert result == 21.0
-
-    def test_clamped_to_device_max_temp(self, hass, mock_config_entry):
-        coordinator = _create_coordinator(hass, mock_config_entry)
-        # device_max_temp=25 is now used AS the boost target
-        # power_fraction=0.5, current=20, boost=25 -> sp = 20 + 0.5*(25-20) = 22.5
-        result = coordinator._compute_device_setpoint("heating", 0.5, 20.0, 21.0, True, device_max_temp=25.0)
-        assert result == 22.5
-        # power_fraction=1.0, current=20, boost=25 -> sp = 25.0
-        result = coordinator._compute_device_setpoint("heating", 1.0, 20.0, 21.0, True, device_max_temp=25.0)
-        assert result == 25.0
-
-    def test_device_max_temp_none_no_clamping(self, hass, mock_config_entry):
-        coordinator = _create_coordinator(hass, mock_config_entry)
-        # Without device_max_temp, should reach 30 (HEATING_BOOST_TARGET)
-        result = coordinator._compute_device_setpoint("heating", 1.0, 20.0, 21.0, True, device_max_temp=None)
-        assert result == 30.0
-
-    def test_cooling_computes_setpoint(self, hass, mock_config_entry):
-        coordinator = _create_coordinator(hass, mock_config_entry)
-        # power_fraction=0.5, current=26, AC_COOLING_BOOST_TARGET=16
-        # sp = 26 - 0.5 * (26 - 16) = 21.0
-        result = coordinator._compute_device_setpoint("cooling", 0.5, 26.0, 23.0, True, has_acs=True)
-        assert result == 21.0
-
-    def test_cooling_without_acs_returns_none(self, hass, mock_config_entry):
-        coordinator = _create_coordinator(hass, mock_config_entry)
-        result = coordinator._compute_device_setpoint("cooling", 0.5, 26.0, 23.0, True, has_acs=False)
-        assert result is None
-
-    def test_heating_ac_only_room(self, hass, mock_config_entry):
-        coordinator = _create_coordinator(hass, mock_config_entry)
-        # AC heating: AC_HEATING_BOOST_TARGET=30
-        # sp = 20 + 0.5 * (30 - 20) = 25.0
-        result = coordinator._compute_device_setpoint(
-            "heating",
-            0.5,
-            20.0,
-            21.0,
-            True,
-            has_thermostats=False,
-            has_acs=True,
+    monkeypatch.setattr(MPCController, "async_evaluate", AsyncMock(return_value=(mode, power)))
+    entity_id = "climate.device"
+    room = {
+        **SAMPLE_ROOM,
+        "climate_mode": "heat_only" if mode == "heating" else "cool_only",
+        "thermostats": [entity_id] if device_type == "trv" else [],
+        "acs": [entity_id] if device_type == "ac" else [],
+        "devices": [{"entity_id": entity_id, "type": device_type, **options}],
+    }
+    attributes = {
+        "hvac_modes": ["off", "heat", "cool"],
+        "temperature": 20.0,
+        "min_temp": 16.0 if device_type == "ac" else 5.0,
+        "max_temp": 30.0,
+        "target_temp_step": 0.5,
+        **bounds,
+    }
+    hass.states.get = MagicMock(
+        side_effect=make_mock_states_get(
+            temp=str(current), extra={entity_id: ("heat" if mode == "heating" else "cool", attributes)}
         )
-        assert result == 25.0
+    )
+    hass.services.async_call = AsyncMock()
+    coordinator = _create_coordinator(hass, mock_config_entry)
+    coordinator.outdoor_temp_effective = 5.0 if mode == "heating" else 32.0
 
-    def test_cooling_clamped_to_device_min(self, hass, mock_config_entry):
-        coordinator = _create_coordinator(hass, mock_config_entry)
-        # power_fraction=1.0, current=26, AC_COOLING_BOOST_TARGET=16
-        # raw = 26 - 1.0 * (26 - 16) = 16.0, device_min_temp=18 -> clamped to 18.0
-        result = coordinator._compute_device_setpoint(
-            "cooling",
-            1.0,
-            26.0,
-            23.0,
-            True,
-            device_min_temp=18.0,
-            has_acs=True,
-        )
-        assert result == 18.0
+    live = await coordinator._async_process_room(room, {}, [])
 
-    def test_dynamic_cooling_boost_proportional(self, hass, mock_config_entry):
-        coordinator = _create_coordinator(hass, mock_config_entry)
-        # device_min_temp=18, pf=0.5: 26 - 0.5*(26-18) = 22.0
-        result = coordinator._compute_device_setpoint(
-            "cooling",
-            0.5,
-            26.0,
-            23.0,
-            True,
-            device_min_temp=18.0,
-            has_acs=True,
-        )
-        assert result == 22.0
-
-    def test_all_direct_returns_target(self, hass, mock_config_entry):
-        """When all devices are direct, return target_temp directly."""
-        coordinator = _create_coordinator(hass, mock_config_entry)
-        result = coordinator._compute_device_setpoint(
-            "heating",
-            1.0,
-            20.0,
-            21.0,
-            True,
-            all_direct=True,
-        )
-        assert result == 21.0
-
-    def test_all_direct_cooling_returns_target(self, hass, mock_config_entry):
-        coordinator = _create_coordinator(hass, mock_config_entry)
-        result = coordinator._compute_device_setpoint(
-            "cooling",
-            1.0,
-            26.0,
-            23.0,
-            True,
-            has_acs=True,
-            all_direct=True,
-        )
-        assert result == 23.0
-
-    def test_all_direct_no_sensor_still_none(self, hass, mock_config_entry):
-        """all_direct with no external sensor still returns None."""
-        coordinator = _create_coordinator(hass, mock_config_entry)
-        result = coordinator._compute_device_setpoint(
-            "heating",
-            1.0,
-            20.0,
-            21.0,
-            False,
-            all_direct=True,
-        )
-        assert result is None
-
-
-class TestComputeDeviceSetpointOrchestrated:
-    """Tests for _compute_device_setpoint_orchestrated with direct_eids."""
-
-    def test_direct_device_returns_target(self, hass, mock_config_entry):
-        coordinator = _create_coordinator(hass, mock_config_entry)
-        cmd = MagicMock()
-        cmd.active = True
-        cmd.entity_id = "climate.heater"
-        cmd.device_type = "thermostat"
-        cmd.power_fraction = 1.0
-        plan = MagicMock()
-        plan.commands = [cmd]
-        result = coordinator._compute_device_setpoint_orchestrated(
-            plan,
-            20.0,
-            21.0,
-            30.0,
-            28.0,
-            direct_eids={"climate.heater"},
-        )
-        assert result == 21.0
-
-    def test_proportional_device_computes_boost(self, hass, mock_config_entry):
-        coordinator = _create_coordinator(hass, mock_config_entry)
-        cmd = MagicMock()
-        cmd.active = True
-        cmd.entity_id = "climate.trv1"
-        cmd.device_type = "thermostat"
-        cmd.power_fraction = 0.5
-        plan = MagicMock()
-        plan.commands = [cmd]
-        result = coordinator._compute_device_setpoint_orchestrated(
-            plan,
-            20.0,
-            21.0,
-            30.0,
-            28.0,
-            direct_eids=set(),
-        )
-        # 20 + 0.5 * (30 - 20) = 25.0
-        assert result == 25.0
-
-    def test_no_direct_eids_defaults_to_proportional(self, hass, mock_config_entry):
-        coordinator = _create_coordinator(hass, mock_config_entry)
-        cmd = MagicMock()
-        cmd.active = True
-        cmd.entity_id = "climate.trv1"
-        cmd.device_type = "thermostat"
-        cmd.power_fraction = 1.0
-        plan = MagicMock()
-        plan.commands = [cmd]
-        result = coordinator._compute_device_setpoint_orchestrated(
-            plan,
-            20.0,
-            21.0,
-            30.0,
-            28.0,
-        )
-        assert result == 30.0
+    assert live["device_setpoint"] == expected
+    assert live["heat_target"] == 21.0
+    assert live["cool_target"] == 24.0
+    operations = live["device_actuation_status"]
+    temperature_operation = next(item for item in operations if item["service"] == "set_temperature")
+    assert temperature_operation["desired"]["temperature"] == expected
+    assert temperature_operation["dispatch"] == "sent"
+    assert temperature_operation["application"] == "pending"
 
 
 class TestReadDeviceTemp:

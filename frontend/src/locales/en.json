@@ -81,7 +81,7 @@
   "room.status.target": "Target",
   "room.status.night": "Night",
   "room.status.primary_sensor": "Primary sensor",
-  "room.status.device_setpoint": "Device setpoint",
+  "room.status.device_setpoint": "Planned device setpoint",
   "room.status.night_active": "Active now",
   "room.status.night_scheduled": "{hours}",
   "room.status.not_set": "Not set",
@@ -144,7 +144,7 @@
   "hero.override": "Override",
   "hero.remaining": "{time} remaining",
   "hero.humidity": "{value}% humidity",
-  "hero.device_setpoint": "Device set to {value}{unit}",
+  "hero.device_setpoint": "Planned device setpoint: {value}{unit}",
   "hero.heat_source_primary": "Heating: TRV",
   "hero.heat_source_secondary": "Heating: AC",
   "hero.heat_source_both": "Heating: TRV + AC",
@@ -303,7 +303,7 @@
   "devices.setpoint_mode": "Setpoint mode",
   "devices.setpoint_mode_proportional": "Proportional (valve control)",
   "devices.setpoint_mode_direct": "Direct (device regulates)",
-  "devices.setpoint_mode_hint": "Direct sends the actual room target to the device — best for thermostats and space heaters that regulate themselves. Proportional sends a boosted setpoint toward the device max_temp — best for radiator valves (TRVs).",
+  "devices.setpoint_mode_hint": "Direct sends the room comfort target, adapted to device steps. Proportional adjusts the device setpoint above the heating target or below the cooling target, within the maximum offset, to request more output. Device output is observed separately.",
   "devices.valve_protection_excluded": "Excluded from valve protection",
   "devices.valve_protection_exclude_hint": "This entity will not be cycled by valve protection (e.g. virtual boiler entities)",
   "devices.info.types_title": "Device types",
@@ -856,5 +856,8 @@
   "comfort.info_night_title": "Night mode",
   "comfort.info_night_body": "During quiet hours RoomMind can cap fans, select sleep presets and turn off device LEDs, displays and beepers, then restore them in the morning.",
   "comfort.info_coupling_title": "Room coupling",
-  "comfort.info_coupling_body": "Adjacent rooms and door sensors let the model estimate borrowed cooling or heating instead of treating every room as isolated."
+  "comfort.info_coupling_body": "Adjacent rooms and door sensors let the model estimate borrowed cooling or heating instead of treating every room as isolated.",
+  "hero.dispatch_deferred": "Adjustment waiting",
+  "comfort.night_controls_observed": "{count}/{total} observed",
+  "comfort.night_controls_pending": "{count} awaiting feedback"
 }

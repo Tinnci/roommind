@@ -9,6 +9,53 @@ import pytest
 from .conftest import SAMPLE_ROOM, _create_coordinator, _make_store_mock, make_mock_states_get
 
 
+async def test_quiet_accessories_precede_climate_and_share_its_observation(hass, mock_config_entry, monkeypatch):
+    from custom_components.roommind.utils import target_resolution
+
+    monkeypatch.setattr(target_resolution, "is_night_mode_active", lambda *_args, **_kwargs: True)
+    room = {
+        **SAMPLE_ROOM,
+        "climate_mode": "cool_only",
+        "devices": [{"entity_id": "climate.ac", "type": "ac", "max_setpoint_offset_c": 2.0}],
+        "night_controls": [
+            {"entity_id": "light.display", "role": "display"},
+            {"entity_id": "switch.beeper", "role": "beeper"},
+        ],
+    }
+    states = {
+        "climate.ac": (
+            "cool",
+            {"temperature": 25.0, "hvac_modes": ["off", "cool"], "min_temp": 16.0, "max_temp": 30.0},
+        ),
+        "switch.beeper": ("on", {}),
+        "light.display": ("on", {}),
+    }
+    hass.states.get = MagicMock(side_effect=make_mock_states_get(temp="28", outdoor_temp="32", extra=states))
+    hass.data = {"roommind": {"store": _make_store_mock({room["area_id"]: room})}}
+
+    async def dispatch(domain, service, data, **kwargs):
+        if domain == "switch":
+            states["climate.ac"][1]["min_temp"] = 25.0
+
+    hass.services.async_call = AsyncMock(side_effect=dispatch)
+    coordinator = _create_coordinator(hass, mock_config_entry)
+
+    result = await coordinator._async_update_data()
+
+    calls = [call.args[:3] for call in hass.services.async_call.call_args_list if call.args[0] != "schedule"]
+    assert calls[:2] == [
+        ("switch", "turn_off", {"entity_id": "switch.beeper"}),
+        ("light", "turn_off", {"entity_id": "light.display"}),
+    ]
+    temperatures = [
+        data["temperature"] for domain, service, data in calls if domain == "climate" and service == "set_temperature"
+    ]
+    assert temperatures == [22.0]
+    live = result["rooms"][room["area_id"]]
+    assert live["cool_target"] == 24.0
+    assert live["device_setpoint"] == 22.0
+
+
 async def test_all_rooms_freeze_airflow_power_and_heat_inputs_before_dispatch(hass, mock_config_entry):
     """An early room's actuation must not change another room's learning inputs."""
     rooms = {
