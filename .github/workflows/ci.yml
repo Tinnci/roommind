@@ -161,8 +161,11 @@ jobs:
 
       - name: HACS validation
         uses: hacs/action@22.5.0
+        env:
+          REPOSITORY_REF: ${{ github.event.pull_request.head.sha || github.sha }}
         with:
           category: integration
+          comment: false
 
   hassfest:
     name: Hassfest

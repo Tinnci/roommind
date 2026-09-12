@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import re
 import stat
 import sys
 import zipfile
@@ -59,8 +60,7 @@ def _validate_component(component_dir: Path, tag: str | None) -> None:
         raise ReleasePackageError(f"manifest version {version} does not match const.py VERSION {const_version}")
 
     if tag:
-        expected = tag.removeprefix("v")
-        if version != expected:
+        if tag != f"v{version}":
             raise ReleasePackageError(f"manifest version {version} does not match tag {tag}")
 
 
@@ -92,6 +92,8 @@ def _read_manifest_version(manifest_path: Path) -> str:
     version = manifest.get("version")
     if not isinstance(version, str) or not version:
         raise ReleasePackageError("manifest.json is missing string version")
+    if not re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", version):
+        raise ReleasePackageError("manifest version must be X.Y.Z")
     return version
 
 

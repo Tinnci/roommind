@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import subprocess
 import tomllib
 import zipfile
 from pathlib import Path
 
 import pytest
+import yaml
 
 from scripts.build_release_package import ReleasePackageError, build_release_package
 
@@ -71,6 +74,8 @@ def test_release_package_rejects_manifest_const_version_mismatch(tmp_path: Path)
         ("[]", "manifest.json must contain an object"),
         (json.dumps({"domain": "roommind", "version": None}), "manifest.json is missing string version"),
         (json.dumps({"domain": "roommind", "version": 123}), "manifest.json is missing string version"),
+        (json.dumps({"domain": "roommind", "version": "01.2.3"}), "manifest version must be X.Y.Z"),
+        (json.dumps({"domain": "roommind", "version": "release-main"}), "manifest version must be X.Y.Z"),
     ],
 )
 def test_release_package_rejects_invalid_manifest_version(
@@ -128,6 +133,7 @@ def test_repository_release_metadata_is_aligned():
 
     assert const_match is not None
     assert manifest["version"] == const_match.group(1)
+    assert manifest["version"] == pyproject["project"]["version"]
     assert tuple(map(int, minimum_homeassistant_version.split("."))) <= tuple(
         map(int, tested_homeassistant_version.split("."))
     )
@@ -199,3 +205,26 @@ def test_release_workflow_validates_manual_tag_input_before_checkout():
     assert "Release tag must start with v" in release_workflow
     assert "Release tag must not contain whitespace" in release_workflow
     assert validation_index < output_index < checkout_index
+
+
+@pytest.mark.parametrize("tag", ["v1.8.0", "v01.8.0", "v1.8.0;touch injected", "v$(>injected)"])
+def test_release_tag_is_data_and_uses_stable_semver(tmp_path: Path, tag: str):
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/release.yml").read_text())
+    resolver = workflow["jobs"]["build-and-upload"]["steps"][0]["run"]
+    output = tmp_path / "output"
+    result = subprocess.run(
+        ["bash", "-e", "-c", resolver],
+        cwd=tmp_path,
+        env={**os.environ, "EVENT_NAME": "workflow_dispatch", "INPUT_TAG": tag, "GITHUB_OUTPUT": str(output)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert not (tmp_path / "injected").exists()
+    if tag == "v1.8.0":
+        assert result.returncode == 0
+        assert output.read_text() == "tag=v1.8.0\n"
+    else:
+        assert result.returncode != 0
+        assert not output.exists()

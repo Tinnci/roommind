@@ -1,15 +1,17 @@
 # RoomMind
 
-[![HACS Default](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/hacs/integration)
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://www.hacs.xyz/docs/faq/custom_repositories/)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.6%2B-blue.svg)](https://www.home-assistant.io/)
-[![License](https://img.shields.io/github/license/snazzybean/roommind)](https://github.com/snazzybean/roommind/blob/main/LICENSE)
-[![Tests](https://github.com/snazzybean/roommind/actions/workflows/ci.yml/badge.svg)](https://github.com/snazzybean/roommind/actions/workflows/ci.yml)
-![Coverage](https://raw.githubusercontent.com/snazzybean/roommind/python-coverage-comment-action-data/badge.svg)
-[![GitHub Release](https://img.shields.io/github/v/release/snazzybean/roommind)](https://github.com/snazzybean/roommind/releases/latest)
+[![License](https://img.shields.io/github/license/Tinnci/roommind)](https://github.com/Tinnci/roommind/blob/main/LICENSE)
+[![Tests](https://github.com/Tinnci/roommind/actions/workflows/ci.yml/badge.svg)](https://github.com/Tinnci/roommind/actions/workflows/ci.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/Tinnci/roommind)](https://github.com/Tinnci/roommind/releases/latest)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/Y8Y31VP2VK)
 
 **Intelligent room climate control for Home Assistant** - self-learning thermal model, proportional valve control, and a dedicated management panel.
+
+This is Tinnci's maintained distribution of [snazzybean/RoomMind](https://github.com/snazzybean/roommind).
+Use this repository's custom HACS entry for the household control and observation changes.
 
 ![Dashboard](docs/images/page-dashboard.png)
 
@@ -47,20 +49,25 @@
 
 ## Installation
 
-[![Open your Home Assistant instance and open RoomMind inside HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=snazzybean&repository=roommind&category=integration)
+[![Open your Home Assistant instance and open RoomMind inside HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Tinnci&repository=roommind&category=integration)
 
 ### HACS (Recommended)
 
 1. Open HACS in Home Assistant
-2. Search for "RoomMind" and install
-3. Restart Home Assistant
-4. Go to **Settings > Devices & Services > Add Integration > RoomMind**
+2. Add `https://github.com/Tinnci/roommind` as a custom repository of type **Integration**
+3. Search for "RoomMind" and install
+4. Restart Home Assistant
+5. Go to **Settings > Devices & Services > Add Integration > RoomMind**
 
 ### Manual
 
-1. Copy `custom_components/roommind/` to your `config/custom_components/` directory
-2. Restart Home Assistant
-3. Go to **Settings > Devices & Services > Add Integration > RoomMind**
+1. Download `roommind.zip` from this repository's release
+2. Extract its contents directly into `config/custom_components/roommind/`; `manifest.json` must be at that directory's root
+3. Restart Home Assistant
+4. Go to **Settings > Devices & Services > Add Integration > RoomMind**
+
+The release archive includes the compiled panel. A source checkout requires `cd frontend && bun run build`
+before packaging. See [Release preparation / 发布准备](docs/releasing.md).
 
 ## Quick Start
 
@@ -153,7 +160,7 @@ These can be used in HA automations, dashboards, or other integrations.
 ## Requirements
 
 - **Home Assistant** 2026.6+
-- **HACS** custom repository or default listing
+- **HACS** custom repository for this maintained distribution
 - At least one HA area with a `climate.*` entity
 - Optional: temperature sensor, humidity sensor, window sensors, weather entity, schedule helpers, person entities
 
@@ -161,7 +168,6 @@ No cloud service is required. Everything runs locally.
 
 ## Feedback & Contributing
 
-- 🐛 **Bug reports** - [Open an issue](https://github.com/snazzybean/roommind/issues/new?template=bug_report.yml)
-- 💡 **Feature requests & ideas** - [Post in Discussions](https://github.com/snazzybean/roommind/discussions/categories/feature-requests) so the community can vote and discuss
-- 🙋 **Questions & usage help** - [Ask in Q&A](https://github.com/snazzybean/roommind/discussions/categories/q-a)
-- 📣 **Announcements** - [Follow Announcements](https://github.com/snazzybean/roommind/discussions/categories/announcements)
+- 🐛 **Bug reports** - [Open an issue](https://github.com/Tinnci/roommind/issues/new?template=bug_report.yml)
+- 💡 **Feature requests & questions** - [Open an issue](https://github.com/Tinnci/roommind/issues/new)
+- 📦 **Maintainer documentation** - [Ecosystem release audit / 生态发布审计](docs/ecosystem-release-audit.md)

@@ -2,6 +2,11 @@
 
 This guide keeps local development, CI, HACS packaging, and upstream backports aligned.
 
+For the current release version and tag workflow, see
+[Releasing RoomMind / 发布 RoomMind](releasing.md). Cross-repository findings
+and household installation evidence are recorded in the
+[ecosystem release audit / 生态发布审计](ecosystem-release-audit.md).
+
 ## Toolchain
 
 Use the repository toolchain consistently:
@@ -45,7 +50,7 @@ cd frontend
 bun install --frozen-lockfile
 bun run build
 cd ..
-uv run --locked python scripts/build_release_package.py --output dist/roommind.zip --tag v1.7.17
+uv run --locked python scripts/build_release_package.py --output dist/roommind.zip --tag v1.8.0
 ```
 
 The package script validates:

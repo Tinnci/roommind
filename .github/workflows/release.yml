@@ -33,9 +33,12 @@ jobs:
     steps:
       - name: Resolve release tag
         id: release
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag_name }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            tag="${{ inputs.tag_name }}"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            tag="$INPUT_TAG"
           elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             tag="${GITHUB_REF_NAME}"
           else
@@ -55,16 +58,23 @@ jobs:
               exit 1
               ;;
           esac
+          if [[ ! "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Release tag must be vX.Y.Z." >&2
+            exit 1
+          fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@v7.0.1
         with:
-          ref: ${{ steps.release.outputs.tag }}
+          ref: refs/tags/${{ steps.release.outputs.tag }}
 
       - name: HACS validation
         uses: hacs/action@22.5.0
+        env:
+          REPOSITORY_REF: refs/tags/${{ steps.release.outputs.tag }}
         with:
           category: integration
+          comment: false
 
       - name: Hassfest validation
         uses: home-assistant/actions/hassfest@master
@@ -128,7 +138,9 @@ jobs:
         run: bun --bun vite build
 
       - name: Create release zip
-        run: uv run --locked python scripts/build_release_package.py --output dist/roommind.zip --tag "${{ steps.release.outputs.tag }}"
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: uv run --locked python scripts/build_release_package.py --output dist/roommind.zip --tag "$RELEASE_TAG"
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v7.0.1
@@ -139,8 +151,10 @@ jobs:
 
       - name: Prepare release notes
         id: notes
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
-          tag="${{ steps.release.outputs.tag }}"
+          tag="$RELEASE_TAG"
           version="${tag#v}"
           notes_file="$(mktemp)"
           awk -v version="$version" '
@@ -156,14 +170,17 @@ jobs:
       - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          NOTES_FILE: ${{ steps.notes.outputs.notes_file }}
         run: |
-          tag="${{ steps.release.outputs.tag }}"
+          tag="$RELEASE_TAG"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release edit "$tag" --notes-file "${{ steps.notes.outputs.notes_file }}" --repo "$GITHUB_REPOSITORY"
+            gh release edit "$tag" --notes-file "$NOTES_FILE" --repo "$GITHUB_REPOSITORY"
             gh release upload "$tag" dist/roommind.zip --repo "$GITHUB_REPOSITORY" --clobber
           else
             gh release create "$tag" dist/roommind.zip \
               --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
               --title "RoomMind $tag" \
-              --notes-file "${{ steps.notes.outputs.notes_file }}"
+              --notes-file "$NOTES_FILE"
           fi

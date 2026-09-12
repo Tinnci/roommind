@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.8.0 - 2026-09-13
+
+- Separate room comfort targets from device setpoints, pace AC adjustments and
+  apply quiet accessory settings before climate commands.
+- Add a room comfort climate entity with schedule/hold controls and a refreshed
+  room interface. Existing override entity semantics remain compatible.
+- Keep Control Intent, Actuation Plan, Actuation Evidence and Control Outcome
+  distinct. Freeze observations before actuation and learn only from physical
+  observations or confirmations; stale feedback remains unknown.
+- Use per-field observation times throughout sensor fusion and history. Reuse
+  the observation database connection and skip unchanged persistence snapshots.
+- Prepare the maintained fork's release metadata, installation instructions and
+  HACS archive; validate the selected release tag rather than the default branch.
+
+本版本汇集家庭空调观测、舒适度控制、设备防打扰和存储减写迭代。新舒适度实体与旧
+override 实体的区别见 [迁移说明](docs/room-comfort-and-feedback.md)。完整发布准备与
+跨仓库取证见 [生态发布审计](docs/ecosystem-release-audit.md)。
+
 ## 1.7.21 - 2026-08-28
 
 ### Fixed
