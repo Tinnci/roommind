@@ -52,6 +52,47 @@ async def test_writes_serialize_mutation_and_persistence_as_one_transaction(stor
 
 
 @pytest.mark.asyncio
+async def test_identical_writes_do_not_rewrite_storage(store):
+    """Repeated saves preserve exact values without writing the same snapshot again."""
+    await store.async_load()
+    await store.async_save_room("bedroom", {"comfort_temp": 25.01})
+    await store.async_save_settings({"nested": {"value": 1}})
+    await store.async_save_thermal_data({"model": {"samples": 10}})
+    store._store.async_save.reset_mock()
+
+    await store.async_save_room("bedroom", {"comfort_temp": 25.01})
+    await store.async_save_settings({"nested": {"value": 1}})
+    await store.async_save_thermal_data({"model": {"samples": 10}})
+    await store.async_clear_thermal_data_room("absent")
+
+    store._store.async_save.assert_not_awaited()
+    await store.async_save_room("bedroom", {"comfort_temp": 25.02})
+    store._store.async_save.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_failed_snapshot_is_retried_even_when_desired_state_is_unchanged(store):
+    """A failed disk write cannot become the remembered persisted snapshot."""
+    await store.async_load()
+    store._store.async_save.side_effect = [OSError("disk unavailable"), None]
+    with pytest.raises(OSError):
+        await store.async_save_settings({"prediction_enabled": False})
+    await store.async_save_settings({"prediction_enabled": False})
+    assert store._store.async_save.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_settings_input_and_result_cannot_mutate_persisted_state(store):
+    """Nested caller dictionaries must not bypass serialized storage writes."""
+    await store.async_load()
+    changes = {"nested": {"values": [1]}}
+    result = await store.async_save_settings(changes)
+    changes["nested"]["values"].append(2)
+    result["nested"]["values"].append(3)
+    assert store.get_settings()["nested"]["values"] == [1]
+
+
+@pytest.mark.asyncio
 async def test_save_room_creates_new(store):
     """Saving a room with a new area_id creates it with defaults."""
     await store.async_load()

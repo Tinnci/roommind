@@ -6,9 +6,10 @@ import hashlib
 import json
 import os
 import sqlite3
+import threading
 import time
-from collections.abc import Iterable
-from contextlib import closing
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from typing import Any
 
 from .thermal_analysis import build_observed_windows, build_thermal_episodes
@@ -39,6 +40,32 @@ class ObservationStore:
         self._episode_retention_days = episode_retention_days
         self._interval_gap_seconds = interval_gap_seconds
         self._schema_ready = False
+        self._connection_lock = threading.RLock()
+        self._conn: sqlite3.Connection | None = None
+        self._closed = False
+
+    def close(self) -> None:
+        """Checkpoint and release the connection after coordinator work stops."""
+        with self._connection_lock:
+            self._closed = True
+            if self._conn is not None:
+                self._conn.close()
+                self._conn = None
+                self._schema_ready = False
+
+    @contextmanager
+    def _session(self) -> Iterator[sqlite3.Connection]:
+        """Serialize executor access while keeping WAL open between committed batches."""
+        with self._connection_lock:
+            if self._closed:
+                raise RuntimeError("Observation store is closed")
+            if self._conn is None:
+                self._conn = self._connect()
+            try:
+                yield self._conn
+            except BaseException:
+                self._conn.rollback()
+                raise
 
     def record(self, observation: dict[str, Any]) -> bool:
         """Insert one observation, returning True when it stores a new row."""
@@ -53,7 +80,7 @@ class ObservationStore:
                 rows.append(row)
         if not rows:
             return 0
-        with closing(self._connect()) as conn:
+        with self._session() as conn:
             before = conn.total_changes
             conn.executemany(
                 """
@@ -108,7 +135,7 @@ class ObservationStore:
         if limit is not None:
             sql += " LIMIT ?"
             params.append(limit)
-        with closing(self._connect()) as conn:
+        with self._session() as conn:
             return [self._dict_from_row(row) for row in conn.execute(sql, params)]
 
     def prune_raw(self, *, cutoff_ts: float | None = None) -> int:
@@ -116,7 +143,7 @@ class ObservationStore:
         if cutoff_ts is None:
             cutoff_ts = time.time() - self._raw_retention_days * 24 * 3600
         self.compact_raw_before(cutoff_ts=cutoff_ts)
-        with closing(self._connect()) as conn:
+        with self._session() as conn:
             cursor = conn.execute("DELETE FROM raw_observations WHERE observed_at < ?", (cutoff_ts,))
             conn.commit()
             return cursor.rowcount
@@ -137,7 +164,7 @@ class ObservationStore:
         if episode_cutoff_ts is None:
             episode_cutoff_ts = now - self._episode_retention_days * 24 * 3600
 
-        with closing(self._connect()) as conn:
+        with self._session() as conn:
             interval_cursor = conn.execute(
                 "DELETE FROM observation_intervals WHERE end_ts < ?",
                 (interval_cutoff_ts,),
@@ -159,7 +186,7 @@ class ObservationStore:
 
     def compact_raw_before(self, *, cutoff_ts: float) -> int:
         """Store compact observed intervals for raw rows before cutoff_ts."""
-        with closing(self._connect()) as conn:
+        with self._session() as conn:
             rows = list(
                 conn.execute(
                     """
@@ -231,7 +258,7 @@ class ObservationStore:
             {where}
             ORDER BY start_ts, interval_id
         """
-        with closing(self._connect()) as conn:
+        with self._session() as conn:
             return [self._interval_dict_from_row(row) for row in conn.execute(sql, params)]
 
     def store_window_summaries(
@@ -268,7 +295,7 @@ class ObservationStore:
         if not persist_empty:
             summaries = [summary for summary in summaries if summary["sample_count"] > 0]
         rows = [self._window_summary_row(room_id, kind, bucket_seconds, summary) for summary in summaries]
-        with closing(self._connect()) as conn:
+        with self._session() as conn:
             before = conn.total_changes
             if not persist_empty:
                 self._delete_empty_window_summaries(
@@ -316,7 +343,7 @@ class ObservationStore:
         sql = f"DELETE FROM observed_window_summaries WHERE {' AND '.join(clauses)}"
         if conn is not None:
             return conn.execute(sql, params).rowcount
-        with closing(self._connect()) as own_conn:
+        with self._session() as own_conn:
             cursor = own_conn.execute(sql, params)
             own_conn.commit()
             return cursor.rowcount
@@ -360,7 +387,7 @@ class ObservationStore:
             {where}
             ORDER BY start_ts, summary_id
         """
-        with closing(self._connect()) as conn:
+        with self._session() as conn:
             return [self._window_summary_dict_from_row(row) for row in conn.execute(sql, params)]
 
     def store_thermal_episodes(
@@ -380,7 +407,7 @@ class ObservationStore:
         episode_rows = [self._thermal_episode_row(room_id, episode) for episode in episodes]
         if not episode_rows:
             return 0
-        with closing(self._connect()) as conn:
+        with self._session() as conn:
             before = conn.total_changes
             conn.executemany(
                 """
@@ -435,20 +462,24 @@ class ObservationStore:
             {where}
             ORDER BY start_ts, episode_id
         """
-        with closing(self._connect()) as conn:
+        with self._session() as conn:
             return [self._thermal_episode_dict_from_row(row) for row in conn.execute(sql, params)]
 
     def _connect(self) -> sqlite3.Connection:
         directory = os.path.dirname(self._db_path)
         if directory:
             os.makedirs(directory, exist_ok=True)
-        conn = sqlite3.connect(self._db_path)
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA synchronous=NORMAL")
-        conn.execute("PRAGMA busy_timeout=5000")
-        if not self._schema_ready:
-            self._ensure_schema(conn)
-            self._schema_ready = True
+        conn = sqlite3.connect(self._db_path, check_same_thread=False)
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            conn.execute("PRAGMA busy_timeout=5000")
+            if not self._schema_ready:
+                self._ensure_schema(conn)
+                self._schema_ready = True
+        except BaseException:
+            conn.close()
+            raise
         return conn
 
     @staticmethod

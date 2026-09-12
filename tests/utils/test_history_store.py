@@ -169,6 +169,17 @@ def test_downsample_preserves_window_open(history_dir):
     assert result[1]["window_open"] is False
 
 
+def test_rotation_without_expired_rows_does_not_rewrite_detail(history_dir):
+    """Retention checks must leave an unchanged history file untouched."""
+    from unittest.mock import patch
+
+    store = HistoryStore(history_dir)
+    store.record("room_a", {"room_temp": 25.01})
+    with patch.object(store, "_rewrite_csv") as rewrite:
+        store.rotate("room_a")
+    rewrite.assert_not_called()
+
+
 def test_rotate_moves_old_to_history(history_dir):
     """Rotation moves old detail rows to history file."""
     store = HistoryStore(history_dir)

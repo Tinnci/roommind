@@ -142,8 +142,14 @@ Astra 在每一次演进迭代中，可自由权衡并交叉推进以下核心�
       - 斐讯 M1 物理机身仅搭载了 SHT20（温湿度）、攀藤颗粒物（PM2.5）和万胜 WZ-S（甲醛），并不存在物理 CO2、eCO2 或 TVOC 传感器；
       - 坚决杜绝在 Home Assistant 中暴露永远不可用或虚假估计的幽灵实体，果断从插件实体注册表（`sensor.py`）中剔除 `CO2`、`eCO2`、`TVOC`，保持物理世界的诚实与代码的极致精简。
 
-### 阶段五：实机经验印证、eMMC 存储寿命治理与极简演进 (Phase 5: Real-World Experience, eMMC Longevity & Codebase Pruning)
-- [ ] **Phase 5: 结合家庭实机数据演进、精度无损的 eMMC 闪存寿命治理与全局架构精简**
+### 阶段五：实机经验印证、eMMC 存储寿命治理与极简演进 (Phase 5: Real-World Experience, eMMC Longevity & Codebase Pruning) [COMPLETED]
+- [x] **Phase 5: 结合家庭实机数据演进、精度无损的 eMMC 闪存寿命治理与全局架构精简**（2026-09-13）
+  - **实机归因 / Household evidence**：只读审计固定一小时窗口，6,534 条 Recorder 状态中 4,939 条仅改变接收时间属性；按实体注册表归属统计，兼容实体更名。45 秒整机采样写入 3,444,736 字节；eMMC `life_time=0x02 0x01`、`pre_eol_info=0x01`，不据此推算剩余寿命。
+  - **观测与发布 / Observation and publication**：ZM1 与 TCL 的原始内存快照持续更新，所有数值、物理属性、来源及可用性变化立即发布；相同报告分别最多合并 60/120 秒，静默前最后报告由定时器补发，保留真实接收时间。指令确认与 context 证据独立于实体发布，不使用未验证的非零死区丢弃微小变化。
+  - **存储精简 / Persistence**：RoomMind 观测 SQLite 复用连接并串行化执行器访问，保留逐批提交、异常回滚及关闭释放；消除每周期关闭连接触发的重复检查点。配置只保存变化后的完整快照，输入及返回值脱离调用方引用；历史 CSV 没有变化时停止重写。
+  - **实体与统计 / Entities and statistics**：纯通信时间与版本诊断在新注册时默认禁用，保留既有用户选择及物理测量；TCL 风机与膨胀阀原始数值补齐 measurement 统计，不虚构单位。驱动提交：ZM1 `a744464`、TCL `d1e9c56`。
+  - **验证 / Validation**：2,309 RoomMind tests、56 ZM1 tests、280 TCL tests、75 Bun tests 通过；Ruff、RoomMind mypy、驱动相关模块 mypy、tsgo typecheck、build、ESLint 与文档链接检查通过。原生 HA 回放中，2,916 条 M1 测量记录对应 729 次发布（减少 75%），保留全部数值变化，5 分钟均值仅有浮点舍入差异，最小值与最大值一致。
+  - **边界 / Limits**：本阶段完成实机只读取证、减写实现、统计保真与本地回归；未部署、重启 HA 或下发家庭设备动作。发布减少比例不等于闪存写入减少比例，部署后的写入速率与长期损耗仍需同负载测量。详见[存储、观测与 eMMC / Storage and publication](docs/storage-and-publication.md)。
   - **核心关切与开放探索空间**：
     - **精度无损的存储寿命与写入放大治理 (Precision-Preserving Longevity & Flash Wear Mitigation)**：
       - 实机 Home Assistant 服务器运行于 eMMC 闪存芯片（`/dev/mmcblk0`，当前底层 EXT_CSD 损耗指示为 `0x02 0x01`）。当前 SQLite 数据库（`home-assistant_v2.db`）存在严重的高频小碎片随机写放大，但**我们的目标绝非盲目粗暴地牺牲数据精度，而是精准保留所有关键物理量（真实室温、湿度、设定点、功率、阀门状态）的高保真度与必要精度**，精准剔除无物理信号价值的微小噪声与机械重复刷盘。

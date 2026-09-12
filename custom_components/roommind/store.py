@@ -36,6 +36,7 @@ class RoomMindStore:
         self._settings: dict = {}
         self._thermal_data: dict = {}
         self._write_lock = asyncio.Lock()
+        self._last_saved_snapshot: dict | None = None
 
     @property
     def _write_transaction(self) -> asyncio.Lock:
@@ -55,6 +56,11 @@ class RoomMindStore:
 
         self._settings = stored.get("settings", {}) if stored else {}
         self._thermal_data = stored.get("thermal_data", {}) if stored else {}
+        self._last_saved_snapshot = (
+            copy.deepcopy({"rooms": self._data, "settings": self._settings, "thermal_data": self._thermal_data})
+            if stored
+            else None
+        )
 
         # One-time migrations (combined into single pass + single save)
         device_migrated = 0
@@ -87,9 +93,12 @@ class RoomMindStore:
 
     async def _async_save_locked(self) -> None:
         """Persist one immutable snapshot while holding the write transaction."""
-        await self._store.async_save(
-            copy.deepcopy({"rooms": self._data, "settings": self._settings, "thermal_data": self._thermal_data})
-        )
+        snapshot = copy.deepcopy({"rooms": self._data, "settings": self._settings, "thermal_data": self._thermal_data})
+        if snapshot == getattr(self, "_last_saved_snapshot", None):
+            return
+        await self._store.async_save(snapshot)
+        # Remember only successful writes so an identical retry remains durable.
+        self._last_saved_snapshot = copy.deepcopy(snapshot)
 
     def get_rooms(self) -> dict[str, dict]:
         """Return a deep copy of all rooms (with migration applied)."""
@@ -113,10 +122,11 @@ class RoomMindStore:
 
     async def async_save_settings(self, changes: dict) -> dict:
         """Merge changes into global settings and persist."""
+        changes = copy.deepcopy(changes)
         async with self._write_transaction:
             self._settings.update(changes)
             await self._async_save_locked()
-            return dict(self._settings)
+            return copy.deepcopy(self._settings)
 
     def get_thermal_data(self) -> dict:
         """Return a deep copy of thermal learning data."""
@@ -124,8 +134,9 @@ class RoomMindStore:
 
     async def async_save_thermal_data(self, data: dict) -> None:
         """Replace thermal learning data and persist."""
+        data = copy.deepcopy(data)
         async with self._write_transaction:
-            self._thermal_data = copy.deepcopy(data)
+            self._thermal_data = data
             await self._async_save_locked()
 
     async def async_clear_thermal_data_room(self, area_id: str) -> None:
@@ -142,6 +153,7 @@ class RoomMindStore:
 
     async def async_save_room(self, area_id: str, config: dict) -> dict:
         """Create or update room configuration for an area."""
+        config = copy.deepcopy(config)
         async with self._write_transaction:
             room = upsert_room_config(area_id, self._data.get(area_id), config)
             self._data[area_id] = room
@@ -154,6 +166,7 @@ class RoomMindStore:
         Note: Does NOT perform device sync (devices <-> thermostats/acs).
         Use async_save_room() for changes involving device fields.
         """
+        changes = copy.deepcopy(changes)
         async with self._write_transaction:
             if area_id not in self._data:
                 raise KeyError(f"Room '{area_id}' not found")

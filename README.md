@@ -34,6 +34,7 @@
 - **Multi-Sensor Fusion Diagnostics** - Temperature sensors expose freshness, bias correction, variance, and conflict status in the room interface.
 - **Physical Feedback Provenance** - Uses device observation timestamps when available, keeps stale activity unknown, and shares one observation snapshot across planning and learning.
 - **Sensor Report Freshness** - Uses per-field report times across control, fusion and raw history; partial updates cannot keep old temperature or humidity alive.
+- **Storage Efficiency** - Preserves distinct measurements and control evidence while companion drivers coalesce duplicate publications; skips unchanged saves and reuses the observation database connection.
 - **Per-Device Setpoint Mode** - Choose proportional (boost setpoint) or direct (exact target) control per device for optimal results with different hardware.
 - **Quiet AC Actuation** - Pace small output increases, apply night accessories before climate commands, and keep dispatch, deferred adjustments and physical feedback distinct.
 - **Room Comfort Controls** - A dedicated HA comfort entity and a calm room interface separate effective comfort targets, device plans and observed feedback. Expand device details when needed.
@@ -117,6 +118,8 @@ For a more detailed explanation of the `Priority` slider, device types, setpoint
 For HA state freshness, sensor fusion, airflow modeling, and comfort diagnostics, see the [Observer and Airflow Guide](docs/observer-and-airflow.md).
 
 For M1/zM1 broadcast measurements, reliable reception, per-field expiry and firmware findings, see [M1 Observation Chain / M1 观测链分析](docs/zm1-observation-chain.md).
+
+For household write measurements, publication rules and statistics fidelity, see [Storage and eMMC / 存储与 eMMC](docs/storage-and-publication.md).
 
 For AC output interpretation, feedback gaps, consistent observations, and dispatch evidence, see [AC Observation and Control](docs/ac-observation-and-control.md).
 

@@ -2,7 +2,61 @@
 
 from __future__ import annotations
 
+import sqlite3
+from concurrent.futures import ThreadPoolExecutor
+
+import pytest
+
 from custom_components.roommind.utils.observation_store import ObservationStore
+
+
+def test_committed_observations_reuse_wal_across_executor_threads(tmp_path):
+    """Every batch stays readable without closing and checkpointing after each cycle."""
+    path = tmp_path / "observations.sqlite"
+    store = ObservationStore(str(path))
+
+    def record(index):
+        return store.record(
+            {
+                "room_id": "bedroom",
+                "entity_id": "sensor.temp",
+                "kind": "temperature",
+                "observed_at": index,
+                "value": f"24.{index:02d}",
+            }
+        )
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        assert all(executor.map(record, range(20)))
+    assert path.with_name(path.name + "-wal").exists()
+    with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as reader:
+        assert reader.execute("SELECT COUNT(*) FROM raw_observations").fetchone()[0] == 20
+    store.close()
+    with pytest.raises(RuntimeError, match="closed"):
+        record(21)
+    reopened = ObservationStore(str(path))
+    assert len(reopened.read()) == 20
+    reopened.close()
+
+
+def test_failed_batch_rolls_back_before_reusing_connection(tmp_path):
+    """A later successful batch cannot accidentally commit a failed earlier batch."""
+    store = ObservationStore(str(tmp_path / "observations.sqlite"))
+    good = {"room_id": "bedroom", "entity_id": "sensor.temp", "kind": "temperature", "observed_at": 1, "value": "24.01"}
+    bad = {**good, "observed_at": 2, "ingested_at": object()}
+    original = store._row_from_observation
+
+    def malformed(observation):
+        row = original({**observation, "ingested_at": 1})
+        return (*row[:5], observation.get("ingested_at", 1), *row[6:])
+
+    store._row_from_observation = malformed
+    with pytest.raises(sqlite3.ProgrammingError):
+        store.record_many([good, bad])
+    store._row_from_observation = original
+    assert store.record({**good, "observed_at": 3})
+    assert [row["observed_at"] for row in store.read()] == [3]
+    store.close()
 
 
 def test_record_and_read_preserves_value_text_and_numeric_value(tmp_path):

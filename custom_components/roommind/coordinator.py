@@ -361,6 +361,9 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def async_shutdown(self) -> None:
         """Release event subscriptions owned by the coordinator."""
         self._remove_tcl_command_listener()
+        await super().async_shutdown()
+        if self._observation_store is not None:
+            await self.hass.async_add_executor_job(self._observation_store.close)
 
     def register_entity_platform(
         self,

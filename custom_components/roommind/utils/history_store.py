@@ -229,8 +229,9 @@ class HistoryStore:
             downsampled = self._downsample(archive, bucket_seconds=300)
             self._append_history(area_id, downsampled)
 
-        # Rewrite detail with only recent rows
-        self._rewrite_csv(self._detail_path(area_id), keep)
+        # Rewrite only when retention or corrupt-row removal changed the file.
+        if len(keep) != len(detail_rows):
+            self._rewrite_csv(self._detail_path(area_id), keep)
 
         # Trim history older than 90 days
         history_rows = self.read_history(area_id)
