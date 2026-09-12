@@ -74,10 +74,12 @@ while [ $ITERATION_COUNT -lt $ITERATION_MAX ]; do
    - 本地底层空调集成驱动源码仓库位于 \`/Users/driezy/ha-tcl-udp-ac\`；
    - 现已全权授权将该驱动仓库纳入联合调试、协议逆向分析与协同优化的统一系统工程范畴；
    - Astra 可跨仓库阅读、分析与修改 \`/Users/driezy/ha-tcl-udp-ac\`，挖掘底层协议（如压缩机真实运行位、功率、故障码）或从源头抑制声光骚扰（如静音/熄屏指令）；改动驱动后需执行 \`cd /Users/driezy/ha-tcl-udp-ac && uv run --with aiohttp --with cryptography --with voluptuous --with yarl python -m unittest discover -s tests -p 'test_*.py'\` 确保驱动测试全部通过。
-5. 代码行间注释使用英文（English comments），文档建议采用中英双语。
-6. 编写完毕后在本地运行测试确认功能正常（如 \`uv run pytest\` 及 \`cd frontend && bun test\`）。
-7. 完成后执行 git add 并使用规范的 git commit 提交改动（例如: feat(...), fix(...), chore(...)）。
-8. 更新 ASTRA_TASKS.md 将该条目勾选为 [x]，并简要输出本次迭代实现的总结。"
+5. 人机心智体验与 Home Assistant 实体契约质询：
+   - 深入思考人机心智模型与实体抽象边界，让前端 UI 自然呈现真实舒适意图与系统执行状态，使 HA 实体契约清晰诚实地反映多源物理事实，消除用户的失控感与认知负担。
+6. 代码行间注释使用英文（English comments），文档建议采用中英双语。
+7. 编写完毕后在本地运行测试确认功能正常（如 \`uv run pytest\` 及 \`cd frontend && bun test\`）。
+8. 完成后执行 git add 并使用规范的 git commit 提交改动（例如: feat(...), fix(...), chore(...)）。
+9. 更新 ASTRA_TASKS.md 将该条目勾选为 [x]，并简要输出本次迭代实现的总结。"
 
     # Execute with session resumption if available, otherwise new session
     "$CODEX_BIN" exec resume --last "$PROMPT" < /dev/null >> "$LOOP_LOG" 2>&1
