@@ -66,11 +66,18 @@ while [ $ITERATION_COUNT -lt $ITERATION_MAX ]; do
    - 严格遵循 RoomMind 核心控制语义：Control Intent -> Actuation Plan -> Actuation Evidence -> Control Outcome。区分 Dispatch（发出）与 Confirmation（物理确认），传感器与设备状态以观测为准，保持数据流单向与不可变状态快照（Immutable Snapshots）；
    - 前端采用 Lit + TypeScript，**严禁使用 npm，必须统一使用 bun**（测试: \`cd frontend && bun test\`，类型检查: \`bun run typecheck\`，编译: \`bun run build\`）；
    - 后端采用 Python 3.12+，使用 \`uv run pytest\` 运行测试，\`uv run ruff check\` 进行代码规范检查；
-3. 遵循'功能优先、避免繁琐 gate 卡点'原则，写出简洁健壮的高质量生产代码与测试用例。
-4. 代码行间注释使用英文（English comments），文档建议采用中英双语。
-5. 编写完毕后在本地运行测试确认功能正常（如 \`uv run pytest\` 及 \`cd frontend && bun test\`）。
-6. 完成后执行 git add 并使用规范的 git commit 提交改动（例如: feat(...), fix(...), chore(...)）。
-7. 更新 ASTRA_TASKS.md 将该条目勾选为 [x]，并简要输出本次迭代实现的总结。"
+3. 核心设计哲学（Clarity & Rigour via Simplification）：
+   - 追求真正的代码清晰与严密，绝非堆砌防御性关卡或测试官僚主义；主动精简代码库，寻找更简洁、直接的功能实现路径，重新审视并精炼目标达成方式（Redesign Goal Realization）；
+   - 坚决做减法与优先级排序：明确区分“真正必要的”与“冗余无用的”，主动剔除不必要的过度防御与繁琐冗余门禁（Prune redundant gates）；
+   - 以真实数据驱动：优先加载并分析本地已就绪的真实家庭遥测数据（目录 \`data/household_telemetry/\` 下的 \`wo_shi_history.csv\`、\`ke_ting_history.csv\` 等数兆字节实际运行时序），基于真实空调（\`climate.tcl_air_conditioner_2\`）与传感器在生活中的客观表现驱动控制闭环与防骚扰演进。
+4. 端到端系统工程联合调优 (End-to-End System Engineering: Driver + Control Fusion)：
+   - 本地底层空调集成驱动源码仓库位于 \`/Users/driezy/ha-tcl-udp-ac\`；
+   - 现已全权授权将该驱动仓库纳入联合调试、协议逆向分析与协同优化的统一系统工程范畴；
+   - Astra 可跨仓库阅读、分析与修改 \`/Users/driezy/ha-tcl-udp-ac\`，挖掘底层协议（如压缩机真实运行位、功率、故障码）或从源头抑制声光骚扰（如静音/熄屏指令）；改动驱动后需执行 \`cd /Users/driezy/ha-tcl-udp-ac && uv run --with aiohttp --with cryptography --with voluptuous --with yarl python -m unittest discover -s tests -p 'test_*.py'\` 确保驱动测试全部通过。
+5. 代码行间注释使用英文（English comments），文档建议采用中英双语。
+6. 编写完毕后在本地运行测试确认功能正常（如 \`uv run pytest\` 及 \`cd frontend && bun test\`）。
+7. 完成后执行 git add 并使用规范的 git commit 提交改动（例如: feat(...), fix(...), chore(...)）。
+8. 更新 ASTRA_TASKS.md 将该条目勾选为 [x]，并简要输出本次迭代实现的总结。"
 
     # Execute with session resumption if available, otherwise new session
     "$CODEX_BIN" exec resume --last "$PROMPT" < /dev/null >> "$LOOP_LOG" 2>&1
