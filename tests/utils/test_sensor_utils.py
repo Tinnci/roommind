@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from custom_components.roommind.utils.sensor_utils import read_sensor_value
 
 
@@ -29,6 +31,12 @@ def _make_hass_no_state() -> MagicMock:
 def test_returns_float_for_valid_state():
     hass = _make_hass("sensor.temp", "21.5")
     assert read_sensor_value(hass, "sensor.temp", "living_room", "temperature") == 21.5
+
+
+@pytest.mark.parametrize("value", ["nan", "inf", "-inf"])
+def test_nonfinite_values_are_not_measurements(value):
+    hass = _make_hass("sensor.temp", value)
+    assert read_sensor_value(hass, "sensor.temp", "living_room", "temperature") is None
 
 
 # ---------------------------------------------------------------------------

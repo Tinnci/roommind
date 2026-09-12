@@ -260,6 +260,7 @@
   "devices.sensor_freshness_aging": "Alternd",
   "devices.sensor_freshness_stale": "Veraltet",
   "devices.sensor_source_reported": "Gemeldet",
+  "devices.sensor_source_observed": "Gerätebeobachtung",
   "devices.sensor_source_updated": "Aktualisiert",
   "devices.sensor_source_changed": "Geändert",
   "devices.sensor_source_none": "Kein Zeitstempel",

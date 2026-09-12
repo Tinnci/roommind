@@ -108,8 +108,14 @@ Astra 在每一次演进迭代中，可自由权衡并交叉推进以下核心�
       - 上层空间气候大脑（`RoomMind`）与底层硬件通信驱动（`ha-tcl-udp-ac`）各自暴露给 Home Assistant 的实体表面，应该如何清晰划分职责与抽象层级，才既契合 HA 原生生态体验，又杜绝物理事实与控制意图的混淆？
       - 对于真实空调存在的蜂鸣声、亮屏等物理副反应，以及系统在多源融合中提取出的数据血统与真实状态，应该如何在实体契约层建立诚实、严密且不扰人的表达？
 
-### 阶段四：空间环境感知源头重塑、固件协议分析与 UDP 传输可靠性 (Phase 4: Environmental Sensing Grounding, M1/EMW3080 Firmware & Transport Inquiries)
-- [ ] **Phase 4: 悟空 M1 / ZM1 (EMW3080) 固件协议逆向、UDP 通信可靠性与全链路传感器观测链重构**
+### 阶段四：空间环境感知源头重塑、固件协议分析与 UDP 传输可靠性 (Phase 4: Environmental Sensing Grounding, M1/EMW3080 Firmware & Transport Inquiries) [COMPLETED]
+- [x] **Phase 4: 悟空 M1 / ZM1 (EMW3080) 固件协议逆向、UDP 通信可靠性与全链路传感器观测链重构**（2026-09-13）
+  - **实机证据 / Physical evidence**：被动抓包确认状态回复与传感器广播独立到达；旧插件在 680 次端口采样中仅 6 次监听，存在接收空窗。后续抓包也发现主机未收到传感器广播，不能把所有空窗归因于插件。只读查询报告间隔为 5 秒，未改设备配置。
+  - **通信与观测 / Transport and observations**：ZM1 使用共享常驻异步监听器，按 MAC 串行请求，处理迟到、局部及冲突回报；只读查询最多重试一次，写入仅派发一次。逐字段保存接收时间与来源，发布不可变快照，独立定时器在 300 秒后使旧测量失效；MQTT 发布或保留消息不冒充新观测。驱动提交：`7da1644`。
+  - **硬件与上层消费 / Hardware and consumption**：移除 CO2、eCO2、TVOC 占位定义并精确清理旧注册项；RoomMind 控制、融合、缓存及原始历史共用字段观测时间，修复陈旧温湿度绕过有效性判断与缓存续命，前端标注设备观测来源。
+  - **固件路径 / Firmware path**：完成 v0.1.4 二进制协议线索分析与现有 RTL0B_SDK 启动工程的原生 clean build 核验；记录传感器引脚核验、采样与网络解耦及运行时测量路径，未将启动工程描述为完整 M1 固件。
+  - **验证 / Validation**：2,302 RoomMind Python tests、52 ZM1 tests（另含 7 subtests）、75 Bun tests 通过；两仓库 Ruff、RoomMind mypy、ZM1 7 个运行时模块 mypy、tsgo typecheck、build、ESLint 与文档链接检查通过。
+  - **边界 / Limits**：本阶段完成协议取证、软件修复、回归与构建核验；未部署、重启 HA 或刷写固件。上游报告空窗仍需 AP 抓包与设备串口/总线诊断，家庭链路可靠性与固件根因尚未验证。详见[M1 观测链分析 / M1 observation chain](docs/zm1-observation-chain.md)。
   - **开放性核心质询与探索空间（Open Questions for Astra to Explore & Resolve）**：
     - **固件底层 vs 插件传输的超时根因质询（The Root-Cause Inquiry: Firmware Stack vs. Integration Protocol）**：
       - 真实卧室中使用的 ZM1 传感器（基于 EMW3080 模块，当前运行第三方固件项目 [`a2633063/zM1`](https://github.com/a2633063/zM1)）偶发的 UDP 超时与回传不稳定，其物理与协议根源究竟在何处？
@@ -125,6 +131,9 @@ Astra 在每一次演进迭代中，可自由权衡并交叉推进以下核心�
     - **空间大脑对感知衰减的韧性契约（The RoomMind Perception Staleness & Resilience Contract）**：
       - 当物理传感器不可避免地经历局域网瞬态抖动或单次超时，RoomMind 与上层协调器应如何定义数据陈旧度（Staleness）与平滑退化规则？
       - 如何既能防止因单次 UDP 超时导致实体频繁上下线（Flapping）造成控制策略混乱，又能坚决避免系统在传感器彻底断联数小时后仍使用“僵尸温度”驱动空调超额制冷/制热？
+    - **物理硬件真实性与冗余实体精简质询（Physical Hardware Grounding & Entity Pruning）**：
+      - 斐讯 M1 物理机身仅搭载了 SHT20（温湿度）、攀藤颗粒物（PM2.5）和万胜 WZ-S（甲醛），并不存在物理 CO2、eCO2 或 TVOC 传感器；
+      - 坚决杜绝在 Home Assistant 中暴露永远不可用或虚假估计的幽灵实体，果断从插件实体注册表（`sensor.py`）中剔除 `CO2`、`eCO2`、`TVOC`，保持物理世界的诚实与代码的极致精简。
 
 ### 阶段五：实机经验印证与极简演进 (Phase 5: Real-World Experience & Codebase Pruning)
 - [ ] **Phase 5: 结合家庭实机数据演进与全局代码精简**

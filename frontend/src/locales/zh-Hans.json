@@ -260,6 +260,7 @@
   "devices.sensor_freshness_aging": "变旧",
   "devices.sensor_freshness_stale": "过期",
   "devices.sensor_source_reported": "上报",
+  "devices.sensor_source_observed": "设备观测",
   "devices.sensor_source_updated": "更新",
   "devices.sensor_source_changed": "变化",
   "devices.sensor_source_none": "无时间戳",

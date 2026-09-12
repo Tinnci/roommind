@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -11,6 +12,7 @@ from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 
 from ..const import MAX_SENSOR_STALENESS, UPDATE_INTERVAL
 from ..control.thermal_model import TemperatureObservation
+from ..utils.sensor_utils import sensor_observation_age, sensor_observation_timestamp
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,17 +57,16 @@ class SensorFusionManager:
         is_primary: bool,
     ) -> TemperatureObservation | None:
         """Return a temperature observation or ``None`` when the state is unusable."""
-        if state is None or value_c is None:
+        if state is None or value_c is None or not math.isfinite(value_c):
             return None
         if state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
             return None
 
-        timestamp = self._freshness_timestamp(state)
-        age_s = 0.0
-        if timestamp is not None:
-            age_s = max(0.0, (now - timestamp).total_seconds())
-            if age_s > MAX_SENSOR_STALENESS:
-                return None
+        attribute = "current_temperature" if entity_id.startswith("climate.") else None
+        timestamp, source = sensor_observation_timestamp(state, attribute=attribute)
+        age_s = sensor_observation_age(state, now=now, attribute=attribute)
+        if age_s is None:
+            return None
 
         variance = self._PRIMARY_VARIANCE if is_primary else self._AUXILIARY_VARIANCE
         if age_s > UPDATE_INTERVAL * 2:
@@ -80,6 +81,8 @@ class SensorFusionManager:
             last_updated=getattr(state, "last_updated", None),
             last_changed=getattr(state, "last_changed", None),
             is_primary=is_primary,
+            observed_at=timestamp if source.endswith("observed_at") else None,
+            freshness_source=source,
         )
 
     def calibrate_observations(
@@ -188,6 +191,7 @@ class SensorFusionManager:
                     "last_reported": self._timestamp_iso(observation.last_reported),
                     "last_updated": self._timestamp_iso(observation.last_updated),
                     "last_changed": self._timestamp_iso(observation.last_changed),
+                    **({"observed_at": observation.observed_at.isoformat()} if observation.observed_at else {}),
                 }
             )
         return result
@@ -230,17 +234,11 @@ class SensorFusionManager:
             )
         return manager
 
-    def _freshness_timestamp(self, state: Any) -> datetime | None:
-        """Prefer HA's report timestamp, falling back for older HA releases."""
-        for attr in ("last_reported", "last_updated", "last_changed"):
-            value = getattr(state, attr, None)
-            if isinstance(value, datetime):
-                return value
-        return None
-
     @staticmethod
     def _freshness_source(observation: TemperatureObservation) -> str:
-        """Return which HA timestamp is driving observation age."""
+        """Return which source timestamp is driving observation age."""
+        if observation.freshness_source is not None:
+            return observation.freshness_source
         if observation.last_reported is not None:
             return "last_reported"
         if observation.last_updated is not None:

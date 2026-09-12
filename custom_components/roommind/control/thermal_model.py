@@ -40,6 +40,8 @@ class TemperatureObservation:
     last_updated: datetime | None = None
     last_changed: datetime | None = None
     is_primary: bool = False
+    observed_at: datetime | None = None
+    freshness_source: str | None = None
 
 
 # ---------------------------------------------------------------------------

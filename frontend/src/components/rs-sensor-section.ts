@@ -1156,6 +1156,9 @@ export class RsSensorSection extends LitElement {
 
   private _freshnessSourceLabel(source: string, lang: string): string {
     switch (source) {
+      case "observed_at":
+      case "current_temperature_observed_at":
+        return localize("devices.sensor_source_observed", lang);
       case "last_reported":
         return localize("devices.sensor_source_reported", lang);
       case "last_updated":

@@ -117,8 +117,8 @@ async def test_published_setpoint_comes_from_the_actual_device_plan(
     assert temperature_operation["application"] == "pending"
 
 
-class TestReadDeviceTemp:
-    """Tests for _read_device_temp."""
+class TestReadDeviceTemperatureObservation:
+    """Tests for temperature observations from managed devices."""
 
     def test_reads_from_thermostat(self, hass, mock_config_entry):
         coordinator = _create_coordinator(hass, mock_config_entry)
@@ -131,7 +131,7 @@ class TestReadDeviceTemp:
             "acs": [],
             "devices": [{"entity_id": "climate.trv1", "type": "trv", "role": "auto", "heating_system_type": ""}],
         }
-        assert coordinator._read_device_temp(room) == 21.5
+        assert coordinator._read_device_temperature_observation(room).value == 21.5
 
     def test_reads_from_ac_when_no_thermostat(self, hass, mock_config_entry):
         coordinator = _create_coordinator(hass, mock_config_entry)
@@ -144,12 +144,12 @@ class TestReadDeviceTemp:
             "acs": ["climate.ac1"],
             "devices": [{"entity_id": "climate.ac1", "type": "ac", "role": "auto", "heating_system_type": ""}],
         }
-        assert coordinator._read_device_temp(room) == 25.0
+        assert coordinator._read_device_temperature_observation(room).value == 25.0
 
     def test_no_devices(self, hass, mock_config_entry):
         coordinator = _create_coordinator(hass, mock_config_entry)
         room = {"thermostats": [], "acs": [], "devices": []}
-        assert coordinator._read_device_temp(room) is None
+        assert coordinator._read_device_temperature_observation(room) is None
 
     def test_state_is_none(self, hass, mock_config_entry):
         coordinator = _create_coordinator(hass, mock_config_entry)
@@ -159,7 +159,7 @@ class TestReadDeviceTemp:
             "acs": [],
             "devices": [{"entity_id": "climate.trv1", "type": "trv", "role": "auto", "heating_system_type": ""}],
         }
-        assert coordinator._read_device_temp(room) is None
+        assert coordinator._read_device_temperature_observation(room) is None
 
     def test_invalid_temperature_value(self, hass, mock_config_entry):
         coordinator = _create_coordinator(hass, mock_config_entry)
@@ -172,7 +172,7 @@ class TestReadDeviceTemp:
             "acs": [],
             "devices": [{"entity_id": "climate.trv1", "type": "trv", "role": "auto", "heating_system_type": ""}],
         }
-        assert coordinator._read_device_temp(room) is None
+        assert coordinator._read_device_temperature_observation(room) is None
 
     def test_no_current_temp_attribute(self, hass, mock_config_entry):
         coordinator = _create_coordinator(hass, mock_config_entry)
@@ -185,7 +185,7 @@ class TestReadDeviceTemp:
             "acs": [],
             "devices": [{"entity_id": "climate.trv1", "type": "trv", "role": "auto", "heating_system_type": ""}],
         }
-        assert coordinator._read_device_temp(room) is None
+        assert coordinator._read_device_temperature_observation(room) is None
 
 
 class TestFahrenheitConversion:

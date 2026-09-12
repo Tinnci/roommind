@@ -33,6 +33,7 @@
 - **Airflow-Aware Comfort** - Circulation, ventilation, and HVAC fan devices feed the thermal model, perceived temperature, and sensor disagreement analysis.
 - **Multi-Sensor Fusion Diagnostics** - Temperature sensors expose freshness, bias correction, variance, and conflict status in the room interface.
 - **Physical Feedback Provenance** - Uses device observation timestamps when available, keeps stale activity unknown, and shares one observation snapshot across planning and learning.
+- **Sensor Report Freshness** - Uses per-field report times across control, fusion and raw history; partial updates cannot keep old temperature or humidity alive.
 - **Per-Device Setpoint Mode** - Choose proportional (boost setpoint) or direct (exact target) control per device for optimal results with different hardware.
 - **Quiet AC Actuation** - Pace small output increases, apply night accessories before climate commands, and keep dispatch, deferred adjustments and physical feedback distinct.
 - **Room Comfort Controls** - A dedicated HA comfort entity and a calm room interface separate effective comfort targets, device plans and observed feedback. Expand device details when needed.
@@ -114,6 +115,8 @@ Until calibrated (~60 idle + ~20 active samples), RoomMind falls back to simple 
 For a more detailed explanation of the `Priority` slider, device types, setpoint modes, idle behavior, and smart source selection, see the [Control and Device Guide](docs/control-and-devices.md).
 
 For HA state freshness, sensor fusion, airflow modeling, and comfort diagnostics, see the [Observer and Airflow Guide](docs/observer-and-airflow.md).
+
+For M1/zM1 broadcast measurements, reliable reception, per-field expiry and firmware findings, see [M1 Observation Chain / M1 观测链分析](docs/zm1-observation-chain.md).
 
 For AC output interpretation, feedback gaps, consistent observations, and dispatch evidence, see [AC Observation and Control](docs/ac-observation-and-control.md).
 

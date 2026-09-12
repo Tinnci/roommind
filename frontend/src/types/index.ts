@@ -36,6 +36,7 @@ export interface SensorFusionStatus {
   freshness_source: "last_reported" | "last_updated" | "last_changed" | "none" | string;
   freshness_status: "fresh" | "aging" | "stale" | string;
   last_reported?: string | null;
+  observed_at?: string | null;
   last_updated?: string | null;
   last_changed?: string | null;
 }

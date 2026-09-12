@@ -8,11 +8,27 @@ RoomMind reads live entity state through `hass.states.get(entity_id)`.
 
 For observation age, prefer timestamps in this order:
 
-1. `State.last_reported`: the entity reported a state, even if the value did not change.
-2. `State.last_updated`: state attributes or the state value changed.
-3. `State.last_changed`: only the state value changed.
+1. A field's explicit `observed_at` attribute. Climate inputs can provide
+   `current_temperature_observed_at` or `current_humidity_observed_at`.
+2. `State.last_reported`: the entity reported a state, even if the value did not change.
+3. `State.last_updated`: state attributes or the state value changed.
+4. `State.last_changed`: only the state value changed.
 
-This matters for stable temperature sensors. A sensor can keep reporting `20.5 C` for a long time; `last_changed` can look old even though the sensor is healthy. `last_reported` is therefore the best freshness signal on current Home Assistant releases.
+This matters for stable temperature sensors. A sensor can keep reporting `20.5 C`
+for a long time; `last_changed` can look old even though the sensor is healthy.
+Conversely, an integration can republish a cached reading when only brightness
+changes. A field timestamp takes precedence in that case. Without explicit
+provenance, `last_reported` remains the preferred HA timestamp.
+
+Malformed, timezone-free or future explicit timestamps are unusable; they do not
+fall back to HA publication time. Non-finite values are rejected. Temperature
+selection, humidity fusion and temperature fusion exclude readings aged 300 seconds
+or more. A dropout cache expires 300 seconds after the original report, so repeated
+reads or later unavailability cannot extend it. A fresh auxiliary can replace an
+expired primary; old humidity is not retained as a fallback measurement.
+
+温湿度以逐字段观测时间为准。部分设备更新不会刷新其他字段，缓存期限从原始报告起算。
+参见 [M1 观测链分析](zm1-observation-chain.md)中的实机证据与驱动属性说明。
 
 RoomMind exposes the selected source as `freshness_source` and the computed age as `age_s` in live diagnostics.
 
@@ -27,6 +43,7 @@ Each observation carries:
 - primary or auxiliary role
 - age in seconds
 - `last_reported`, `last_updated`, and `last_changed`
+- explicit `observed_at` and its source when the integration provides them
 
 Fresh but conflicting sensors are kept visible. Stale or unavailable states are dropped before EKF training. Aging sensors stay usable but receive higher variance, so they contribute less confidence to the fused observation.
 

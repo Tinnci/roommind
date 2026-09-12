@@ -260,6 +260,7 @@
   "devices.sensor_freshness_aging": "Aging",
   "devices.sensor_freshness_stale": "Stale",
   "devices.sensor_source_reported": "Reported",
+  "devices.sensor_source_observed": "Device observation",
   "devices.sensor_source_updated": "Updated",
   "devices.sensor_source_changed": "Changed",
   "devices.sensor_source_none": "No timestamp",

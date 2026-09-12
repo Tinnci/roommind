@@ -67,6 +67,35 @@ def test_observation_falls_back_to_last_updated_when_last_reported_missing():
     assert observation.age_s == pytest.approx(15.0)
 
 
+def test_field_observation_timestamp_takes_precedence_over_entity_report():
+    """A brightness or availability update cannot refresh the temperature."""
+    now = datetime(2026, 9, 12, 12, tzinfo=UTC)
+    state = _state("20.0", last_reported=now)
+    state.attributes["observed_at"] = (now - timedelta(seconds=90)).isoformat()
+    fusion = SensorFusionManager()
+
+    observation = fusion.observation_from_state("sensor.wall", state, now=now, value_c=20.0, is_primary=True)
+
+    assert observation is not None
+    assert observation.age_s == 90
+    diagnostic = fusion.diagnostics([observation], power_fraction=0.0)[0]
+    assert diagnostic["freshness_source"] == "observed_at"
+    assert diagnostic["observed_at"] == state.attributes["observed_at"]
+
+
+@pytest.mark.parametrize("timestamp", [None, "", "bad", "2026-09-12T12:00:00", "2026-09-13T12:00:00+00:00"])
+def test_invalid_explicit_observation_time_does_not_fall_back_to_ha(timestamp):
+    """Unknown or future source timestamps cannot become fresh HA observations."""
+    now = datetime(2026, 9, 12, 12, tzinfo=UTC)
+    state = _state("20.0", last_reported=now)
+    state.attributes["observed_at"] = timestamp
+
+    assert (
+        SensorFusionManager().observation_from_state("sensor.wall", state, now=now, value_c=20.0, is_primary=True)
+        is None
+    )
+
+
 def test_diagnostics_exposes_ha_freshness_metadata():
     """Fusion diagnostics include HA timestamp source and serialized timestamps."""
     now = datetime(2026, 5, 24, 12, 0, tzinfo=UTC)

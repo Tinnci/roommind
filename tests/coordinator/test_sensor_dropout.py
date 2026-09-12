@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from homeassistant.core import State
 
 from custom_components.roommind.const import MAX_SENSOR_STALENESS, MODE_IDLE
 from custom_components.roommind.control.solar import SolarExposure
@@ -316,3 +317,94 @@ async def test_managed_mode_dropout_uses_cache(hass, mock_config_entry):
     room = result["rooms"]["living_room_abc12345"]
     assert room["current_temp"] == 19.0, "should use cached device temp"
     assert room["current_temp_raw"] is None
+
+
+@pytest.mark.parametrize("explicit_timestamp", [False, True])
+async def test_stale_numeric_reading_cannot_drive_control_or_learning(hass, mock_config_entry, explicit_timestamp):
+    """An online entity with an expired measurement must not reseed the cache."""
+    area_id = SAMPLE_ROOM["area_id"]
+    hass.data = {"roommind": {"store": _make_store_mock({area_id: SAMPLE_ROOM})}}
+    old = datetime.now(UTC) - timedelta(seconds=MAX_SENSOR_STALENESS + 1)
+    attrs = {"unit_of_measurement": "°C"}
+    if explicit_timestamp:
+        attrs["observed_at"] = old.isoformat()
+    sensor_id = SAMPLE_ROOM["temperature_sensor"]
+    state = State(sensor_id, "18.0", attrs)
+    if not explicit_timestamp:
+        state.last_reported = old
+    hass.states.get = MagicMock(side_effect={sensor_id: state}.get)
+    hass.services.async_call = AsyncMock()
+    coordinator = _create_coordinator(hass, mock_config_entry)
+    coordinator._ekf_training.process = MagicMock()
+
+    result = await coordinator._async_update_data()
+
+    room = result["rooms"][area_id]
+    assert room["current_temp"] is None
+    assert room["current_temp_raw"] is None
+    assert room["commanded_mode"] == MODE_IDLE
+    assert area_id not in coordinator._last_valid_temps
+    coordinator._ekf_training.process.assert_not_called()
+
+
+@pytest.mark.parametrize("unavailable", [False, True])
+def test_cache_expires_from_measurement_time_not_last_control_cycle(hass, mock_config_entry, freezer, unavailable):
+    """Neither a partial entity update nor a dropout grants a new cache lifetime."""
+    freezer.move_to("2026-09-12T12:00:00+00:00")
+    now = datetime.now(UTC)
+    attrs = {
+        "unit_of_measurement": "°C",
+        "observed_at": (now - timedelta(seconds=MAX_SENSOR_STALENESS - 15)).isoformat(),
+    }
+    sensor_id = SAMPLE_ROOM["temperature_sensor"]
+    states = {sensor_id: State(sensor_id, "18.0", attrs)}
+    hass.states.get = MagicMock(side_effect=states.get)
+    coordinator = _create_coordinator(hass, mock_config_entry)
+    first = coordinator._read_room_sensors(SAMPLE_ROOM, SAMPLE_ROOM["area_id"])
+    assert first.current_temp == 18.0
+
+    freezer.move_to(now + timedelta(seconds=20))
+    states[sensor_id] = State(sensor_id, "unavailable" if unavailable else "18.0", {**attrs, "brightness": 2})
+    expired = coordinator._read_room_sensors(SAMPLE_ROOM, SAMPLE_ROOM["area_id"])
+
+    assert expired.current_temp is None
+    assert expired.current_temp_raw is None
+    assert not expired.temperature_observations
+
+
+def test_stale_primary_uses_fresh_auxiliary_without_stale_humidity_fallback(hass, mock_config_entry):
+    """Only usable channels may select the control temperature or humidity."""
+    old = datetime.now(UTC) - timedelta(seconds=MAX_SENSOR_STALENESS + 10)
+    room = {**SAMPLE_ROOM, "temperature_sensors": ["sensor.aux"]}
+    states = {
+        room["temperature_sensor"]: State(room["temperature_sensor"], "18.0", {"observed_at": old.isoformat()}),
+        room["humidity_sensor"]: State(room["humidity_sensor"], "90.0", {"observed_at": old.isoformat()}),
+        "sensor.aux": State("sensor.aux", "22.0", {"unit_of_measurement": "°C"}),
+    }
+    hass.states.get = MagicMock(side_effect=states.get)
+    coordinator = _create_coordinator(hass, mock_config_entry)
+
+    snapshot = coordinator._read_room_sensors(room, room["area_id"])
+
+    assert snapshot.current_temp_raw == 22.0
+    assert [obs.entity_id for obs in snapshot.temperature_observations] == ["sensor.aux"]
+    assert snapshot.humidity.value is None
+    assert not snapshot.humidity.sources
+
+
+def test_raw_sensor_history_preserves_field_observation_timestamp(hass, mock_config_entry):
+    """Republishing an old measurement must not create a newer raw sample."""
+    observed_at = datetime.now(UTC) - timedelta(seconds=60)
+    state = State(
+        SAMPLE_ROOM["temperature_sensor"],
+        "20.0",
+        {"observed_at": observed_at.isoformat(), "observation_source": "udp"},
+    )
+    hass.states.get = MagicMock(side_effect={SAMPLE_ROOM["temperature_sensor"]: state}.get)
+    coordinator = _create_coordinator(hass, mock_config_entry)
+
+    coordinator._read_room_sensors(SAMPLE_ROOM, SAMPLE_ROOM["area_id"])
+
+    raw = coordinator._raw_observation_buffer[0]
+    assert raw["observed_at"] == observed_at.timestamp()
+    assert raw["attributes"]["observation_source"] == "udp"

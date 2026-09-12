@@ -110,7 +110,7 @@ from .utils.observation_store import ObservationStore
 from .utils.schedule_utils import (
     resolve_schedule_index,
 )
-from .utils.sensor_utils import read_sensor_value
+from .utils.sensor_utils import read_sensor_value, sensor_observation_age, sensor_observation_timestamp
 from .utils.target_resolution import ControlTargetPlan, prepare_control_target_plan
 from .utils.temp_utils import celsius_delta_to_ha, ha_temp_to_celsius, ha_temp_unit_str
 
@@ -809,11 +809,10 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         now = datetime.now(UTC)
 
         current_temp: float | None = None
+        current_temp_age_s = 0.0
         for temp_sensor_id in temp_sensor_ids:
-            raw_temp = read_sensor_value(self.hass, temp_sensor_id, area_id, "temperature")
+            raw_temp = read_sensor_value(self.hass, temp_sensor_id, area_id, "temperature", now=now)
             temp_c = ha_temp_to_celsius(self.hass, raw_temp, entity_id=temp_sensor_id) if raw_temp is not None else None
-            if current_temp is None and temp_c is not None:
-                current_temp = temp_c
             state = self.hass.states.get(temp_sensor_id) if temp_sensor_id else None
             self._record_raw_state_observation(
                 area_id,
@@ -831,17 +830,22 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
             if observation is not None:
                 observations.append(observation)
+                if current_temp is None:
+                    current_temp = observation.value
+                    current_temp_age_s = observation.age_s
 
         # Fallback: read current_temperature from first thermostat/AC if no external sensor
         if current_temp is None and not has_external_sensor:
-            raw_dev = self._read_device_temp(room)
-            current_temp = ha_temp_to_celsius(self.hass, raw_dev) if raw_dev is not None else None
+            device_observation = self._read_device_temperature_observation(room, now=now)
+            if device_observation is not None:
+                current_temp = device_observation.value
+                current_temp_age_s = device_observation.age_s
 
         # --- Sensor dropout fallback: use cached temp if fresh enough ---
         current_temp_raw = current_temp  # preserve original for EKF/history
 
         if current_temp is not None:
-            self._last_valid_temps[area_id] = (current_temp, time.monotonic())
+            self._last_valid_temps[area_id] = (current_temp, time.monotonic() - current_temp_age_s)
         elif area_id in self._last_valid_temps:
             cached_temp, cached_ts = self._last_valid_temps[area_id]
             if time.monotonic() - cached_ts < MAX_SENSOR_STALENESS:
@@ -886,7 +890,7 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "room_id": area_id,
                 "entity_id": entity_id,
                 "kind": kind,
-                "observed_at": self._state_observed_at(state),
+                "observed_at": self._state_observed_at(state, kind=kind),
                 "ingested_at": time.time(),
                 "state": raw_state,
                 "value": state_value,
@@ -899,20 +903,29 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
 
     @staticmethod
-    def _state_observed_at(state: Any) -> float:
+    def _state_observed_at(state: Any, *, kind: str) -> float | None:
         """Return the source observation timestamp for a HA state."""
-        for attr in ("last_reported", "last_updated", "last_changed"):
-            value = getattr(state, attr, None)
-            if isinstance(value, datetime):
-                return value.timestamp()
-        return time.time()
+        attribute = f"current_{kind}" if str(getattr(state, "entity_id", "")).startswith("climate.") else None
+        timestamp, source = sensor_observation_timestamp(state, attribute=attribute)
+        if timestamp is not None:
+            return timestamp.timestamp()
+        return time.time() if source == "none" else None
 
     @staticmethod
     def _essential_raw_attributes(attrs: dict) -> dict:
         """Return compact attributes worth preserving in raw observation storage."""
         return {
             key: attrs[key]
-            for key in ("device_class", "state_class", "unit_of_measurement", "friendly_name")
+            for key in (
+                "device_class",
+                "state_class",
+                "unit_of_measurement",
+                "friendly_name",
+                "observed_at",
+                "observation_source",
+                "current_temperature_observed_at",
+                "current_humidity_observed_at",
+            )
             if key in attrs
         }
 
@@ -937,7 +950,6 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Read configured humidity sources into an explicit weighted snapshot."""
         sensor_ids = self._humidity_sensor_ids(room)
         weighted_values: list[tuple[float, float, str]] = []
-        fallback_values: list[tuple[float, str]] = []
         primary = room.get("humidity_sensor") or ""
         for sensor_id in sensor_ids:
             state = self.hass.states.get(sensor_id)
@@ -948,17 +960,14 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 state,
                 is_primary=(sensor_id == primary),
             )
-            value = read_sensor_value(self.hass, sensor_id, area_id, "humidity")
+            value = read_sensor_value(self.hass, sensor_id, area_id, "humidity", now=now)
             if value is None:
                 continue
-            fallback_values.append((value, sensor_id))
-            freshness_ts = getattr(state, "last_reported", None) or getattr(state, "last_updated", None)
-            weight = 1.0
-            if isinstance(freshness_ts, datetime):
-                age_s = max(0.0, (now - freshness_ts).total_seconds())
-                if age_s > MAX_SENSOR_STALENESS:
-                    continue
-                weight = 1.0 / (1.0 + age_s / 900.0)
+            attribute = "current_humidity" if sensor_id.startswith("climate.") else None
+            age_s = sensor_observation_age(state, now=now, attribute=attribute)
+            if age_s is None:
+                continue
+            weight = 1.0 / (1.0 + age_s / 900.0)
             if sensor_id == primary:
                 weight *= 1.25
             weighted_values.append((value, weight, sensor_id))
@@ -972,13 +981,6 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     sources=tuple(sources),
                     primary_available=primary in sources,
                 )
-        if fallback_values:
-            sources = [sensor_id for _, sensor_id in fallback_values]
-            return HumiditySensorSnapshot(
-                value=round(fallback_values[0][0], 2),
-                sources=tuple(sources),
-                primary_available=primary in sources,
-            )
         return HumiditySensorSnapshot(value=None)
 
     def _humidity_sensor_ids(self, room: dict) -> list[str]:
@@ -2057,15 +2059,25 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             statuses.append(status)
         return statuses
 
-    def _read_device_temp(self, room: dict) -> float | None:
-        """Read current_temperature from the first thermostat or AC entity."""
+    def _read_device_temperature_observation(
+        self, room: dict, *, now: datetime | None = None
+    ) -> TemperatureObservation | None:
+        """Read the first usable thermostat or AC temperature with its original age."""
+        now = now or datetime.now(UTC)
         for entity_id in get_all_entity_ids(room.get("devices", [])):
             state = self.hass.states.get(entity_id)
-            if state and state.attributes.get("current_temperature") is not None:
-                try:
-                    return float(state.attributes["current_temperature"])
-                except ValueError, TypeError:
-                    continue
+            raw = read_sensor_value(self.hass, entity_id, room.get("area_id", ""), "temperature", now=now)
+            if raw is None:
+                continue
+            observation = self._sensor_fusion.observation_from_state(
+                entity_id,
+                state,
+                now=now,
+                value_c=ha_temp_to_celsius(self.hass, raw, entity_id=entity_id),
+                is_primary=True,
+            )
+            if observation is not None:
+                return observation
         return None
 
     def _is_entity_running(self, entity_id: str) -> bool:
