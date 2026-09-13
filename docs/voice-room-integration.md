@@ -15,6 +15,14 @@ room has reached it. The Control Cycle continues to observe, plan, constrain,
 submit, reconcile, learn, publish, and persist. No voice path writes directly
 into the coordinator or thermal model.
 
+Gateway reads the comfort entity after the policy write. A matching active
+`override_temperature` can establish that the comfort target was saved;
+`override_suppressed` keeps an active away-policy override visible. This copied
+policy observation remains separate from Actuation Evidence for the AC.
+
+“把温度调到 25.5 度”可先澄清房间，再用“卧室”完成同一意图；无需重说温度或设备名。
+界面分别呈现“舒适目标已保存”“目标已提交”和设备的发出、接收及回报状态。
+
 卧室 M1 的房间温度与 TCL 空调内温来自不同物理位置，不能互相替代。历史数据中的
 设备设定与舒适目标之差为 −4.5～+2.5°C；这也是两个不同概念，不是温度校准偏移。
 传感器字段过期时，语音应说明该来源当前不可用。未观测到的压缩机活动继续未知。
