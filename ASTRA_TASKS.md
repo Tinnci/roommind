@@ -264,7 +264,12 @@ Astra 在每一次演进迭代中，可自由权衡并交叉推进以下核心�
          - **多端呈现优化**：在 Home Assistant 仪表板提供结构紧凑、分组清晰的高质感卡片，并在 Phosh 锁屏/侧边栏提供快速静音与夜间模式快捷微调入口。
 
 ### 阶段九：Voice Harness 核心控制台全面板（概览 / 运行记录 / 测试 / 设置）UI/UX 深度重塑 (Phase 9: Voice Harness Full Surface UI/UX Overhaul)
-- [ ] **Phase 9: “概览、运行记录、测试、设置”全面板 UI 现代化重构、交互质感飞跃与设计系统统一**
+- [x] **Phase 9: “概览、运行记录、测试、设置”全面板 UI 现代化重构、交互质感飞跃与设计系统统一**（2026-09-13）
+  - **实现 / Delivery**：Voice Harness 0.3.52 使用 Lit + TypeScript 统一四面板、设计变量、深浅色与响应式布局；加入 Bento 概览、观测指标、六阶段瀑布、Trace 抽屉、回答 Diff、JSON/WAV/PCM 详情、真实模型流式演练、取消与重放，以及四组设置、链路探测和 JSON/YAML 配置迁移。移除旧面板渲染路径，保留轮询期间的表单输入。
+  - **证据与交互 / Evidence and interaction**：派发、接收与物理确认分别呈现，缺失时序保持未知；修复输出校验失败误报完成、场景切换遗留 Token 统计和参考断言误报模型完成。模型选择器触控高度提升到 48px；支持卫星原生 22,050Hz PCM，模态抽屉补齐无障碍名称。
+  - **验证 / Validation**：RoomMind 2,316 Python、75 Bun；Gateway 395 Python、53 Bun、7 Earcon；TCL 283 unittest 全部通过。Ruff、tsgo、Bun build 和版本同步通过；390/820/1440px 浏览器检查无横向溢出，检查的触控控件满足 44px。
+  - **实机 / Target device**：已备份四组件并运行 `./deploy.sh` 同步 RoomMind、TCL 和 zM1，Gateway 0.3.52 已部署；Home Assistant 重启后组件加载正常，新版资源 HTTP 200。实测流式生成、回答对比、配置导出回导、Wyoming/TTS/卫星探测，以及两轮 PCM → ASR → 对话 → TTS；卫星播放具有匹配的开始、完成事件。详见[完整验证记录 / Verification](https://github.com/Tinnci/llm-gateway/blob/main/docs/voice-harness-phase9-2026-09-13.md)。
+  - **边界与后续 / Limits**：本轮注入 PCM 验证服务链路，不代替远场拾音与声学测量。实机发现 HA 快速温度意图选择空调内温（24.4°C），而 M1 与 RoomMind 为 26.2°C；该来源选择问题保留为 Phase 10 的具体输入，未宣称舒适温度查询已修复。
   - **核心目标与全景面板重构规范（Four Core Panels Architecture & Modern UX）**：
     1. **概览面板（Overview Panel）—— 系统健康与全链路脉动（Live Pipeline Pulse）**：
        - **Bento 模块化系统状态流**：大模型网关、Wyoming ASR、Edge TTS、Kukui 平板卫星状态整合为现代 Bento 优雅微卡片；
