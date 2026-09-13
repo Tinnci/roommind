@@ -132,6 +132,9 @@ For AC output interpretation, feedback gaps, consistent observations, and dispat
 
 For daily controls, the new comfort climate entity, legacy override compatibility and device feedback, see [Room Comfort and Device Feedback / 房间舒适度与设备反馈](docs/room-comfort-and-feedback.md).
 
+For voice queries and comfort requests through LLM Gateway, see
+[Voice and RoomMind / 语音与空间意图](docs/voice-room-integration.md).
+
 ## Entities Created
 
 | Entity | Description |
