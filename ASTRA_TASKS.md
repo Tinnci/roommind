@@ -192,7 +192,12 @@ Astra 在每一次演进迭代中，可自由权衡并交叉推进以下核心�
   - [x] **现场与发布验收 / Remaining acceptance**：实机多场景自动化双轮对话与试听证据齐备；待用户物理日常长期体验。
 
 ### 阶段八：AI 语音控制中心与设置界面深度重塑 (Phase 8: Voice Control Center & Interactive Settings UI/UX)
-- [ ] **Phase 8: AI 语音设置面板交互深化、场景化调音套件与 Phosh/HA 双端无缝协同**
+- [x] **Phase 8: AI 语音设置面板交互深化、场景化调音套件与 Phosh/HA 双端无缝协同**（2026-09-13）
+  - **交付与闭环 / Delivery & Grounding**：
+    - 前端交付高质感卡片式语音控制中枢（Lit + TypeScript，bun 构建），支持 Focus/Daily/Night 场景预设、400ms 防抖保存、6 项音效微交互试听、深色模式与移动端触控适配；
+    - Phosh 锁屏原生大板面打通扬声器静音、夜间模式、音量升降与 30 分钟免打扰快捷开关；
+    - 引入 `voice_preview_lock` 防止多端并发试听导致削顶破音；新增 `room_environment.py` 与 `ha-background-rotator.c` 将 RoomMind 物理舒适度事实联动至锁屏环境流光；
+    - 实机 `192.168.3.120` 部署验证完成，获取物理屏幕 `kmsgrab` 真实截图与 API 快照，288 项 Python 测试、13 项 Meson 测试、全套 Bun 测试通过。
   - **核心目标与演进约束（Strict Voice Scope & Experience Inquiries）**：
     1. **严格限定工作范围（Strict AI Voice Scope Guard）**：
        - **本阶段及后续工程循环严格专注于当前主力维护的 AI 语音技术栈**（`/Users/driezy/Downloads/ha-voice-stack` 下的 `repos/llm-gateway`、`repos/phosh-ha-status`、`repos/doubao-asr-for-ha`、`repos/hass-edge-tts` 以及与 `RoomMind` 的环境联动）；
