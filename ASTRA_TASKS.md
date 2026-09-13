@@ -258,6 +258,31 @@ Astra 在每一次演进迭代中，可自由权衡并交叉推进以下核心�
          - **引入“试听即反馈”交互（Live Auditory Preview）**：在每一个音量滑块旁直观嵌入“试听测试音（Play Test Sound）”按钮，调节时无需猜测，所调即所听；
          - **多端呈现优化**：在 Home Assistant 仪表板提供结构紧凑、分组清晰的高质感卡片，并在 Phosh 锁屏/侧边栏提供快速静音与夜间模式快捷微调入口。
 
+### 阶段九：Voice Harness 核心控制台全面板（概览 / 运行记录 / 测试 / 设置）UI/UX 深度重塑 (Phase 9: Voice Harness Full Surface UI/UX Overhaul)
+- [ ] **Phase 9: “概览、运行记录、测试、设置”全面板 UI 现代化重构、交互质感飞跃与设计系统统一**
+  - **核心目标与全景面板重构规范（Four Core Panels Architecture & Modern UX）**：
+    1. **概览面板（Overview Panel）—— 系统健康与全链路脉动（Live Pipeline Pulse）**：
+       - **Bento 模块化系统状态流**：大模型网关、Wyoming ASR、Edge TTS、Kukui 平板卫星状态整合为现代 Bento 优雅微卡片；
+       - **关键指标仪表化（Hero Stats & Sparklines）**：耗时中位数、成功率、最后一次唤醒、错误率以微曲线（Sparklines）直观展现；
+       - **实时链路脉冲动效**：麦克风监听、VAD 状态、模型流式响应以克制的呼吸微动效实时映射，一眼洞悉链路健康。
+    2. **运行记录面板（Runs / Traces Panel）—— 交互式瀑布时间线与沉浸式 Trace 检查器**：
+       - **交互式瀑布流时序（Waterfall Trace Timeline）**：将单轮对话细拆为 `Wake -> ASR -> LLM -> TTS -> Playback -> Follow-up`，以高质感彩色瀑布条清晰直观呈现各阶段耗时占比与瓶颈；
+       - **沉浸式检查抽屉（Trace Inspector Drawer）**：支持点击任意 Run 平滑滑出抽屉，提供多模态详情卡片（完整 JSON 树状折叠、对话气泡复原、PCM 采样回放试听、Token 消耗统计）；
+       - **高效筛选与对比（Replay Diff）**：支持按成功/告警/失败/高耗时极速筛选，并支持任意两个 Run 的模型回答差异高亮对比。
+    3. **测试面板（Test & Scenarios Panel）—— 场景化工作台与交互式流式演练**：
+       - **场景卡片工作台（Scenario Playground）**：将预置场景卡片化（如多轮追问消解、弱网降级容错、风噪穿透压测）；
+       - **即时流式触发（Run & Stream Watch）**：支持在面板中直接输入测试语音或文本，单步触发并实时以打字机流式呈现 Gateway 的 Token 生成与 Tool Calls 轨迹；
+       - **断言与契约结果可视化**：直观的 Pass/Fail 状态标签与一键“重放本轮测试（Replay Test）”。
+    4. **设置面板（Settings Panel）—— 统一中枢与场景化调音套件**：
+       - **配置分类层级**：清晰的分组二级导航（“声学与音频调校”、“大模型路由与 API”、“ASR/TTS 链路与 Wyoming”、“系统与存储策略”）；
+       - **所见即所得与实时验证**：每个设置项均配备实时探测与验证微交互（探测模型连通性、TTS 延迟、音频增益试听）；
+       - **配置导入导出（Config Portability）**：支持一键导出/导入调优配置文件（JSON/YAML），方便备份与多端同步。
+    5. **全局设计系统与性能基准（Design System & Tactile Motion Standards）**：
+       - 基于 Lit + TypeScript + CSS 自定义属性（Tokens），遵循 Apple HIG / Material You 空间层级美学与 Calm Technology 理念；
+       - 标签页切换引入平滑 View Transitions 与弹性微动画（Spring Physics），杜绝生硬闪烁；
+       - 适配桌面宽屏多列、平板 10.1 寸流式 Bento 以及移动端 390px 紧凑排版，触控目标保证 >= 44px；
+       - 全量支持深色/浅色自适应主题与无障碍（a11y / ARIA / 键盘导航 1-4 快捷键）。
+
 ---
 
 ## 演进历史归档与架构决策沉淀 (Evolution Log & Architectural Milestones)
