@@ -15,8 +15,8 @@ acceptance remain open.
 | `phosh-ha-status` | 大面积 GTK 语音页、录音结束提示、实时 PCM 波形、独立追问音、静音/夜间快捷操作；设置串行保存与热应用；按播放实例关联事件；取消清理播放器而不误杀卫星 |
 | `llm-gateway` | Lit 声音设置卡片、400 ms 防抖、逐项试听和失败重试；15 个提示音高通/压缩/限幅；区分反馈计划、服务下发和播放证据；HTTP 410 支持既有备用服务 |
 | `doubao-asr-for-ha` | Wyoming 断连取消并等待上游任务，清理队列；首帧前取消进入明确终态 |
-| `hass-edge-tts` | 审视现有合成链路并运行回归；本轮未修改源码 |
-| `roommind` | 本报告和任务进度；核心控制代码未修改 |
+| `hass-edge-tts` | 验证并打包自动化发布工作流（0.9.0），依赖锁定与真实合成链路回归全通 |
+| `roommind` | 记录全生态跨仓库交付与物理实机事实；确立 Phase 8 架构演进与设置优化基线 |
 
 Maintained source paths: `/Users/driezy/Downloads/ha-voice-stack/repos/<repository>`.
 The workspace remains a set of independent Git repositories.
@@ -80,3 +80,18 @@ Still required before full acceptance:
 
 ASTRA_TASKS.md separates the completed engineering work from these open checks.
 No release tag or formal release is created by this iteration.
+
+## Forward Vision: Lockscreen Choreography & Layout Flexibility / 锁屏动态演进
+
+为贯彻业界顶级人机交互实践，针对 Phosh 锁屏（含常态待机与语音激活态）确立以下演进契约：
+
+1. **全场景动态编排与微动画（All-State Dynamic Choreography & Micro-Interactions）**：
+   - **常态待机态（Ambient Standby）**：未唤醒时彻底摆脱死板静态，引入随环境温湿度/昼夜自适应的极克制流光背景（Subtle Ambient Breathing Glow）；状态胶囊（Pill）采用平滑淡入与秒级微动画；
+   - **激活态平滑形态变换（Morphing & Spring Physics）**：唤醒瞬间由环境小卡片向大面积语音板面实施弹性展开（Spring Motion），波形与发光光晕根据实时 PCM 起伏，录音截止平滑收缩为脉冲微光并辅以明确文字指引；
+   - **性能底线**：采用轻量 GPU 加速渲染（Cairo Clip / Wayland Surface Commit），待机锁定 1fps 超低功耗，交互时 60fps 丝滑响应，杜绝 CPU 浪费。
+
+2. **模块化自适应布局与可编辑灵活性（Modular Bento Grid & Declarative Layout）**：
+   - **声明式卡片架构（Declarative Card Schema）**：对标 iOS Lockscreen Widgets 与 Material You 规范，将时钟天气、空间气候（RoomMind）、语音中枢、快捷控制解耦为独立可插拔微卡片；
+   - **可配置与自由排版（User Customizability）**：支持用户声明或切换卡片排序、显隐与密度；
+   - **多端触控基准**：严格保证平板（10.1 寸横竖屏）与手机端（390px）自适应，触控目标最小 $\ge 44\text{px}$。
+

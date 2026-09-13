@@ -210,11 +210,20 @@ Astra 在每一次演进迭代中，可自由权衡并交叉推进以下核心�
          - 滑块拖拽实时防抖热应用（400ms Debounce Hot Apply），杜绝手动点保存的陈旧体验；
          - 每个音量项边提供直观的高灵敏“试听测试音（Play Test Sound）”微交互，试听时伴随轻量声波动效；
          - 声学电平指示：直观标记 -1.0 dBFS 安全峰值线与推荐响度区间，消除盲调猜测。
-    3. **多端协同与交互对齐（Cross-Surface Alignment）**：
-       - **Phosh 锁屏原生端**：在 10.1 寸平板的原生语音大板面（`ha-daily-board-renderer`）及抽屉中，打通轻量级调音与状态控制（快速静音、夜间静音模式、拾音状态）；
-       - **响应式与触控体验**：适配 390px 移动端与 10.1 寸平板横竖屏，触控目标严格保持 >= 44px 舒适尺寸，防止误触；
-       - 深色/浅色自适应主题，与 Home Assistant 主题平滑对齐。
-    4. **实机验证底线（Real Hardware Verification）**：
+    3. **Phosh 锁屏全场景（有无唤醒词双态）动态编排与微动效（Dynamic Choreography & Micro-Interactions）**：
+       - **常态环境待机（Ambient Standby，无唤醒词触发时）**：
+         - 彻底告别粗糙死板与静态排版，引入随环境温湿度/舒适度（与 RoomMind 联动）及昼夜节律自适应的极克制流光背景（Subtle Ambient Breathing Glow）；
+         - 状态胶囊（Pill）、时钟与环境气候卡片采用丝滑淡入淡出微动画；
+         - 功耗守卫：待机态锁定 1fps 超低频刷新，闲置 CPU 占用严格维持在极低水平；
+       - **交互激活态弹性转场（Morphing & Spring Physics）**：
+         - 唤醒瞬间平滑展开为大尺寸交互板面，由小卡片弹性过渡至大视野；
+         - 实时 PCM 拾音动态波形与流光发光晕随说话音量呼吸起伏，并在 ASR 录音截止瞬间优雅收缩为脉冲光点，伴随清晰“已停止收音”文字指引；
+         - 思考与朗读阶段的多模态同频映射，消除突兀跳变。
+    4. **模块化布局、可编辑性与灵活性（Modular Bento Grid & Declarative Customizability）**：
+       - **业界顶级架构规范（Modern Widget & Card Standards）**：借鉴 iOS Lockscreen Widgets 与 Material You 声明式规范，将时间天气、空间气候（RoomMind）、语音中枢、快捷控制解耦为独立 Bento 微卡片；
+       - **可配置与自由排版（User Customizability）**：支持用户声明或切换卡片排序、显隐与密度；
+       - **多端触控与排版响应式**：适配 10.1 寸平板横竖屏与 390px 手机端，触控目标严格保持 >= 44px 舒适尺寸，防止误触；深浅色自适应无缝过渡。
+    5. **实机验证底线（Real Hardware Verification）**：
        - 必须在实机 `192.168.3.120` 上完成真实触控、设置项实时生效验证与端到端试听，确保守护进程与 Phosh 桌面坚若磐石。
 
   - **核心关切与开放探索空间**：
