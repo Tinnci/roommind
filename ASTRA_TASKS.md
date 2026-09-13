@@ -186,7 +186,37 @@ Astra 在每一次演进迭代中，可自由权衡并交叉推进以下核心�
          - 探索实现跨仓库的协同发布模式或共享工作流，达成全生态代码质量与发布体验的高度一致性。
 
 ### 阶段七：语音助手全链路、PHOSH 锁屏交互重塑与多模态实机工程 (Phase 7: Voice Stack Overhaul, Phosh Lockscreen UI, Follow-Up Earcons & Target Grounding)
-- [ ] **Phase 7: ha-voice-stack 全链路协同、PHOSH 锁屏动态界面重构、追问听觉反馈 (Earcons) 与实机沉浸式交互闭环**
+- [x] **Phase 7: ha-voice-stack 全链路协同、PHOSH 锁屏动态界面重构、追问听觉反馈 (Earcons) 与实机沉浸式交互闭环**（2026-09-13）
+  - [x] **工程实现与部署 / Implementation and deployment**（2026-09-13）：完成原生大面积语音页、实时 PCM 波形、追问音、15 个提示音母带处理、Lit 声音卡片及热应用；修复播放事件时间戳、取消误杀卫星、音量单位和 ASR 首帧前断连清理。
+  - [x] **实机闭环 / Device evidence**：合成语音经真实扬声器/麦克风完成双轮对话，保持同一会话 ID；六项试听、播报中音量/静音、取消清理、原生状态矩阵与本地回归通过。发现并恢复实机已退役模型路由。详见[Phase 7 迭代报告](docs/voice-stack-phase7-2026-09-13.md)。
+  - [x] **现场与发布验收 / Remaining acceptance**：实机多场景自动化双轮对话与试听证据齐备；待用户物理日常长期体验。
+
+### 阶段八：AI 语音控制中心与设置界面深度重塑 (Phase 8: Voice Control Center & Interactive Settings UI/UX)
+- [ ] **Phase 8: AI 语音设置面板交互深化、场景化调音套件与 Phosh/HA 双端无缝协同**
+  - **核心目标与演进约束（Strict Voice Scope & Experience Inquiries）**：
+    1. **严格限定工作范围（Strict AI Voice Scope Guard）**：
+       - **本阶段及后续工程循环严格专注于当前主力维护的 AI 语音技术栈**（`/Users/driezy/Downloads/ha-voice-stack` 下的 `repos/llm-gateway`、`repos/phosh-ha-status`、`repos/doubao-asr-for-ha`、`repos/hass-edge-tts` 以及与 `RoomMind` 的环境联动）；
+       - **坚决杜绝发散至无关的硬件或墨水屏等外部项目**，确保全部算力与注意力高度聚焦于 AI 语音与交互体验。
+    2. **设置界面（Settings UI）的全面深化与美学跃升**：
+       - **卡片式语音控制中枢（Voice Control Suite）**：在 Home Assistant 前端深度重塑声音与语音设置卡片（Lit + TypeScript，统一使用 bun 构建），提供极具质感的现代控制中心，彻底告别零散的原生 `input_number`；
+       - **全场景分层调音与细致微调**：
+         - 唤醒提示音量（Wake Cue Volume）
+         - 追问提示音量（Follow-up Cue Volume）
+         - 思考等待循环音量（Processing Loop Volume）
+         - 日间播报音量（Daytime TTS Volume）
+         - 夜间柔和播报音量（Nighttime Gentle TTS Volume）
+         - 一键静音 / 免打扰与夜间模式联动
+       - **“试听即反馈”（Live Auditory Preview）与实时响应**：
+         - 滑块拖拽实时防抖热应用（400ms Debounce Hot Apply），杜绝手动点保存的陈旧体验；
+         - 每个音量项边提供直观的高灵敏“试听测试音（Play Test Sound）”微交互，试听时伴随轻量声波动效；
+         - 声学电平指示：直观标记 -1.0 dBFS 安全峰值线与推荐响度区间，消除盲调猜测。
+    3. **多端协同与交互对齐（Cross-Surface Alignment）**：
+       - **Phosh 锁屏原生端**：在 10.1 寸平板的原生语音大板面（`ha-daily-board-renderer`）及抽屉中，打通轻量级调音与状态控制（快速静音、夜间静音模式、拾音状态）；
+       - **响应式与触控体验**：适配 390px 移动端与 10.1 寸平板横竖屏，触控目标严格保持 >= 44px 舒适尺寸，防止误触；
+       - 深色/浅色自适应主题，与 Home Assistant 主题平滑对齐。
+    4. **实机验证底线（Real Hardware Verification）**：
+       - 必须在实机 `192.168.3.120` 上完成真实触控、设置项实时生效验证与端到端试听，确保守护进程与 Phosh 桌面坚若磐石。
+
   - **核心关切与开放探索空间**：
     1. **语音技术栈多仓库一体化审视（Voice Stack Ecosystem & Diagnostic Audit）**：
        - 聚焦工作区 `/Users/driezy/Downloads/ha-voice-stack`，将所有语音关联仓库统一纳入协同演进（`repos/phosh-ha-status` 锁屏与交互、`repos/llm-gateway` 大模型对话代理与 Harness、`repos/doubao-asr-for-ha` Wyoming ASR 适配、`repos/hass-edge-tts` 语音合成）；
