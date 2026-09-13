@@ -93,6 +93,7 @@ while [ $ITERATION_COUNT -lt $ITERATION_MAX ]; do
      * 测试面板（Test）：场景卡片工作台（Scenario Playground）、即时流式触发与打字机 Token/Tool Calls 轨迹、断言状态与一键重放；
      * 设置面板（Settings）：四大分组导航（声学调音、大模型路由策略、ASR/TTS 链路与 Wyoming、系统与存储策略）、实时连通性与延迟探测、配置导入导出（JSON/YAML）；
      * 全局规范：Apple HIG / Material You Bento 空间美学、平滑 View Transitions、桌面/平板/手机自适应（触控目标 >= 44px）、深浅色主题无缝支持；
+     * 极致实用性导向（Pragmatic Utility Over Vanity Metrics）：杜绝中看不中用的展板堆砌与纯打字玩具；概览面板必须集成高频空间快捷控制岛（麦克风一键静音/免打扰/场景切换/最近对话微摘要气泡），测试面板必须打通真实 PCM 失败录音回测与麦克风即时采样录音；
    - 必须在实机 192.168.3.120 上完成部署验证与端到端闭环测试。
 8. 代码行间注释使用英文（English comments），文档建议采用中英双语。
 9. 编写完毕后在本地运行测试确认功能正常（如 \`uv run pytest\` 及 \`cd frontend && bun test\`）。
