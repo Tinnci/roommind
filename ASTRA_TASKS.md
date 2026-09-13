@@ -288,21 +288,23 @@ Astra 在每一次演进迭代中，可自由权衡并交叉推进以下核心�
        - 适配桌面宽屏多列、平板 10.1 寸流式 Bento 以及移动端 390px 紧凑排版，触控目标保证 >= 44px；
        - 全量支持深色/浅色自适应主题与无障碍（a11y / ARIA / 键盘导航 1-4 快捷键）。
 
-### 阶段十：极致实用性、空间日常控制与真实失败音频回测 (Phase 10: Pragmatic Utility, Fast Spatial Controls & Failure Audio Grounding)
-- [ ] **Phase 10: 消除工控与展示花架子，强化概览面板高频空间控制，打通测试工作台与真实失败音频回测**
-  - **核心关切与设计哲学（Pragmatic Utility & Calm Space Control）**：
-    1. **拒绝“只看不控”的展板形式主义（From Dashboard to Control Center）**：
-       - 概览面板决不能仅仅堆砌时延 Sparklines 和统计百分比。新增日常绝对高频的**空间控制快捷岛（Spatial Fast-Control Island）**：
-         - 真实麦克风一键静音 / 取消静音与 30 分钟免打扰快捷开关；
-         - 日常 / 专注 / 夜间模式一键即时预设切换；
-         - “最近 3 条语音交互微摘要气泡”：直接展示机器刚测试/理解用户意图的结果，若识别错误提供一键重发/纠正按钮；
-    2. **拒绝“纯文本打字”的玩具式测试（Real Audio & Failure-Driven Testing）**：
-       - 家庭日常使用 99% 是靠远场拾音，键盘打字测试无法排查真实的麦克风底噪、回声、截断与 VAD 灵敏度；
-       - 测试面板与“运行记录（Runs）”打通：支持**一键抓取历史上任意一次识别失败或置信度低的真实 PCM 录音**，一键灌入测试工作台进行 ASR 与大模型意图复测；
-       - 提供“麦克风即时采样录音测试”，用户在网页端可直接说话录音，测试真实语音识别与响应断言，彻底告别脱离实际的纯键盘打字；
-    3. **做减法与扁平化，首屏直达高频设置（Prune Configuration Clutter）**：
-       - 避免过深的折叠与嵌套二级导航；音量滑块与一键试听保持首屏触手可及；
-       - 进阶通信与底层协议参数收拢于专家高级抽屉，消除用户的认知负荷。
+### 阶段十：第一性原理质询：目标与手段的本质解构与平静空间智能重塑 (Phase 10: First-Principles Grounding: Decoupling Ends from Means in Calm Spatial Intelligence)
+- [ ] **Phase 10: 目标与手段的本质解构：消除手段的异化与形式主义，回归空间意图、物理真实与零心智负担**
+  - **核心第一性原理拷问（First-Principles Inquiries into Ends vs. Means）**：
+    1. **终极目标（The Ultimate Ends）到底是什么？**：
+       - 在家庭真实生活中，人的终极目标是**安宁的空间舒适、意图被诚实理解、物理动作被无感且可靠地确认、以及零认知负荷（Calmness, Reliable Grounding & Zero Cognitive Burden）**。
+       - 人的目的**从来不是**去浏览仪表盘、不是去分析毫秒瀑布流、不是去测试台敲键盘演练、更不是去调整层层叠叠的参数滑块。
+    2. **警惕手段的反客为主与异化（The Distortion of Instrumental Means）**：
+       - **展板形式主义（Dashboard Fallacy）**：将系统内部的中间机械指标（延迟微折线、统计百分比）堆在首屏，把用户当成工控台值班员，这是把可观测性的“手段”误当成了人机交互的“目标”；
+       - **玩具式演练（Playground Vanity）**：在网页端做打字流式输出，脱离了家庭真实声学与远场交互的物理事实，把用户当成了大模型的测试员；
+       - **配置推卸（Configuration Shifting）**：把系统原本应当基于昼夜节律与空间物理事实自适应消解的声学与环境矛盾，转化为无数零散的参数滑块推卸给用户。
+    3. **重新审视目标达成的真正路径（Redesigning Goal Realization via Simplification）**：
+       - **手段退居幕后，交互回归本质（Invisible Infrastructure & Calm Surface）**：界面如果出现，只回答人真正关心的三个本质命题：
+         1. **意图诚实性（Intent Transparency）**：“刚才那句话，系统究竟听到了什么、打算做什么？”——以极简、自然的方式呈现意图对齐，而非冰冷的技术堆栈；
+         2. **物理真实性（Physical Reality）**：“现实世界的设备真的响应了吗？”——绝不用发出了请求（Dispatch）冒充物理确认（Confirmation）；
+         3. **克制自愈与优雅澄清（Calm Fallback & Clarification）**：面对噪声或歧义，系统如何在不打扰家庭安宁的前提下完成自愈，或以最自然的方式发起澄清。
+       - **坚决做减法与剪枝（Ruthless Pruning）**：审视现有的四个面板与控制逻辑，凡是属于“为了展示技术而存在”、“把内部机械过程伪装成交互目标”的冗余关卡和视觉噪音，果断进行精简、合并或隐藏，让系统真正实现平静科技（Calm Technology）。
+
 
 
 ---
