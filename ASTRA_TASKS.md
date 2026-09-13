@@ -294,7 +294,13 @@ Astra 在每一次演进迭代中，可自由权衡并交叉推进以下核心�
        - 全量支持深色/浅色自适应主题与无障碍（a11y / ARIA / 键盘导航 1-4 快捷键）。
 
 ### 阶段十：第一性原理质询：目标与手段的本质解构与平静空间智能重塑 (Phase 10: First-Principles Grounding: Decoupling Ends from Means in Calm Spatial Intelligence)
-- [ ] **Phase 10: 目标与手段的本质解构：消除手段的异化与形式主义，回归空间意图、物理真实与零心智负担**
+- [x] **Phase 10: 目标与手段的本质解构：消除手段的异化与形式主义，回归空间意图、物理真实与零心智负担**（2026-09-14）
+  - **实现 / Delivery**：Gateway 0.3.56 区分房间观测、RoomMind 舒适目标与明确空调指令；Norta 实际 Assist 入口统一经过 Gateway。补齐多轮房间澄清、设备澄清后的温度保留，控制不可用时明确结束；记录保留独立的派发、接收、设备回报与策略保存事实。
+  - **精简 / Calm surface**：概览聚焦听懂的话、回应和实际结果；运行记录先呈现对话，指标、瀑布与音量微调按需展开。保留四面板、流式测试、取消、重放、Diff、PCM 与配置迁移能力；未新增 hash、冻结契约或门禁。
+  - **实证 / Grounding**：分析 53,828 行家庭历史，设备设定与舒适目标差值 −4.5～+2.5°C 不作为校准或压缩机证据。实机卧室、客厅与卧室 2 的回答分别匹配指定传感器；现有 zM1 无 CO₂/eCO₂/TVOC 幽灵实体。
+  - **验证 / Validation**：RoomMind 2,316 Python、75 Bun；Gateway 461 Python、59 Bun、7 Earcon；TCL 283 unittest；zM1 60 tests 与 7 subtests 通过。Ruff、mypy、tsgo、Bun build 与版本同步通过；四面板 × 三种宽度 × 深浅色的 24 状态布局检查通过。
+  - **实机 / Target device**：四组件备份后执行 `./deploy.sh`，HA 重启并正常加载 Gateway 0.3.56、RoomMind、TCL 与 zM1。两轮 PCM → ASR → Gateway → TTS、多轮澄清、同 context ID 的 TCL 设定回报及卫星播放完成事件均已核对；原有 25°C 舒适 hold 与设备设定保持。配置 JSON/YAML 回导、模型流式重放、Trace/Diff 和链路探测通过。详见[完整验证记录 / Verification](https://github.com/Tinnci/llm-gateway/blob/main/docs/voice-harness-phase10-2026-09-14.md)。
+  - **边界 / Limits**：本轮验证服务与播放链路，不把注入 PCM 当作远场拾音、唤醒词或声学质量测量；设备设定回报不证明压缩机活动或房间达标。既有 TCL 云端 token-refresh `InternalError` 告警仍保留，未宣称已修复。
   - **核心第一性原理拷问（First-Principles Inquiries into Ends vs. Means）**：
     1. **终极目标（The Ultimate Ends）到底是什么？**：
        - 在家庭真实生活中，人的终极目标是**安宁的空间舒适、意图被诚实理解、物理动作被无感且可靠地确认、以及零认知负荷（Calmness, Reliable Grounding & Zero Cognitive Burden）**。
