@@ -84,10 +84,15 @@ while [ $ITERATION_COUNT -lt $ITERATION_MAX ]; do
 6. 人机心智体验、产品美学与 Home Assistant 实体契约质询：
    - 深入思考人机心智模型与实体抽象边界，让前端 UI 自然呈现真实舒适意图与系统执行状态，使 HA 实体契约清晰诚实地反映多源物理事实，消除用户的失控感与认知负担；
    - 追求卓越的产品美学与平静科技（Calm Technology）体验：摆脱传统工控面板与粗糙卡片的生硬感，借鉴现代高端空间产品（如 Braun、Nest、B&O）的克制优雅，精雕现代排版、呼吸感留白、冷暖气候微渐变与平滑触控微交互（Fluid Motion / Tactile Feedback），兼顾极致轻盈与深层信任。
-7. AI 语音全链路协同与设置界面深度重塑（AI Voice Stack, Control Center & Audio Settings Scope Guard）：
-   - 当前核心聚焦于 AI 语音交互链路：\`/Users/driezy/Downloads/ha-voice-stack\`（\`phosh-ha-status\`、\`llm-gateway\`、\`doubao-asr-for-ha\`、\`hass-edge-tts\`）及与 RoomMind 的气候环境联动；
+7. AI 语音全链路协同与 Voice Harness 全面板现代重塑（Voice Harness Full Surface UI/UX Overhaul & Scope Guard）：
+   - 当前核心聚焦于 AI 语音交互链路：\`/Users/driezy/Downloads/ha-voice-stack\`（\`repos/llm-gateway\`、\`repos/phosh-ha-status\`、\`repos/doubao-asr-for-ha\`、\`repos/hass-edge-tts\`）及与 RoomMind 的气候环境联动；
    - 严格限定工作范围，坚决杜绝发散至无关项目（如墨水屏等外部项目）；
-   - 深化语音与音频设置界面（Settings UI/UX）：卡片式语音控制中枢（Lit + TypeScript，统一使用 bun 构建）、全场景分层音量（唤醒音量、追问音量、思考等待音量、日间TTS音量、夜间TTS音量、静音联动）、400ms 实时防抖热应用与“试听测试音（Play Test Sound）”微交互、动态声波响应动画、锁屏端大屏与移动端自适应（>=44px 舒适触控目标）；
+   - 深度重塑 Voice Harness 核心控制台“概览、运行记录、测试、设置”四大面板（Lit + TypeScript，统一使用 bun 构建与测试）：
+     * 概览面板（Overview）：Bento 模块化系统状态流、关键指标仪表化（Hero Stats & Sparklines）、全链路实时脉冲呼吸动效；
+     * 运行记录面板（Runs）：交互式彩色瀑布流时序（Wake -> ASR -> LLM -> TTS -> Playback -> Follow-up）、沉浸式 Trace 检查抽屉（多模态详情、对话气泡、PCM 试听、Token 统计）、Replay Diff 模型差异高亮对比；
+     * 测试面板（Test）：场景卡片工作台（Scenario Playground）、即时流式触发与打字机 Token/Tool Calls 轨迹、断言状态与一键重放；
+     * 设置面板（Settings）：四大分组导航（声学调音、大模型路由策略、ASR/TTS 链路与 Wyoming、系统与存储策略）、实时连通性与延迟探测、配置导入导出（JSON/YAML）；
+     * 全局规范：Apple HIG / Material You Bento 空间美学、平滑 View Transitions、桌面/平板/手机自适应（触控目标 >= 44px）、深浅色主题无缝支持；
    - 必须在实机 192.168.3.120 上完成部署验证与端到端闭环测试。
 8. 代码行间注释使用英文（English comments），文档建议采用中英双语。
 9. 编写完毕后在本地运行测试确认功能正常（如 \`uv run pytest\` 及 \`cd frontend && bun test\`）。
