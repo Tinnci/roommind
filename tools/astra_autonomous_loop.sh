@@ -84,11 +84,16 @@ while [ $ITERATION_COUNT -lt $ITERATION_MAX ]; do
 6. 人机心智体验、产品美学与 Home Assistant 实体契约质询：
    - 深入思考人机心智模型与实体抽象边界，让前端 UI 自然呈现真实舒适意图与系统执行状态，使 HA 实体契约清晰诚实地反映多源物理事实，消除用户的失控感与认知负担；
    - 追求卓越的产品美学与平静科技（Calm Technology）体验：摆脱传统工控面板与粗糙卡片的生硬感，借鉴现代高端空间产品（如 Braun、Nest、B&O）的克制优雅，精雕现代排版、呼吸感留白、冷暖气候微渐变与平滑触控微交互（Fluid Motion / Tactile Feedback），兼顾极致轻盈与深层信任。
-7. 代码行间注释使用英文（English comments），文档建议采用中英双语。
-8. 编写完毕后在本地运行测试确认功能正常（如 \`uv run pytest\` 及 \`cd frontend && bun test\`）。
-9. 完成后执行 git add 并使用规范的 git commit 提交改动，将变更推送至 GitHub 远端 (\`git push origin main\`)。
-10. 执行 \`./deploy.sh\` 将最新组件及配套驱动同步部署至 192.168.3.120 实机，确保 Home Assistant 容器重启并正常加载。
-11. 更新 ASTRA_TASKS.md 将该条目勾选为 [x]，并简要输出本次迭代实现的总结。"
+7. AI 语音全链路协同与设置界面深度重塑（AI Voice Stack, Control Center & Audio Settings Scope Guard）：
+   - 当前核心聚焦于 AI 语音交互链路：\`/Users/driezy/Downloads/ha-voice-stack\`（\`phosh-ha-status\`、\`llm-gateway\`、\`doubao-asr-for-ha\`、\`hass-edge-tts\`）及与 RoomMind 的气候环境联动；
+   - 严格限定工作范围，坚决杜绝发散至无关项目（如墨水屏等外部项目）；
+   - 深化语音与音频设置界面（Settings UI/UX）：卡片式语音控制中枢（Lit + TypeScript，统一使用 bun 构建）、全场景分层音量（唤醒音量、追问音量、思考等待音量、日间TTS音量、夜间TTS音量、静音联动）、400ms 实时防抖热应用与“试听测试音（Play Test Sound）”微交互、动态声波响应动画、锁屏端大屏与移动端自适应（>=44px 舒适触控目标）；
+   - 必须在实机 192.168.3.120 上完成部署验证与端到端闭环测试。
+8. 代码行间注释使用英文（English comments），文档建议采用中英双语。
+9. 编写完毕后在本地运行测试确认功能正常（如 \`uv run pytest\` 及 \`cd frontend && bun test\`）。
+10. 完成后执行 git add 并使用规范的 git commit 提交改动，将变更推送至 GitHub 远端 (\`git push origin main\`)。
+11. 执行 \`./deploy.sh\` 将最新组件及配套驱动同步部署至 192.168.3.120 实机，确保 Home Assistant 容器重启并正常加载。
+12. 更新 ASTRA_TASKS.md 将该条目勾选为 [x]，并简要输出本次迭代实现的总结。"
 
     # Execute with session resumption if available, otherwise new session
     "$CODEX_BIN" exec resume --last "$PROMPT" < /dev/null >> "$LOOP_LOG" 2>&1
