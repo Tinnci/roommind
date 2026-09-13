@@ -181,7 +181,7 @@ fi
 # 4. Restart Home Assistant container on 192.168.3.120 if requested
 if [[ "${RESTART_HA:-1}" == "1" ]]; then
   echo "--- Restarting Home Assistant container on ${HA_IP} ---"
-  "${SSH_CMD[@]}" "${SSH_USER}@${HA_IP}" "docker restart homeassistant || true"
+  "${SSH_CMD[@]}" "${SSH_USER}@${HA_IP}" "docker restart homeassistant"
   echo "    OK"
 fi
 
