@@ -384,12 +384,14 @@ export class RsAirflowSection extends LitElement {
           <div class="summary-label">${localize("airflow.vent_plan_level", lang)}</div>
           <div class="summary-value">${this._percent(this.ventPlanLevel)}</div>
         </div>
-        ${this.hvacOutputStatus
-          ? html`<div class="summary-item">
-              <div class="summary-label">${localize("airflow.hvac_output", lang)}</div>
-              <div class="summary-value">${describeHvacOutput(this.hvacOutputStatus, lang)}</div>
-            </div>`
-          : nothing}
+        ${
+          this.hvacOutputStatus
+            ? html`<div class="summary-item">
+                <div class="summary-label">${localize("airflow.hvac_output", lang)}</div>
+                <div class="summary-value">${describeHvacOutput(this.hvacOutputStatus, lang)}</div>
+              </div>`
+            : nothing
+        }
       </div>
       ${this.airflowDevices.map((device) => this._renderViewRow(device))}
     `;
@@ -418,45 +420,57 @@ export class RsAirflowSection extends LitElement {
         >
         <span class="pill">${this._roleLabel(device.role)}</span>
         <span class="pill">${this._preferenceLabel(device.effect_weight ?? 1)}</span>
-        ${device.control_enabled
-          ? html`<span class="pill active"
-              >${localize("airflow.control_enabled_short", lang)}</span
-            >`
-          : device.controllable
-            ? html`<span class="pill">${localize("airflow.controllable_short", lang)}</span>`
-            : nothing}
-        ${unavailable
-          ? html`<span class="pill warning">${localize("airflow.unavailable", lang)}</span>`
-          : html`
-              <span class="pill"
-                >${localize("airflow.planned_level", lang)} ${this._percent(planned)}</span
-              >
-              <span class="view-value"
-                >${localize("airflow.actual_level", lang)} ${this._percent(observed)}</span
-              >
-            `}
-        ${showWarning
-          ? html`<span class="pill warning" title=${this._skipReasonLabel(command?.skip_reason)}
-              >${commandLabel}</span
-            >`
-          : nothing}
-        ${command?.night_capped
-          ? html`<span class="pill warning">${localize("airflow.night_capped", lang)}</span>`
-          : nothing}
-        ${command?.assumed_state_confidence && command.assumed_state_confidence !== "observed"
-          ? html`<span class="pill warning"
-              >${this._confidenceLabel(command.assumed_state_confidence)}</span
-            >`
-          : nothing}
-        ${command?.skipped_services?.length
-          ? html`<span
-              class="pill warning"
-              title=${command.skipped_services
-                .map((item) => `${item.service}: ${this._skipReasonLabel(item.reason)}`)
-                .join("\n")}
-              >${command.skipped_services.length} ${localize("airflow.skipped", lang)}</span
-            >`
-          : nothing}
+        ${
+          device.control_enabled
+            ? html`<span class="pill active"
+                >${localize("airflow.control_enabled_short", lang)}</span
+              >`
+            : device.controllable
+              ? html`<span class="pill">${localize("airflow.controllable_short", lang)}</span>`
+              : nothing
+        }
+        ${
+          unavailable
+            ? html`<span class="pill warning">${localize("airflow.unavailable", lang)}</span>`
+            : html`
+                <span class="pill"
+                  >${localize("airflow.planned_level", lang)} ${this._percent(planned)}</span
+                >
+                <span class="view-value"
+                  >${localize("airflow.actual_level", lang)} ${this._percent(observed)}</span
+                >
+              `
+        }
+        ${
+          showWarning
+            ? html`<span class="pill warning" title=${this._skipReasonLabel(command?.skip_reason)}
+                >${commandLabel}</span
+              >`
+            : nothing
+        }
+        ${
+          command?.night_capped
+            ? html`<span class="pill warning">${localize("airflow.night_capped", lang)}</span>`
+            : nothing
+        }
+        ${
+          command?.assumed_state_confidence && command.assumed_state_confidence !== "observed"
+            ? html`<span class="pill warning"
+                >${this._confidenceLabel(command.assumed_state_confidence)}</span
+              >`
+            : nothing
+        }
+        ${
+          command?.skipped_services?.length
+            ? html`<span
+                class="pill warning"
+                title=${command.skipped_services
+                  .map((item) => `${item.service}: ${this._skipReasonLabel(item.reason)}`)
+                  .join("\n")}
+                >${command.skipped_services.length} ${localize("airflow.skipped", lang)}</span
+              >`
+            : nothing
+        }
       </div>
     `;
   }
@@ -484,9 +498,11 @@ export class RsAirflowSection extends LitElement {
         <div slot="master" class="master">
           <div class="block-title">${localize("airflow.devices", lang)}</div>
           <div class="master-list">
-            ${areaAirflow.length > 0
-              ? areaAirflow.map((e) => this._renderMasterRow(e.entity_id, false))
-              : html`<div class="empty-list">${localize("airflow.no_candidates", lang)}</div>`}
+            ${
+              areaAirflow.length > 0
+                ? areaAirflow.map((e) => this._renderMasterRow(e.entity_id, false))
+                : html`<div class="empty-list">${localize("airflow.no_candidates", lang)}</div>`
+            }
             ${externalIds.map((id) => this._renderMasterRow(id, true))}
           </div>
           <div class="picker-wrap">
@@ -502,12 +518,14 @@ export class RsAirflowSection extends LitElement {
         </div>
 
         <div slot="detail" class="detail-panel">
-          ${selectedInRoom
-            ? this._renderDeviceDetail(selected)
-            : html`<div class="empty-detail">
-                <ha-icon icon="mdi:gesture-tap"></ha-icon>
-                <span>${localize("devices.select_to_configure", lang)}</span>
-              </div>`}
+          ${
+            selectedInRoom
+              ? this._renderDeviceDetail(selected)
+              : html`<div class="empty-detail">
+                  <ha-icon icon="mdi:gesture-tap"></ha-icon>
+                  <span>${localize("devices.select_to_configure", lang)}</span>
+                </div>`
+          }
         </div>
       </rs-master-detail>
     `;
@@ -540,19 +558,25 @@ export class RsAirflowSection extends LitElement {
         <div class="master-info">
           <div class="master-name-row">
             <span class="master-name">${friendlyName}</span>
-            ${external
-              ? html`<span class="external-badge">${localize("devices.other_area", lang)}</span>`
-              : nothing}
+            ${
+              external
+                ? html`<span class="external-badge">${localize("devices.other_area", lang)}</span>`
+                : nothing
+            }
           </div>
           <div class="master-meta">
-            ${device
-              ? html`<span class="meta-pill">${this._roleLabel(device.role)}</span>`
-              : nothing}
-            ${device?.control_enabled
-              ? html`<span class="meta-pill"
-                  >${localize("airflow.control_enabled_short", lang)}</span
-                >`
-              : nothing}
+            ${
+              device
+                ? html`<span class="meta-pill">${this._roleLabel(device.role)}</span>`
+                : nothing
+            }
+            ${
+              device?.control_enabled
+                ? html`<span class="meta-pill"
+                    >${localize("airflow.control_enabled_short", lang)}</span
+                  >`
+                : nothing
+            }
             ${q > 0 ? html`<span class="meta-pill">${this._percent(q)}</span>` : nothing}
           </div>
         </div>
@@ -619,23 +643,25 @@ export class RsAirflowSection extends LitElement {
         ></ha-switch>
       </div>
 
-      ${device.controllable
-        ? html`
-            <div class="detail-toggle-row">
-              <div class="toggle-text">
-                <div class="toggle-title">${localize("airflow.control_enabled", lang)}</div>
-                <div class="toggle-hint">${localize("airflow.control_enabled_hint", lang)}</div>
+      ${
+        device.controllable
+          ? html`
+              <div class="detail-toggle-row">
+                <div class="toggle-text">
+                  <div class="toggle-title">${localize("airflow.control_enabled", lang)}</div>
+                  <div class="toggle-hint">${localize("airflow.control_enabled_hint", lang)}</div>
+                </div>
+                <ha-switch
+                  .checked=${device.control_enabled}
+                  @change=${(e: Event) =>
+                    this._updateDevice(entityId, {
+                      control_enabled: (e.target as HTMLInputElement).checked,
+                    })}
+                ></ha-switch>
               </div>
-              <ha-switch
-                .checked=${device.control_enabled}
-                @change=${(e: Event) =>
-                  this._updateDevice(entityId, {
-                    control_enabled: (e.target as HTMLInputElement).checked,
-                  })}
-              ></ha-switch>
-            </div>
-          `
-        : nothing}
+            `
+          : nothing
+      }
       ${this._renderBehaviorGroup(
         entityId,
         device,
@@ -676,15 +702,17 @@ export class RsAirflowSection extends LitElement {
         </summary>
         <div class="detail-group-body">
           ${isFan ? this._renderFanPrefs(entityId, device, presetModes) : nothing}
-          ${hasClimatePrefs
-            ? this._renderClimatePrefs(
-                entityId,
-                device,
-                presetModes,
-                swingModes,
-                swingHorizontalModes,
-              )
-            : nothing}
+          ${
+            hasClimatePrefs
+              ? this._renderClimatePrefs(
+                  entityId,
+                  device,
+                  presetModes,
+                  swingModes,
+                  swingHorizontalModes,
+                )
+              : nothing
+          }
         </div>
       </details>
     `;
@@ -763,29 +791,31 @@ export class RsAirflowSection extends LitElement {
           : KEEP;
 
     return html`
-      ${presetModes.length > 0
-        ? html`
-            <div class="detail-field">
-              <ha-select
-                .label=${localize("airflow.preset_mode", lang)}
-                .value=${device.preferred_preset_mode || KEEP}
-                @selected=${(e: Event) => {
-                  const value = getSelectValue(e);
-                  this._updateDevice(entityId, {
-                    preferred_preset_mode: value === KEEP ? "" : value,
-                  });
-                }}
-                @closed=${(e: Event) => e.stopPropagation()}
-                fixedMenuPosition
-              >
-                <ha-list-item value=${KEEP}>${localize("airflow.keep", lang)}</ha-list-item>
-                ${presetModes.map(
-                  (mode) => html`<ha-list-item value=${mode}>${mode}</ha-list-item>`,
-                )}
-              </ha-select>
-            </div>
-          `
-        : nothing}
+      ${
+        presetModes.length > 0
+          ? html`
+              <div class="detail-field">
+                <ha-select
+                  .label=${localize("airflow.preset_mode", lang)}
+                  .value=${device.preferred_preset_mode || KEEP}
+                  @selected=${(e: Event) => {
+                    const value = getSelectValue(e);
+                    this._updateDevice(entityId, {
+                      preferred_preset_mode: value === KEEP ? "" : value,
+                    });
+                  }}
+                  @closed=${(e: Event) => e.stopPropagation()}
+                  fixedMenuPosition
+                >
+                  <ha-list-item value=${KEEP}>${localize("airflow.keep", lang)}</ha-list-item>
+                  ${presetModes.map(
+                    (mode) => html`<ha-list-item value=${mode}>${mode}</ha-list-item>`,
+                  )}
+                </ha-select>
+              </div>
+            `
+          : nothing
+      }
       <div class="detail-field">
         <ha-select
           .label=${localize("airflow.direction", lang)}
@@ -837,84 +867,90 @@ export class RsAirflowSection extends LitElement {
   ) {
     const lang = this.language;
     return html`
-      ${presetModes.length > 0
-        ? html`
-            ${this._renderPresetSelect(
-              entityId,
-              device,
-              "preferred_preset_mode_thermal",
-              "airflow.preset_mode_thermal",
-              presetModes,
-            )}
-            ${this._renderPresetSelect(
-              entityId,
-              device,
-              "preferred_preset_mode_idle",
-              "airflow.preset_mode_idle",
-              presetModes,
-            )}
-            ${this._renderPresetSelect(
-              entityId,
-              device,
-              "preferred_preset_mode_night",
-              "airflow.preset_mode_night",
-              presetModes,
-            )}
-            ${this._renderPresetSelect(
-              entityId,
-              device,
-              "preferred_preset_mode_away",
-              "airflow.preset_mode_away",
-              presetModes,
-            )}
-          `
-        : nothing}
-      ${swingModes.length > 0
-        ? html`
-            <div class="detail-field">
-              <ha-select
-                .label=${localize("airflow.swing_mode", lang)}
-                .value=${device.preferred_swing_mode || KEEP}
-                @selected=${(e: Event) => {
-                  const value = getSelectValue(e);
-                  this._updateDevice(entityId, {
-                    preferred_swing_mode: value === KEEP ? "" : value,
-                  });
-                }}
-                @closed=${(e: Event) => e.stopPropagation()}
-                fixedMenuPosition
-              >
-                <ha-list-item value=${KEEP}>${localize("airflow.keep", lang)}</ha-list-item>
-                ${swingModes.map(
-                  (mode) => html`<ha-list-item value=${mode}>${mode}</ha-list-item>`,
-                )}
-              </ha-select>
-            </div>
-          `
-        : nothing}
-      ${swingHorizontalModes.length > 0
-        ? html`
-            <div class="detail-field">
-              <ha-select
-                .label=${localize("airflow.swing_horizontal_mode", lang)}
-                .value=${device.preferred_swing_horizontal_mode || KEEP}
-                @selected=${(e: Event) => {
-                  const value = getSelectValue(e);
-                  this._updateDevice(entityId, {
-                    preferred_swing_horizontal_mode: value === KEEP ? "" : value,
-                  });
-                }}
-                @closed=${(e: Event) => e.stopPropagation()}
-                fixedMenuPosition
-              >
-                <ha-list-item value=${KEEP}>${localize("airflow.keep", lang)}</ha-list-item>
-                ${swingHorizontalModes.map(
-                  (mode) => html`<ha-list-item value=${mode}>${mode}</ha-list-item>`,
-                )}
-              </ha-select>
-            </div>
-          `
-        : nothing}
+      ${
+        presetModes.length > 0
+          ? html`
+              ${this._renderPresetSelect(
+                entityId,
+                device,
+                "preferred_preset_mode_thermal",
+                "airflow.preset_mode_thermal",
+                presetModes,
+              )}
+              ${this._renderPresetSelect(
+                entityId,
+                device,
+                "preferred_preset_mode_idle",
+                "airflow.preset_mode_idle",
+                presetModes,
+              )}
+              ${this._renderPresetSelect(
+                entityId,
+                device,
+                "preferred_preset_mode_night",
+                "airflow.preset_mode_night",
+                presetModes,
+              )}
+              ${this._renderPresetSelect(
+                entityId,
+                device,
+                "preferred_preset_mode_away",
+                "airflow.preset_mode_away",
+                presetModes,
+              )}
+            `
+          : nothing
+      }
+      ${
+        swingModes.length > 0
+          ? html`
+              <div class="detail-field">
+                <ha-select
+                  .label=${localize("airflow.swing_mode", lang)}
+                  .value=${device.preferred_swing_mode || KEEP}
+                  @selected=${(e: Event) => {
+                    const value = getSelectValue(e);
+                    this._updateDevice(entityId, {
+                      preferred_swing_mode: value === KEEP ? "" : value,
+                    });
+                  }}
+                  @closed=${(e: Event) => e.stopPropagation()}
+                  fixedMenuPosition
+                >
+                  <ha-list-item value=${KEEP}>${localize("airflow.keep", lang)}</ha-list-item>
+                  ${swingModes.map(
+                    (mode) => html`<ha-list-item value=${mode}>${mode}</ha-list-item>`,
+                  )}
+                </ha-select>
+              </div>
+            `
+          : nothing
+      }
+      ${
+        swingHorizontalModes.length > 0
+          ? html`
+              <div class="detail-field">
+                <ha-select
+                  .label=${localize("airflow.swing_horizontal_mode", lang)}
+                  .value=${device.preferred_swing_horizontal_mode || KEEP}
+                  @selected=${(e: Event) => {
+                    const value = getSelectValue(e);
+                    this._updateDevice(entityId, {
+                      preferred_swing_horizontal_mode: value === KEEP ? "" : value,
+                    });
+                  }}
+                  @closed=${(e: Event) => e.stopPropagation()}
+                  fixedMenuPosition
+                >
+                  <ha-list-item value=${KEEP}>${localize("airflow.keep", lang)}</ha-list-item>
+                  ${swingHorizontalModes.map(
+                    (mode) => html`<ha-list-item value=${mode}>${mode}</ha-list-item>`,
+                  )}
+                </ha-select>
+              </div>
+            `
+          : nothing
+      }
     `;
   }
 

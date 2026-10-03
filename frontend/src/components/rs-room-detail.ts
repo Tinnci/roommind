@@ -602,13 +602,15 @@ export class RsRoomDetail extends LitElement {
           @display-name-changed=${this._onDisplayNameChanged}
         ></rs-hero-status>
         ${!this._isOutdoor ? this._renderTemperatureControlPanel() : nothing}
-        ${!this._isOutdoor
-          ? html`<rs-control-details
-              .hass=${this.hass}
-              .config=${this.config}
-              .controlEnabled=${this.climateControlActive && this._climateControlEnabled}
-            ></rs-control-details>`
-          : nothing}
+        ${
+          !this._isOutdoor
+            ? html`<rs-control-details
+                .hass=${this.hass}
+                .config=${this.config}
+                .controlEnabled=${this.climateControlActive && this._climateControlEnabled}
+              ></rs-control-details>`
+            : nothing
+        }
 
         <div class="detail-grid">
           ${layout.primarySections.map((section) => this._renderPrimarySection(section))}

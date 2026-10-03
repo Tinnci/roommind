@@ -689,42 +689,57 @@ export class RsSensorSection extends LitElement {
 
     const lang = this.hass.language;
     return html`
-      ${hasTempSensors
-        ? html`
-            <div class="section-subtitle">${localize("devices.temp_sensors", lang)}</div>
-            ${tempSensorIds.map((id) => this._renderSensorViewRow(id, "temp"))}
-          `
-        : nothing}
-      ${hasHumiditySensor
-        ? html`
-            <div class="section-subtitle">${localize("devices.humidity_sensors", lang)}</div>
-            ${humiditySensorIds.map((id) => this._renderSensorViewRow(id, "humidity"))}
-          `
-        : nothing}
-      ${hasOccupancySensors
-        ? html`
-            <div class="section-subtitle">${localize("devices.occupancy_sensors", lang)}</div>
-            ${[...this.occupancySensors].map((id) => this._renderOccupancyViewRow(id))}
-          `
-        : nothing}
-      ${hasWindowSensors
-        ? html`
-            <div class="section-subtitle">${localize("devices.window_sensors", lang)}</div>
-            ${[...this.windowSensors].map((id) => this._renderWindowViewRow(id))}
-            ${this.windowOpenDelay || this.windowCloseDelay
-              ? html`<div class="delay-view">
-                  ${this.windowOpenDelay
-                    ? html`${localize("devices.window_open_delay", lang)}: ${this.windowOpenDelay}s`
-                    : nothing}
-                  ${this.windowOpenDelay && this.windowCloseDelay ? " · " : nothing}
-                  ${this.windowCloseDelay
-                    ? html`${localize("devices.window_close_delay", lang)}:
-                      ${this.windowCloseDelay}s`
-                    : nothing}
-                </div>`
-              : nothing}
-          `
-        : nothing}
+      ${
+        hasTempSensors
+          ? html`
+              <div class="section-subtitle">${localize("devices.temp_sensors", lang)}</div>
+              ${tempSensorIds.map((id) => this._renderSensorViewRow(id, "temp"))}
+            `
+          : nothing
+      }
+      ${
+        hasHumiditySensor
+          ? html`
+              <div class="section-subtitle">${localize("devices.humidity_sensors", lang)}</div>
+              ${humiditySensorIds.map((id) => this._renderSensorViewRow(id, "humidity"))}
+            `
+          : nothing
+      }
+      ${
+        hasOccupancySensors
+          ? html`
+              <div class="section-subtitle">${localize("devices.occupancy_sensors", lang)}</div>
+              ${[...this.occupancySensors].map((id) => this._renderOccupancyViewRow(id))}
+            `
+          : nothing
+      }
+      ${
+        hasWindowSensors
+          ? html`
+              <div class="section-subtitle">${localize("devices.window_sensors", lang)}</div>
+              ${[...this.windowSensors].map((id) => this._renderWindowViewRow(id))}
+              ${
+                this.windowOpenDelay || this.windowCloseDelay
+                  ? html`<div class="delay-view">
+                      ${
+                        this.windowOpenDelay
+                          ? html`${localize("devices.window_open_delay", lang)}:
+                            ${this.windowOpenDelay}s`
+                          : nothing
+                      }
+                      ${this.windowOpenDelay && this.windowCloseDelay ? " · " : nothing}
+                      ${
+                        this.windowCloseDelay
+                          ? html`${localize("devices.window_close_delay", lang)}:
+                            ${this.windowCloseDelay}s`
+                          : nothing
+                      }
+                    </div>`
+                  : nothing
+              }
+            `
+          : nothing
+      }
     `;
   }
 
@@ -894,45 +909,53 @@ export class RsSensorSection extends LitElement {
         <div class="block-header" @click=${() => this._toggleBlock("temp")}>
           <ha-icon icon="mdi:thermometer"></ha-icon>
           <div class="block-title">${localize("devices.temp_sensors", lang)}</div>
-          ${this._temperatureSensorIds().length > 0
-            ? html`<span class="count-chip has-selection"
-                >${this._temperatureSensorIds().length}</span
-              >`
-            : total > 0
-              ? html`<span class="count-chip">${total}</span>`
-              : nothing}
+          ${
+            this._temperatureSensorIds().length > 0
+              ? html`<span class="count-chip has-selection"
+                  >${this._temperatureSensorIds().length}</span
+                >`
+              : total > 0
+                ? html`<span class="count-chip">${total}</span>`
+                : nothing
+          }
           <ha-icon
             class="chevron ${isCollapsed ? "collapsed" : ""}"
             icon="mdi:chevron-down"
           ></ha-icon>
         </div>
-        ${isCollapsed
-          ? nothing
-          : html`
-              <div class="block-body temperature-stack">
-                ${ids.length > 0
-                  ? html`
-                      <div class="sensor-table">
-                        <div class="sensor-table-title">
-                          <ha-icon icon="mdi:sort-ascending"></ha-icon>
-                          ${localize("devices.temperature_priority_sources", lang)}
-                        </div>
-                        <div class="sensor-table-hint">
-                          ${localize("devices.temperature_priority_hint", lang)}
-                        </div>
-                        ${ids.map(({ entityId, external }) =>
-                          this._renderPrioritySensorRow(
-                            entityId,
-                            external,
-                            "temp",
-                            selectedIds.indexOf(entityId),
-                          ),
-                        )}
-                      </div>
-                    `
-                  : html`<div class="empty-row">${localize("devices.no_temp_sensors", lang)}</div>`}
-              </div>
-            `}
+        ${
+          isCollapsed
+            ? nothing
+            : html`
+                <div class="block-body temperature-stack">
+                  ${
+                    ids.length > 0
+                      ? html`
+                          <div class="sensor-table">
+                            <div class="sensor-table-title">
+                              <ha-icon icon="mdi:sort-ascending"></ha-icon>
+                              ${localize("devices.temperature_priority_sources", lang)}
+                            </div>
+                            <div class="sensor-table-hint">
+                              ${localize("devices.temperature_priority_hint", lang)}
+                            </div>
+                            ${ids.map(({ entityId, external }) =>
+                              this._renderPrioritySensorRow(
+                                entityId,
+                                external,
+                                "temp",
+                                selectedIds.indexOf(entityId),
+                              ),
+                            )}
+                          </div>
+                        `
+                      : html`<div class="empty-row">
+                          ${localize("devices.no_temp_sensors", lang)}
+                        </div>`
+                  }
+                </div>
+              `
+        }
       </div>
     `;
   }
@@ -955,45 +978,51 @@ export class RsSensorSection extends LitElement {
         <div class="block-header" @click=${() => this._toggleBlock("humidity")}>
           <ha-icon icon="mdi:water-percent"></ha-icon>
           <div class="block-title">${localize("devices.humidity_sensors", lang)}</div>
-          ${selectedIds.length > 0
-            ? html`<span class="count-chip has-selection">${selectedIds.length}</span>`
-            : total > 0
-              ? html`<span class="count-chip">${total}</span>`
-              : nothing}
+          ${
+            selectedIds.length > 0
+              ? html`<span class="count-chip has-selection">${selectedIds.length}</span>`
+              : total > 0
+                ? html`<span class="count-chip">${total}</span>`
+                : nothing
+          }
           <ha-icon
             class="chevron ${isCollapsed ? "collapsed" : ""}"
             icon="mdi:chevron-down"
           ></ha-icon>
         </div>
-        ${isCollapsed
-          ? nothing
-          : html`
-              <div class="block-body temperature-stack">
-                ${ids.length > 0
-                  ? html`
-                      <div class="sensor-table">
-                        <div class="sensor-table-title">
-                          <ha-icon icon="mdi:sort-ascending"></ha-icon>
-                          ${localize("devices.humidity_priority_sources", lang)}
-                        </div>
-                        <div class="sensor-table-hint">
-                          ${localize("devices.humidity_priority_hint", lang)}
-                        </div>
-                        ${ids.map(({ entityId, external }) =>
-                          this._renderPrioritySensorRow(
-                            entityId,
-                            external,
-                            "humidity",
-                            selectedIds.indexOf(entityId),
-                          ),
-                        )}
-                      </div>
-                    `
-                  : html`<div class="empty-row">
-                      ${localize("devices.no_humidity_sensors", lang)}
-                    </div>`}
-              </div>
-            `}
+        ${
+          isCollapsed
+            ? nothing
+            : html`
+                <div class="block-body temperature-stack">
+                  ${
+                    ids.length > 0
+                      ? html`
+                          <div class="sensor-table">
+                            <div class="sensor-table-title">
+                              <ha-icon icon="mdi:sort-ascending"></ha-icon>
+                              ${localize("devices.humidity_priority_sources", lang)}
+                            </div>
+                            <div class="sensor-table-hint">
+                              ${localize("devices.humidity_priority_hint", lang)}
+                            </div>
+                            ${ids.map(({ entityId, external }) =>
+                              this._renderPrioritySensorRow(
+                                entityId,
+                                external,
+                                "humidity",
+                                selectedIds.indexOf(entityId),
+                              ),
+                            )}
+                          </div>
+                        `
+                      : html`<div class="empty-row">
+                          ${localize("devices.no_humidity_sensors", lang)}
+                        </div>`
+                  }
+                </div>
+              `
+        }
       </div>
     `;
   }
@@ -1036,9 +1065,11 @@ export class RsSensorSection extends LitElement {
         <div class="row-info">
           <div class="row-name-line">
             <span class="row-name">${friendlyName}</span>
-            ${external
-              ? html`<span class="external-badge">${localize("devices.other_area", lang)}</span>`
-              : nothing}
+            ${
+              external
+                ? html`<span class="external-badge">${localize("devices.other_area", lang)}</span>`
+                : nothing
+            }
           </div>
           <div class="row-eid">${entityId}</div>
         </div>
@@ -1115,9 +1146,11 @@ export class RsSensorSection extends LitElement {
           </div>
           <div class="fusion-meta">
             <span class="fusion-chip ${status.is_primary ? "primary" : ""}">
-              ${status.is_primary
-                ? localize("devices.primary_sensor", lang)
-                : localize("devices.sensor_auxiliary", lang)}
+              ${
+                status.is_primary
+                  ? localize("devices.primary_sensor", lang)
+                  : localize("devices.sensor_auxiliary", lang)
+              }
             </span>
             <span class="fusion-chip ${status.freshness_status}">
               ${this._freshnessLabel(status.freshness_status, lang)}
@@ -1198,14 +1231,16 @@ export class RsSensorSection extends LitElement {
           @change=${this._onWindowCloseDelayChange}
         ></ha-textfield>
       </div>
-      ${this.heatingSystemType === "underfloor" && this.windowOpenDelay < 300
-        ? html`
-            <div class="delay-hint">
-              <ha-icon icon="mdi:information-outline"></ha-icon>
-              ${localize("devices.underfloor_delay_hint", lang)}
-            </div>
-          `
-        : nothing}
+      ${
+        this.heatingSystemType === "underfloor" && this.windowOpenDelay < 300
+          ? html`
+              <div class="delay-hint">
+                <ha-icon icon="mdi:information-outline"></ha-icon>
+                ${localize("devices.underfloor_delay_hint", lang)}
+              </div>
+            `
+          : nothing
+      }
     `;
   }
 
@@ -1261,35 +1296,41 @@ export class RsSensorSection extends LitElement {
         <div class="block-header" @click=${() => this._toggleBlock(opts.kind)}>
           <ha-icon icon=${opts.icon}></ha-icon>
           <div class="block-title">${opts.title}</div>
-          ${opts.selectedCount > 0
-            ? html`<span class="count-chip has-selection">${opts.selectedCount}</span>`
-            : total > 0
-              ? html`<span class="count-chip">${total}</span>`
-              : nothing}
+          ${
+            opts.selectedCount > 0
+              ? html`<span class="count-chip has-selection">${opts.selectedCount}</span>`
+              : total > 0
+                ? html`<span class="count-chip">${total}</span>`
+                : nothing
+          }
           <ha-icon
             class="chevron ${isCollapsed ? "collapsed" : ""}"
             icon="mdi:chevron-down"
           ></ha-icon>
         </div>
-        ${isCollapsed
-          ? nothing
-          : html`
-              <div class="block-body">
-                <div class="row-list">
-                  ${opts.areaSensors.length > 0 || opts.externalSensors.length > 0
-                    ? html`
-                        ${opts.areaSensors.map((e) =>
-                          this._renderEditRow(e.entity_id, opts.kind, false),
-                        )}
-                        ${opts.externalSensors.map((id) =>
-                          this._renderEditRow(id, opts.kind, true),
-                        )}
-                      `
-                    : html`<div class="empty-row">${opts.emptyText}</div>`}
+        ${
+          isCollapsed
+            ? nothing
+            : html`
+                <div class="block-body">
+                  <div class="row-list">
+                    ${
+                      opts.areaSensors.length > 0 || opts.externalSensors.length > 0
+                        ? html`
+                            ${opts.areaSensors.map((e) =>
+                              this._renderEditRow(e.entity_id, opts.kind, false),
+                            )}
+                            ${opts.externalSensors.map((id) =>
+                              this._renderEditRow(id, opts.kind, true),
+                            )}
+                          `
+                        : html`<div class="empty-row">${opts.emptyText}</div>`
+                    }
+                  </div>
+                  ${opts.extras ?? nothing}
                 </div>
-                ${opts.extras ?? nothing}
-              </div>
-            `}
+              `
+        }
       </div>
     `;
   }
@@ -1331,9 +1372,13 @@ export class RsSensorSection extends LitElement {
           <div class="row-info">
             <div class="row-name-line">
               <span class="row-name">${friendlyName}</span>
-              ${external
-                ? html`<span class="external-badge">${localize("devices.other_area", lang)}</span>`
-                : nothing}
+              ${
+                external
+                  ? html`<span class="external-badge"
+                      >${localize("devices.other_area", lang)}</span
+                    >`
+                  : nothing
+              }
             </div>
             <div class="row-eid">${entityId}</div>
           </div>
@@ -1362,27 +1407,31 @@ export class RsSensorSection extends LitElement {
           this._onSensorSelected(isSelected ? "" : entityId, kind);
         }}
       >
-        ${kind === "temp"
-          ? html`
-              <div class="temp-controls">
-                <ha-radio .checked=${isSelected} name="temp-sensor"></ha-radio>
-                <span class="temp-role">${localize("devices.primary_sensor", lang)}</span>
-                <ha-checkbox
-                  .checked=${isIncludedTemp}
-                  @change=${(e: Event) => {
-                    const t = e.target as HTMLElement & { checked: boolean };
-                    this._onTemperatureSensorToggle(entityId, t.checked);
-                  }}
-                ></ha-checkbox>
-              </div>
-            `
-          : html`<ha-radio .checked=${isSelected} name="${kind}-sensor"></ha-radio>`}
+        ${
+          kind === "temp"
+            ? html`
+                <div class="temp-controls">
+                  <ha-radio .checked=${isSelected} name="temp-sensor"></ha-radio>
+                  <span class="temp-role">${localize("devices.primary_sensor", lang)}</span>
+                  <ha-checkbox
+                    .checked=${isIncludedTemp}
+                    @change=${(e: Event) => {
+                      const t = e.target as HTMLElement & { checked: boolean };
+                      this._onTemperatureSensorToggle(entityId, t.checked);
+                    }}
+                  ></ha-checkbox>
+                </div>
+              `
+            : html`<ha-radio .checked=${isSelected} name="${kind}-sensor"></ha-radio>`
+        }
         <div class="row-info">
           <div class="row-name-line">
             <span class="row-name">${friendlyName}</span>
-            ${external
-              ? html`<span class="external-badge">${localize("devices.other_area", lang)}</span>`
-              : nothing}
+            ${
+              external
+                ? html`<span class="external-badge">${localize("devices.other_area", lang)}</span>`
+                : nothing
+            }
           </div>
           <div class="row-eid">${entityId}</div>
         </div>

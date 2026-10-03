@@ -3,14 +3,7 @@ import type { DeviceConfig } from "../types";
 export type PrimaryRoomSection = "schedule";
 
 export type ConfigurationRoomSection =
-  | "devices"
-  | "sensors"
-  | "comfort"
-  | "airflow"
-  | "presence"
-  | "covers"
-  | "heatSource"
-  | "outdoor";
+  "devices" | "sensors" | "comfort" | "airflow" | "presence" | "covers" | "heatSource" | "outdoor";
 
 export interface RoomDetailLayoutInput {
   isOutdoor: boolean;

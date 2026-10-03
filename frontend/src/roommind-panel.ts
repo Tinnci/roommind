@@ -648,50 +648,63 @@ export class RoomMindPanel extends LitElement {
 
     return html`
       <div class="toolbar">
-        ${inDetail
-          ? html`<ha-icon-button
-              .path=${BACK_PATH}
-              @click=${this._onBackFromDetail}
-            ></ha-icon-button>`
-          : html`<ha-menu-button .hass=${this.hass} .narrow=${this.narrow}></ha-menu-button>`}
+        ${
+          inDetail
+            ? html`<ha-icon-button
+                .path=${BACK_PATH}
+                @click=${this._onBackFromDetail}
+              ></ha-icon-button>`
+            : html`<ha-menu-button .hass=${this.hass} .narrow=${this.narrow}></ha-menu-button>`
+        }
         <div class="title">
-          ${inDetail
-            ? this._rooms[this._selectedAreaId!]?.display_name || detailArea?.name || ""
-            : localize("panel.title", l)}
+          ${
+            inDetail
+              ? this._rooms[this._selectedAreaId!]?.display_name || detailArea?.name || ""
+              : localize("panel.title", l)
+          }
         </div>
         ${this._renderSaveIndicator()}
-        ${inDetail && this._rooms[this._selectedAreaId!]
-          ? html`<ha-icon-button
-                .path=${CHART_PATH}
-                @click=${this._onGoToAnalytics}
-              ></ha-icon-button
-              ><ha-icon-button .path=${DELETE_PATH} @click=${this._onDeleteRoom}></ha-icon-button>`
-          : nothing}
-        ${!inDetail && this._activeTab === "analytics" && this._analyticsRoom
-          ? html`<ha-icon-button
-              .path=${THERMOMETER_PATH}
-              @click=${this._onGoToRoomFromAnalytics}
-            ></ha-icon-button>`
-          : nothing}
+        ${
+          inDetail && this._rooms[this._selectedAreaId!]
+            ? html`<ha-icon-button
+                  .path=${CHART_PATH}
+                  @click=${this._onGoToAnalytics}
+                ></ha-icon-button
+                ><ha-icon-button
+                  .path=${DELETE_PATH}
+                  @click=${this._onDeleteRoom}
+                ></ha-icon-button>`
+            : nothing
+        }
+        ${
+          !inDetail && this._activeTab === "analytics" && this._analyticsRoom
+            ? html`<ha-icon-button
+                .path=${THERMOMETER_PATH}
+                @click=${this._onGoToRoomFromAnalytics}
+              ></ha-icon-button>`
+            : nothing
+        }
       </div>
 
-      ${!inDetail
-        ? html`
-            <div class="tabs">
-              ${(Object.keys(tabLabels) as TabId[]).map(
-                (tab) => html`
-                  <button
-                    class="tab"
-                    ?active=${this._activeTab === tab}
-                    @click=${() => this._onTabClicked(tab)}
-                  >
-                    ${tabLabels[tab]}
-                  </button>
-                `,
-              )}
-            </div>
-          `
-        : nothing}
+      ${
+        !inDetail
+          ? html`
+              <div class="tabs">
+                ${(Object.keys(tabLabels) as TabId[]).map(
+                  (tab) => html`
+                    <button
+                      class="tab"
+                      ?active=${this._activeTab === tab}
+                      @click=${() => this._onTabClicked(tab)}
+                    >
+                      ${tabLabels[tab]}
+                    </button>
+                  `,
+                )}
+              </div>
+            `
+          : nothing
+      }
 
       <div class="content">${this._renderTab()}</div>
     `;
@@ -810,158 +823,182 @@ export class RoomMindPanel extends LitElement {
             ? "mdi:eye-outline"
             : "mdi:check-circle-outline";
     return html`
-      ${configuredCount > 0 || hiddenAreaInfos.length > 0
-        ? html`
-            <ha-card class="overview-panel">
-              <div class="overview-top">
-                <span class="overview-icon ${overviewIconClass}">
-                  <ha-icon .icon=${overviewIcon}></ha-icon>
-                </span>
-                <div class="overview-copy">
-                  <h2 class="overview-title">${overviewTitle}</h2>
-                  <div class="overview-subtitle">
-                    ${localize("panel.overview.summary", l, {
-                      configured: configuredCount,
-                      total: areaInfos.length,
-                    })}
-                  </div>
-                  ${this._vacationActive
-                    ? html`<div class="overview-policy">
-                        <ha-icon icon="mdi:airplane"></ha-icon>
-                        <span class="overview-policy-copy">
-                          <span class="overview-policy-label"
-                            >${localize("panel.policy.scope", l)}</span
-                          >
-                          <span class="overview-policy-value">
-                            ${localize("panel.policy.vacation", l, {
-                              temp:
-                                this._vacationTemp !== null
-                                  ? formatTemp(this._vacationTemp, this.hass)
-                                  : "--",
-                              unit: tempUnit(this.hass),
-                            })}
-                          </span>
-                        </span>
-                        ${effectiveOverrideCount > 0
-                          ? html`<span class="overview-policy-exception">
-                              ${localize("panel.policy.exceptions", l, {
+      ${
+        configuredCount > 0 || hiddenAreaInfos.length > 0
+          ? html`
+              <ha-card class="overview-panel">
+                <div class="overview-top">
+                  <span class="overview-icon ${overviewIconClass}">
+                    <ha-icon .icon=${overviewIcon}></ha-icon>
+                  </span>
+                  <div class="overview-copy">
+                    <h2 class="overview-title">${overviewTitle}</h2>
+                    <div class="overview-subtitle">
+                      ${localize("panel.overview.summary", l, {
+                        configured: configuredCount,
+                        total: areaInfos.length,
+                      })}
+                    </div>
+                    ${
+                      this._vacationActive
+                        ? html`<div class="overview-policy">
+                            <ha-icon icon="mdi:airplane"></ha-icon>
+                            <span class="overview-policy-copy">
+                              <span class="overview-policy-label"
+                                >${localize("panel.policy.scope", l)}</span
+                              >
+                              <span class="overview-policy-value">
+                                ${localize("panel.policy.vacation", l, {
+                                  temp:
+                                    this._vacationTemp !== null
+                                      ? formatTemp(this._vacationTemp, this.hass)
+                                      : "--",
+                                  unit: tempUnit(this.hass),
+                                })}
+                              </span>
+                            </span>
+                            ${
+                              effectiveOverrideCount > 0
+                                ? html`<span class="overview-policy-exception">
+                                    ${localize("panel.policy.exceptions", l, {
+                                      count: effectiveOverrideCount,
+                                    })}
+                                  </span>`
+                                : nothing
+                            }
+                          </div>`
+                        : nothing
+                    }
+                    <div class="overview-flags">
+                      ${
+                        this._presenceEnabled && !this._anyoneHome
+                          ? html`<span class="overview-flag">
+                              <ha-icon icon="mdi:home-off-outline"></ha-icon>
+                              ${localize("panel.stat.away", l)}
+                            </span>`
+                          : nothing
+                      }
+                      ${
+                        windowOpenCount > 0
+                          ? html`<span class="overview-flag active">
+                              <ha-icon icon="mdi:window-open-variant"></ha-icon>
+                              ${localize("panel.stat.windows", l, { count: windowOpenCount })}
+                            </span>`
+                          : nothing
+                      }
+                      ${
+                        awayCount > 0
+                          ? html`<span class="overview-flag">
+                              <ha-icon icon="mdi:home-off-outline"></ha-icon>
+                              ${localize("panel.stat.rooms_away", l, { count: awayCount })}
+                            </span>`
+                          : nothing
+                      }
+                      ${
+                        !this._vacationActive && effectiveOverrideCount > 0
+                          ? html`<span class="overview-flag">
+                              <ha-icon icon="mdi:timer-outline"></ha-icon>
+                              ${localize("panel.stat.overrides", l, {
                                 count: effectiveOverrideCount,
                               })}
                             </span>`
-                          : nothing}
-                      </div>`
-                    : nothing}
-                  <div class="overview-flags">
-                    ${this._presenceEnabled && !this._anyoneHome
-                      ? html`<span class="overview-flag">
-                          <ha-icon icon="mdi:home-off-outline"></ha-icon>
-                          ${localize("panel.stat.away", l)}
-                        </span>`
-                      : nothing}
-                    ${windowOpenCount > 0
-                      ? html`<span class="overview-flag active">
-                          <ha-icon icon="mdi:window-open-variant"></ha-icon>
-                          ${localize("panel.stat.windows", l, { count: windowOpenCount })}
-                        </span>`
-                      : nothing}
-                    ${awayCount > 0
-                      ? html`<span class="overview-flag">
-                          <ha-icon icon="mdi:home-off-outline"></ha-icon>
-                          ${localize("panel.stat.rooms_away", l, { count: awayCount })}
-                        </span>`
-                      : nothing}
-                    ${!this._vacationActive && effectiveOverrideCount > 0
-                      ? html`<span class="overview-flag">
-                          <ha-icon icon="mdi:timer-outline"></ha-icon>
-                          ${localize("panel.stat.overrides", l, {
-                            count: effectiveOverrideCount,
-                          })}
-                        </span>`
-                      : nothing}
-                    ${pausedOverrideCount > 0
-                      ? html`<span class="overview-flag">
-                          <ha-icon icon="mdi:pause-circle-outline"></ha-icon>
-                          ${localize("panel.stat.overrides_paused", l, {
-                            count: pausedOverrideCount,
-                          })}
-                        </span>`
-                      : nothing}
+                          : nothing
+                      }
+                      ${
+                        pausedOverrideCount > 0
+                          ? html`<span class="overview-flag">
+                              <ha-icon icon="mdi:pause-circle-outline"></ha-icon>
+                              ${localize("panel.stat.overrides_paused", l, {
+                                count: pausedOverrideCount,
+                              })}
+                            </span>`
+                          : nothing
+                      }
+                    </div>
+                  </div>
+                  <span class="stats-actions">
+                    ${
+                      hiddenAreaInfos.length > 0
+                        ? html`<ha-icon-button
+                            class="hidden-rooms-toggle"
+                            .path=${mdiEyeOff}
+                            @click=${() => {
+                              this._showHiddenRooms = !this._showHiddenRooms;
+                            }}
+                          ></ha-icon-button>`
+                        : nothing
+                    }
+                    ${
+                      this._reorderMode
+                        ? html`<ha-button class="reorder-done" @click=${this._onReorderDone}>
+                            ${localize("panel.reorder_done", l)}
+                          </ha-button>`
+                        : html`<ha-icon-button
+                            class="reorder-btn"
+                            .path=${"M9,3L5,7H8V14H10V7H13M16,17V10H14V17H11L15,21L19,17H16Z"}
+                            @click=${() => {
+                              this._reorderMode = true;
+                            }}
+                            title=${localize("panel.reorder", l)}
+                          ></ha-icon-button>`
+                    }
+                  </span>
+                </div>
+                <div class="overview-metrics">
+                  <div class="stat">
+                    <span class="stat-value">${configuredCount}</span>
+                    <span class="stat-label">${localize("panel.stat.rooms", l)}</span>
+                  </div>
+                  <div class="stat">
+                    <span class="stat-value">${activeCount}</span>
+                    <span class="stat-label">${localize("panel.stat.active", l)}</span>
+                  </div>
+                  <div class="stat">
+                    <span class="stat-value heating">${heatingCount}</span>
+                    <span class="stat-label">${localize("panel.stat.heating", l)}</span>
+                  </div>
+                  <div class="stat">
+                    <span class="stat-value cooling">${coolingCount}</span>
+                    <span class="stat-label">${localize("panel.stat.cooling", l)}</span>
+                  </div>
+                  ${
+                    unknownCount > 0
+                      ? html`<div class="stat">
+                          <span class="stat-value">${unknownCount}</span>
+                          <span class="stat-label">${localize("panel.stat.unknown", l)}</span>
+                        </div>`
+                      : nothing
+                  }
+                  <div class="stat">
+                    <span class="stat-value warning">${moldCount}</span>
+                    <span class="stat-label">${localize("panel.stat.mold", l)}</span>
                   </div>
                 </div>
-                <span class="stats-actions">
-                  ${hiddenAreaInfos.length > 0
-                    ? html`<ha-icon-button
-                        class="hidden-rooms-toggle"
-                        .path=${mdiEyeOff}
-                        @click=${() => {
-                          this._showHiddenRooms = !this._showHiddenRooms;
-                        }}
-                      ></ha-icon-button>`
-                    : nothing}
-                  ${this._reorderMode
-                    ? html`<ha-button class="reorder-done" @click=${this._onReorderDone}>
-                        ${localize("panel.reorder_done", l)}
-                      </ha-button>`
-                    : html`<ha-icon-button
-                        class="reorder-btn"
-                        .path=${"M9,3L5,7H8V14H10V7H13M16,17V10H14V17H11L15,21L19,17H16Z"}
-                        @click=${() => {
-                          this._reorderMode = true;
-                        }}
-                        title=${localize("panel.reorder", l)}
-                      ></ha-icon-button>`}
-                </span>
-              </div>
-              <div class="overview-metrics">
-                <div class="stat">
-                  <span class="stat-value">${configuredCount}</span>
-                  <span class="stat-label">${localize("panel.stat.rooms", l)}</span>
+              </ha-card>
+            `
+          : nothing
+      }
+      ${
+        this._showHiddenRooms && hiddenAreaInfos.length > 0
+          ? html`
+              <ha-card class="hidden-rooms-panel">
+                <div class="hidden-rooms-header">
+                  <span>${localize("panel.hidden_rooms", l)} (${hiddenAreaInfos.length})</span>
                 </div>
-                <div class="stat">
-                  <span class="stat-value">${activeCount}</span>
-                  <span class="stat-label">${localize("panel.stat.active", l)}</span>
-                </div>
-                <div class="stat">
-                  <span class="stat-value heating">${heatingCount}</span>
-                  <span class="stat-label">${localize("panel.stat.heating", l)}</span>
-                </div>
-                <div class="stat">
-                  <span class="stat-value cooling">${coolingCount}</span>
-                  <span class="stat-label">${localize("panel.stat.cooling", l)}</span>
-                </div>
-                ${unknownCount > 0
-                  ? html`<div class="stat">
-                      <span class="stat-value">${unknownCount}</span>
-                      <span class="stat-label">${localize("panel.stat.unknown", l)}</span>
-                    </div>`
-                  : nothing}
-                <div class="stat">
-                  <span class="stat-value warning">${moldCount}</span>
-                  <span class="stat-label">${localize("panel.stat.mold", l)}</span>
-                </div>
-              </div>
-            </ha-card>
-          `
-        : nothing}
-      ${this._showHiddenRooms && hiddenAreaInfos.length > 0
-        ? html`
-            <ha-card class="hidden-rooms-panel">
-              <div class="hidden-rooms-header">
-                <span>${localize("panel.hidden_rooms", l)} (${hiddenAreaInfos.length})</span>
-              </div>
-              ${hiddenAreaInfos.map(
-                (info) => html`
-                  <div class="hidden-room-row">
-                    <span class="hidden-room-name">${info.area.name}</span>
-                    <ha-button @click=${() => this._unhideRoom(info.area.area_id)}>
-                      ${localize("panel.unhide", l)}
-                    </ha-button>
-                  </div>
-                `,
-              )}
-            </ha-card>
-          `
-        : nothing}
+                ${hiddenAreaInfos.map(
+                  (info) => html`
+                    <div class="hidden-room-row">
+                      <span class="hidden-room-name">${info.area.name}</span>
+                      <ha-button @click=${() => this._unhideRoom(info.area.area_id)}>
+                        ${localize("panel.unhide", l)}
+                      </ha-button>
+                    </div>
+                  `,
+                )}
+              </ha-card>
+            `
+          : nothing
+      }
       ${this._renderAreaGroups(areaInfos)}
     `;
   }
@@ -980,14 +1017,16 @@ export class RoomMindPanel extends LitElement {
     return groups.map(
       (group) => html`
         <section class="room-section ${group.tone}">
-          ${group.name
-            ? html`
-                <div class="room-section-heading">
-                  <h4 class="floor-heading room-section-title">${group.name}</h4>
-                  <span class="room-section-count">${group.items.length}</span>
-                </div>
-              `
-            : nothing}
+          ${
+            group.name
+              ? html`
+                  <div class="room-section-heading">
+                    <h4 class="floor-heading room-section-title">${group.name}</h4>
+                    <span class="room-section-count">${group.items.length}</span>
+                  </div>
+                `
+              : nothing
+          }
           <div class="area-grid">
             ${group.items.map((info, idx) => this._renderAreaCard(info, idx, group.items.length))}
           </div>

@@ -1,10 +1,7 @@
 import type { DeviceActuationStatus, NightControlConfig, NightControlStatus } from "../types";
 
 export type ActuationFeedback =
-  | DeviceActuationStatus["dispatch"]
-  | "accepted"
-  | "confirmed"
-  | "not_confirmed";
+  DeviceActuationStatus["dispatch"] | "accepted" | "confirmed" | "not_confirmed";
 
 export function actuationFeedback(
   operation: Pick<DeviceActuationStatus, "dispatch" | "application" | "acceptance">,

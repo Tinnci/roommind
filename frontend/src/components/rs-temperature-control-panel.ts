@@ -561,31 +561,37 @@ export class RsTemperatureControlPanel extends LitElement {
                   <ha-icon icon="mdi:check"></ha-icon>
                   ${this._applyLabel(targetC)}
                 </button>
-                ${ov.active
-                  ? html`
-                      <button
-                        class="action-button"
-                        type="button"
-                        ?disabled=${!this.config || this._busy}
-                        @click=${this._onClearOverride}
-                      >
-                        <ha-icon icon="mdi:autorenew"></ha-icon>
-                        ${localize("room.temperature_panel.restore", this.language)}
-                      </button>
-                    `
-                  : nothing}
+                ${
+                  ov.active
+                    ? html`
+                        <button
+                          class="action-button"
+                          type="button"
+                          ?disabled=${!this.config || this._busy}
+                          @click=${this._onClearOverride}
+                        >
+                          <ha-icon icon="mdi:autorenew"></ha-icon>
+                          ${localize("room.temperature_panel.restore", this.language)}
+                        </button>
+                      `
+                    : nothing
+                }
               </div>
-              ${this._targetDirty
-                ? html`
-                    <div class="pending-note">
-                      <ha-icon icon="mdi:alert-circle-outline"></ha-icon>
-                      ${localize("room.temperature_panel.pending_hint", this.language)}
-                    </div>
-                  `
-                : nothing}
-              ${this._overrideError
-                ? html`<div class="error">${this._overrideError}</div>`
-                : nothing}
+              ${
+                this._targetDirty
+                  ? html`
+                      <div class="pending-note">
+                        <ha-icon icon="mdi:alert-circle-outline"></ha-icon>
+                        ${localize("room.temperature_panel.pending_hint", this.language)}
+                      </div>
+                    `
+                  : nothing
+              }
+              ${
+                this._overrideError
+                  ? html`<div class="error">${this._overrideError}</div>`
+                  : nothing
+              }
               <div class="duration-row">
                 <span class="section-label"
                   >${localize("room.temperature_panel.hold", this.language)}</span

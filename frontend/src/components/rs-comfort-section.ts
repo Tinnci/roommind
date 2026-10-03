@@ -324,9 +324,11 @@ export class RsComfortSection extends LitElement {
         <div class="summary-item">
           <div class="summary-label">${localize("comfort.rapid_recovery", lang)}</div>
           <div class="summary-value ${this.rapidRecoveryActive ? "warning" : ""}">
-            ${this.rapidRecoveryActive
-              ? localize("comfort.active", lang)
-              : localize("comfort.inactive", lang)}
+            ${
+              this.rapidRecoveryActive
+                ? localize("comfort.active", lang)
+                : localize("comfort.inactive", lang)
+            }
           </div>
         </div>
         <div class="summary-item">
@@ -337,13 +339,15 @@ export class RsComfortSection extends LitElement {
               total: String(nightControls.total),
             })}
           </div>
-          ${nightControls.pending > 0
-            ? html`<div class="muted">
-                ${localize("comfort.night_controls_pending", lang, {
-                  count: String(nightControls.pending),
-                })}
-              </div>`
-            : nothing}
+          ${
+            nightControls.pending > 0
+              ? html`<div class="muted">
+                  ${localize("comfort.night_controls_pending", lang, {
+                    count: String(nightControls.pending),
+                  })}
+                </div>`
+              : nothing
+          }
         </div>
         <div class="summary-item">
           <div class="summary-label">${localize("comfort.room_coupling", lang)}</div>
@@ -357,14 +361,16 @@ export class RsComfortSection extends LitElement {
           ramp: this.sleepTempRampC.toFixed(1),
         })}
       </div>
-      ${this.couplingStatus.length
-        ? html`
-            <div class="section-title">${localize("comfort.live_coupling", lang)}</div>
-            <div class="list">
-              ${this.couplingStatus.map((item) => this._renderCouplingView(item))}
-            </div>
-          `
-        : nothing}
+      ${
+        this.couplingStatus.length
+          ? html`
+              <div class="section-title">${localize("comfort.live_coupling", lang)}</div>
+              <div class="list">
+                ${this.couplingStatus.map((item) => this._renderCouplingView(item))}
+              </div>
+            `
+          : nothing
+      }
     `;
   }
 
@@ -505,9 +511,11 @@ export class RsComfortSection extends LitElement {
         <summary>${localize("comfort.night_controls", lang)}</summary>
         <div class="settings-group-body">
           <div class="list">
-            ${this.nightControls.length
-              ? this.nightControls.map((item, index) => this._renderNightControlEdit(item, index))
-              : html`<div class="empty">${localize("comfort.no_night_controls", lang)}</div>`}
+            ${
+              this.nightControls.length
+                ? this.nightControls.map((item, index) => this._renderNightControlEdit(item, index))
+                : html`<div class="empty">${localize("comfort.no_night_controls", lang)}</div>`
+            }
           </div>
           <button class="add-btn" @click=${this._addNightControl}>
             + ${localize("comfort.add_night_control", lang)}
@@ -519,9 +527,11 @@ export class RsComfortSection extends LitElement {
         <summary>${localize("comfort.adjacent_rooms", lang)}</summary>
         <div class="settings-group-body">
           <div class="list">
-            ${this.adjacentRooms.length
-              ? this.adjacentRooms.map((item, index) => this._renderAdjacentEdit(item, index))
-              : html`<div class="empty">${localize("comfort.no_adjacent_rooms", lang)}</div>`}
+            ${
+              this.adjacentRooms.length
+                ? this.adjacentRooms.map((item, index) => this._renderAdjacentEdit(item, index))
+                : html`<div class="empty">${localize("comfort.no_adjacent_rooms", lang)}</div>`
+            }
           </div>
           <button class="add-btn" @click=${this._addAdjacent}>
             + ${localize("comfort.add_adjacent_room", lang)}

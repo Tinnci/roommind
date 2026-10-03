@@ -67,9 +67,11 @@ export class RsRoomConfigurationHub extends LitElement {
         </span>
         <span class="config-meta">${localize(item.metaKey, this.language, item.metaParams)}</span>
       </span>
-      ${item.editable
-        ? html`<ha-icon class="config-chevron" icon="mdi:chevron-right"></ha-icon>`
-        : nothing}
+      ${
+        item.editable
+          ? html`<ha-icon class="config-chevron" icon="mdi:chevron-right"></ha-icon>`
+          : nothing
+      }
     `;
   }
 

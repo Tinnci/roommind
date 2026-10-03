@@ -24,9 +24,11 @@ export class RsSettingsPanel extends LitElement {
             <span class="panel-title">${this.heading}</span>
             ${this.summary ? html`<span class="panel-summary">${this.summary}</span>` : nothing}
           </span>
-          ${this.badge
-            ? html`<rs-badge .label=${this.badge} .hint=${this.badgeHint}></rs-badge>`
-            : nothing}
+          ${
+            this.badge
+              ? html`<rs-badge .label=${this.badge} .hint=${this.badgeHint}></rs-badge>`
+              : nothing
+          }
         </div>
         <div class="panel-content">
           ${this.intro ? html`<p class="section-intro">${this.intro}</p>` : nothing}

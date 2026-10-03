@@ -85,32 +85,36 @@ export class RsAnalyticsChart extends LitElement {
             }}
           ></ha-icon>
         </div>
-        ${this._chartInfoExpanded
-          ? html`<div class="chart-info-panel">
-              ${this._renderMarkdown(localize("analytics.chart_info_body", l))}
-            </div>`
-          : nothing}
-        ${points.length > 0
-          ? html`
-              <rs-analytics-summary
-                .hass=${this.hass}
-                .data=${this.data}
-                .language=${l}
-                .isOutdoor=${this.isOutdoor}
-              ></rs-analytics-summary>
-              <ha-chart-base
-                .hass=${this.hass}
-                .data=${displaySeries}
-                .options=${options}
-                .height=${"300px"}
-                style="height: 300px"
-              ></ha-chart-base>
-              ${this._renderSeriesLegend(allSeries)}
-            `
-          : html`<div class="chart-empty">
-              <ha-icon icon="mdi:chart-line"></ha-icon>
-              <span>${localize("analytics.no_data", l)}</span>
-            </div>`}
+        ${
+          this._chartInfoExpanded
+            ? html`<div class="chart-info-panel">
+                ${this._renderMarkdown(localize("analytics.chart_info_body", l))}
+              </div>`
+            : nothing
+        }
+        ${
+          points.length > 0
+            ? html`
+                <rs-analytics-summary
+                  .hass=${this.hass}
+                  .data=${this.data}
+                  .language=${l}
+                  .isOutdoor=${this.isOutdoor}
+                ></rs-analytics-summary>
+                <ha-chart-base
+                  .hass=${this.hass}
+                  .data=${displaySeries}
+                  .options=${options}
+                  .height=${"300px"}
+                  style="height: 300px"
+                ></ha-chart-base>
+                ${this._renderSeriesLegend(allSeries)}
+              `
+            : html`<div class="chart-empty">
+                <ha-icon icon="mdi:chart-line"></ha-icon>
+                <span>${localize("analytics.no_data", l)}</span>
+              </div>`
+        }
       </ha-card>
     `;
   }

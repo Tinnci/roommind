@@ -512,55 +512,65 @@ export class RsAreaCard extends LitElement {
           if (event.target === event.currentTarget && event.key === "Enter") this._onCardClick();
         }}
       >
-        ${!this.reordering
-          ? html`<ha-icon-button
-              class="hide-btn"
-              .path=${mdiEyeOff}
-              @click=${this._onHideClick}
-            ></ha-icon-button>`
-          : nothing}
-        ${this.reordering
-          ? html`<div class="reorder-overlay">
-              <div
-                class="reorder-half left ${!this.canMoveUp ? "disabled" : ""}"
-                @click=${this._onMoveUp}
-              >
-                <ha-icon-button
-                  .path=${"M15.41,16.58L10.83,12L15.41,7.41L14,6L8,12L14,18L15.41,16.58Z"}
-                ></ha-icon-button>
-              </div>
-              <div
-                class="reorder-half right ${!this.canMoveDown ? "disabled" : ""}"
-                @click=${this._onMoveDown}
-              >
-                <ha-icon-button
-                  .path=${"M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"}
-                ></ha-icon-button>
-              </div>
-            </div>`
-          : nothing}
+        ${
+          !this.reordering
+            ? html`<ha-icon-button
+                class="hide-btn"
+                .path=${mdiEyeOff}
+                @click=${this._onHideClick}
+              ></ha-icon-button>`
+            : nothing
+        }
+        ${
+          this.reordering
+            ? html`<div class="reorder-overlay">
+                <div
+                  class="reorder-half left ${!this.canMoveUp ? "disabled" : ""}"
+                  @click=${this._onMoveUp}
+                >
+                  <ha-icon-button
+                    .path=${"M15.41,16.58L10.83,12L15.41,7.41L14,6L8,12L14,18L15.41,16.58Z"}
+                  ></ha-icon-button>
+                </div>
+                <div
+                  class="reorder-half right ${!this.canMoveDown ? "disabled" : ""}"
+                  @click=${this._onMoveDown}
+                >
+                  <ha-icon-button
+                    .path=${"M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"}
+                  ></ha-icon-button>
+                </div>
+              </div>`
+            : nothing
+        }
         <div class="card-inner">
           <div class="card-header">
             <h3 class="area-name">${this.config?.display_name || this.area.name}</h3>
-            ${isConfigured && live
-              ? html`
-                  <span class="mode-pill ${getModeClass(mode)}">
-                    <span class="mode-dot"></span>
-                    ${mode === null
-                      ? localize("hero.output_unknown", this.hass.language)
-                      : formatMode(mode, this.hass.language)}
-                  </span>
-                `
-              : nothing}
+            ${
+              isConfigured && live
+                ? html`
+                    <span class="mode-pill ${getModeClass(mode)}">
+                      <span class="mode-dot"></span>
+                      ${
+                        mode === null
+                          ? localize("hero.output_unknown", this.hass.language)
+                          : formatMode(mode, this.hass.language)
+                      }
+                    </span>
+                  `
+                : nothing
+            }
           </div>
 
-          ${isConfigured
-            ? this._renderConfigured()
-            : this.config?.live &&
-                (this.config.live.current_temp !== null ||
-                  this.config.live.current_humidity !== null)
-              ? this._renderSensorOnly()
-              : this._renderUnconfigured(hasClimateDevices)}
+          ${
+            isConfigured
+              ? this._renderConfigured()
+              : this.config?.live &&
+                  (this.config.live.current_temp !== null ||
+                    this.config.live.current_humidity !== null)
+                ? this._renderSensorOnly()
+                : this._renderUnconfigured(hasClimateDevices)
+          }
         </div>
       </ha-card>
     `;
@@ -587,12 +597,14 @@ export class RsAreaCard extends LitElement {
             )}</span
           >
           <div class="temp-value">
-            ${live.current_temp !== null
-              ? html`
-                  <span class="current-temp">${formatTemp(live.current_temp, this.hass)}</span>
-                  <span class="temp-unit">${tempUnit(this.hass)}</span>
-                `
-              : html`<span class="no-temp">--</span>`}
+            ${
+              live.current_temp !== null
+                ? html`
+                    <span class="current-temp">${formatTemp(live.current_temp, this.hass)}</span>
+                    <span class="temp-unit">${tempUnit(this.hass)}</span>
+                  `
+                : html`<span class="no-temp">--</span>`
+            }
           </div>
         </div>
         <div class="metric-block target-info">
@@ -603,73 +615,97 @@ export class RsAreaCard extends LitElement {
       ${this._renderDeltaLine(live)}
       <div class="card-footer">
         <span class="humidity-info">
-          ${live.current_humidity !== null
-            ? html`<ha-icon icon="mdi:water-percent"></ha-icon> ${localize(
-                  "card.humidity",
-                  this.hass.language,
-                  {
-                    value: live.current_humidity.toFixed(0),
-                  },
-                )}`
-            : nothing}
+          ${
+            live.current_humidity !== null
+              ? html`<ha-icon icon="mdi:water-percent"></ha-icon> ${localize(
+                    "card.humidity",
+                    this.hass.language,
+                    {
+                      value: live.current_humidity.toFixed(0),
+                    },
+                  )}`
+              : nothing
+          }
         </span>
         <span class="badge-row">
-          ${live.override_active
-            ? html`<span class="status-badge override">
-                <ha-icon
-                  icon=${isOverrideEffective(this.config!, this.climateControlActive)
-                    ? "mdi:timer-outline"
-                    : "mdi:pause-circle-outline"}
-                ></ha-icon>
-                ${isOverrideEffective(this.config!, this.climateControlActive)
-                  ? localize("card.override_active", this.hass.language)
-                  : localize("card.override_paused", this.hass.language)}
-              </span>`
-            : nothing}
-          ${live.window_open
-            ? html`<span class="status-badge window">
-                <ha-icon icon="mdi:window-open-variant"></ha-icon>
-                ${localize("card.window_open", this.hass.language)}
-              </span>`
-            : nothing}
-          ${live.presence_away
-            ? html`<span class="status-badge away">
-                <ha-icon icon="mdi:home-off-outline"></ha-icon>
-                ${localize("card.presence_away", this.hass.language)}
-              </span>`
-            : nothing}
-          ${live.mold_risk_level && live.mold_risk_level !== "ok"
-            ? html`<span class="mold-badge ${live.mold_risk_level}">
-                <ha-icon icon="mdi:water-alert"></ha-icon>
-                ${live.mold_risk_level === "critical"
-                  ? localize("card.mold_critical", this.hass.language)
-                  : localize("card.mold_warning", this.hass.language)}
-              </span>`
-            : nothing}
-          ${live.mold_prevention_active
-            ? html`<span class="mold-badge prevention">
-                <ha-icon icon="mdi:shield-check"></ha-icon>
-                ${localize("card.mold_prevention", this.hass.language, {
-                  delta: toDisplayDelta(live.mold_prevention_delta, this.hass).toFixed(0),
-                  unit: tempUnit(this.hass),
-                })}
-              </span>`
-            : nothing}
-          ${showMpcIcon
-            ? html`<span class="mpc-badge ${live.mpc_active ? "active" : "learning"}">
-                <ha-icon .icon=${live.mpc_active ? "mdi:brain" : "mdi:school-outline"}></ha-icon>
-                ${live.mpc_active
-                  ? localize("card.mpc_active", this.hass.language)
-                  : localize("card.mpc_learning", this.hass.language)}
-              </span>`
-            : nothing}
+          ${
+            live.override_active
+              ? html`<span class="status-badge override">
+                  <ha-icon
+                    icon=${
+                      isOverrideEffective(this.config!, this.climateControlActive)
+                        ? "mdi:timer-outline"
+                        : "mdi:pause-circle-outline"
+                    }
+                  ></ha-icon>
+                  ${
+                    isOverrideEffective(this.config!, this.climateControlActive)
+                      ? localize("card.override_active", this.hass.language)
+                      : localize("card.override_paused", this.hass.language)
+                  }
+                </span>`
+              : nothing
+          }
+          ${
+            live.window_open
+              ? html`<span class="status-badge window">
+                  <ha-icon icon="mdi:window-open-variant"></ha-icon>
+                  ${localize("card.window_open", this.hass.language)}
+                </span>`
+              : nothing
+          }
+          ${
+            live.presence_away
+              ? html`<span class="status-badge away">
+                  <ha-icon icon="mdi:home-off-outline"></ha-icon>
+                  ${localize("card.presence_away", this.hass.language)}
+                </span>`
+              : nothing
+          }
+          ${
+            live.mold_risk_level && live.mold_risk_level !== "ok"
+              ? html`<span class="mold-badge ${live.mold_risk_level}">
+                  <ha-icon icon="mdi:water-alert"></ha-icon>
+                  ${
+                    live.mold_risk_level === "critical"
+                      ? localize("card.mold_critical", this.hass.language)
+                      : localize("card.mold_warning", this.hass.language)
+                  }
+                </span>`
+              : nothing
+          }
+          ${
+            live.mold_prevention_active
+              ? html`<span class="mold-badge prevention">
+                  <ha-icon icon="mdi:shield-check"></ha-icon>
+                  ${localize("card.mold_prevention", this.hass.language, {
+                    delta: toDisplayDelta(live.mold_prevention_delta, this.hass).toFixed(0),
+                    unit: tempUnit(this.hass),
+                  })}
+                </span>`
+              : nothing
+          }
+          ${
+            showMpcIcon
+              ? html`<span class="mpc-badge ${live.mpc_active ? "active" : "learning"}">
+                  <ha-icon .icon=${live.mpc_active ? "mdi:brain" : "mdi:school-outline"}></ha-icon>
+                  ${
+                    live.mpc_active
+                      ? localize("card.mpc_active", this.hass.language)
+                      : localize("card.mpc_learning", this.hass.language)
+                  }
+                </span>`
+              : nothing
+          }
         </span>
       </div>
-      ${!this.climateControlActive || this.config?.climate_control_enabled === false
-        ? html`<div class="uncontrolled-hint">
-            ${localize("card.not_controlled", this.hass.language)}
-          </div>`
-        : nothing}
+      ${
+        !this.climateControlActive || this.config?.climate_control_enabled === false
+          ? html`<div class="uncontrolled-hint">
+              ${localize("card.not_controlled", this.hass.language)}
+            </div>`
+          : nothing
+      }
     `;
   }
 
@@ -734,21 +770,25 @@ export class RsAreaCard extends LitElement {
               >${localize("room.temperature_panel.current", this.hass.language)}</span
             >
             <div class="temp-value">
-              ${live.current_temp !== null
-                ? html`
-                    <span class="current-temp">${formatTemp(live.current_temp, this.hass)}</span>
-                    <span class="temp-unit">${tempUnit(this.hass)}</span>
-                  `
-                : html`<span class="no-temp">--</span>`}
+              ${
+                live.current_temp !== null
+                  ? html`
+                      <span class="current-temp">${formatTemp(live.current_temp, this.hass)}</span>
+                      <span class="temp-unit">${tempUnit(this.hass)}</span>
+                    `
+                  : html`<span class="no-temp">--</span>`
+              }
             </div>
           </div>
           <div class="metric-block">
             <span class="metric-label">${localize("card.humidity_label", this.hass.language)}</span>
             <div class="temp-value">
-              ${live.current_humidity !== null
-                ? html`<span class="target-temp">${live.current_humidity.toFixed(0)}</span>
-                    <span class="temp-unit">%</span>`
-                : html`<span class="no-temp">--</span>`}
+              ${
+                live.current_humidity !== null
+                  ? html`<span class="target-temp">${live.current_humidity.toFixed(0)}</span>
+                      <span class="temp-unit">%</span>`
+                  : html`<span class="no-temp">--</span>`
+              }
             </div>
           </div>
         </div>
@@ -756,20 +796,26 @@ export class RsAreaCard extends LitElement {
       <div class="card-footer">
         <span class="humidity-info"></span>
         <span class="badge-row">
-          ${isOutdoor
-            ? html`<span class="outdoor-badge">
-                <ha-icon icon="mdi:tree"></ha-icon>
-                ${localize("card.outdoor", this.hass.language)}
-              </span>`
-            : nothing}
-          ${live.mold_risk_level && live.mold_risk_level !== "ok"
-            ? html`<span class="mold-badge ${live.mold_risk_level}">
-                <ha-icon icon="mdi:water-alert"></ha-icon>
-                ${live.mold_risk_level === "critical"
-                  ? localize("card.mold_critical", this.hass.language)
-                  : localize("card.mold_warning", this.hass.language)}
-              </span>`
-            : nothing}
+          ${
+            isOutdoor
+              ? html`<span class="outdoor-badge">
+                  <ha-icon icon="mdi:tree"></ha-icon>
+                  ${localize("card.outdoor", this.hass.language)}
+                </span>`
+              : nothing
+          }
+          ${
+            live.mold_risk_level && live.mold_risk_level !== "ok"
+              ? html`<span class="mold-badge ${live.mold_risk_level}">
+                  <ha-icon icon="mdi:water-alert"></ha-icon>
+                  ${
+                    live.mold_risk_level === "critical"
+                      ? localize("card.mold_critical", this.hass.language)
+                      : localize("card.mold_warning", this.hass.language)
+                  }
+                </span>`
+              : nothing
+          }
         </span>
       </div>
     `;
@@ -786,9 +832,11 @@ export class RsAreaCard extends LitElement {
     return html`
       <div class="device-summary">
         ${ce}
-        ${localize(ce !== 1 ? "card.climate_devices" : "card.climate_device", l)}${ts > 0
-          ? ` \u00B7 ${ts} ${localize(ts !== 1 ? "card.temp_sensors" : "card.temp_sensor", l)}`
-          : ""}
+        ${localize(ce !== 1 ? "card.climate_devices" : "card.climate_device", l)}${
+          ts > 0
+            ? ` \u00B7 ${ts} ${localize(ts !== 1 ? "card.temp_sensors" : "card.temp_sensor", l)}`
+            : ""
+        }
       </div>
       <div class="configure-prompt">
         <span class="configure-text">${localize("card.tap_configure", l)}</span>

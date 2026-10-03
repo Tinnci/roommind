@@ -215,9 +215,11 @@ export class RsOverrideSection extends LitElement {
       <hr class="override-divider" />
       <div class="override-label">${localize("override.label", this.language)}</div>
       ${this._renderOverrideButtons(ov)}
-      ${this._overrideError
-        ? html`<div class="override-error">${this._overrideError}</div>`
-        : nothing}
+      ${
+        this._overrideError
+          ? html`<div class="override-error">${this._overrideError}</div>`
+          : nothing
+      }
     `;
   }
 
@@ -241,55 +243,61 @@ export class RsOverrideSection extends LitElement {
               <ha-icon
                 icon=${t === "boost" ? "mdi:fire" : t === "eco" ? "mdi:leaf" : "mdi:thermometer"}
               ></ha-icon>
-              ${t === "boost"
-                ? localize("override.comfort", this.language)
-                : t === "eco"
-                  ? localize("override.eco", this.language)
-                  : localize("override.custom", this.language)}
+              ${
+                t === "boost"
+                  ? localize("override.comfort", this.language)
+                  : t === "eco"
+                    ? localize("override.eco", this.language)
+                    : localize("override.custom", this.language)
+              }
             </button>
           `;
         })}
       </div>
-      ${showDuration
-        ? html`
-            ${this._overridePending === "custom"
-              ? html`
-                  <ha-textfield
-                    class="override-target"
-                    type="number"
-                    .label=${localize("override.target", this.language)}
-                    .suffix=${tempUnit(this.hass)}
-                    min=${tempRange(5, 35, this.hass).min}
-                    max=${tempRange(5, 35, this.hass).max}
-                    step=${tempStep(this.hass)}
-                    .value=${String(toDisplay(this._overrideCustomTemp, this.hass))}
-                    @input=${this._onOverrideCustomTempInput}
-                  ></ha-textfield>
-                `
-              : nothing}
-            <div class="override-duration">
-              <span class="override-duration-label"
-                >${localize("override.activate_for", this.language)}</span
-              >
-              <div class="override-dur-chips">
-                ${[
-                  { label: "1h", hours: 1 },
-                  { label: "2h", hours: 2 },
-                  { label: "4h", hours: 4 },
-                ].map(
-                  (opt) => html`
-                    <button
-                      class="override-dur-chip"
-                      @click=${() => this._onOverrideActivate(opt.hours)}
-                    >
-                      ${opt.label}
-                    </button>
-                  `,
-                )}
+      ${
+        showDuration
+          ? html`
+              ${
+                this._overridePending === "custom"
+                  ? html`
+                      <ha-textfield
+                        class="override-target"
+                        type="number"
+                        .label=${localize("override.target", this.language)}
+                        .suffix=${tempUnit(this.hass)}
+                        min=${tempRange(5, 35, this.hass).min}
+                        max=${tempRange(5, 35, this.hass).max}
+                        step=${tempStep(this.hass)}
+                        .value=${String(toDisplay(this._overrideCustomTemp, this.hass))}
+                        @input=${this._onOverrideCustomTempInput}
+                      ></ha-textfield>
+                    `
+                  : nothing
+              }
+              <div class="override-duration">
+                <span class="override-duration-label"
+                  >${localize("override.activate_for", this.language)}</span
+                >
+                <div class="override-dur-chips">
+                  ${[
+                    { label: "1h", hours: 1 },
+                    { label: "2h", hours: 2 },
+                    { label: "4h", hours: 4 },
+                  ].map(
+                    (opt) => html`
+                      <button
+                        class="override-dur-chip"
+                        @click=${() => this._onOverrideActivate(opt.hours)}
+                      >
+                        ${opt.label}
+                      </button>
+                    `,
+                  )}
+                </div>
               </div>
-            </div>
-          `
-        : nothing}
+            `
+          : nothing
+      }
     `;
   }
 
