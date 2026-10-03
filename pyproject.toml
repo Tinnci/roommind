@@ -61,22 +61,22 @@ do_not_mutate = [
 
 [dependency-groups]
 dev = [
-    "homeassistant==2026.7.4",
+    "homeassistant==2026.9.4",
     "mypy>=2.1.0",
     "pre-commit>=4.6.0",
     "pytest-cov>=7.0.0",
     "pytest-freezer>=0.4.9",
-    "pytest-homeassistant-custom-component==0.13.348",
+    "pytest-homeassistant-custom-component==0.13.367",
     "pytest-sugar>=1.0.0",
     "pytest-xdist>=3.8.0",
-    "ruff>=0.15.14",
+    "ruff>=0.16.10",
 ]
 
 [tool.uv]
-# Home Assistant 2026.7.4 pins vulnerable dev-only transitive versions.
+# Home Assistant 2026.9.4 pins vulnerable dev-only transitive versions.
 # Keep the development environment on patched releases until upstream catches up.
 override-dependencies = [
     "cryptography>=50.0.0,<51",
     "pillow>=12.3.0,<13",
-    "pyjwt>=2.13.0,<3",
+    "pyjwt>=2.15.0,<3",
 ]

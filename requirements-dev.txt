@@ -4,8 +4,8 @@
 
 # Testing — pytest-homeassistant-custom-component pins exact versions
 # of many sub-dependencies, so avoid version constraints that conflict.
-homeassistant==2026.7.4
-pytest-homeassistant-custom-component==0.13.348
+homeassistant==2026.9.4
+pytest-homeassistant-custom-component==0.13.367
 pytest-cov>=7.0.0
 pytest-freezer>=0.4.9
 pytest-sugar>=1.0.0
@@ -14,4 +14,4 @@ pytest-xdist>=3.8.0
 # Linting & type checking
 mypy>=2.1.0
 pre-commit>=4.6.0
-ruff>=0.15.14
+ruff>=0.16.10
