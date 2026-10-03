@@ -6,6 +6,8 @@ import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import voluptuous as vol
+from homeassistant.helpers import config_validation as cv
 
 from custom_components.roommind.utils.notification_utils import (
     NotificationThrottler,
@@ -59,6 +61,18 @@ class TestNotificationThrottler:
 
 
 @pytest.mark.asyncio
+async def test_notify_entity_payload_passes_real_ha_schema():
+    """Entity notify does not accept mobile-app data extensions."""
+    schema = cv.make_entity_service_schema({vol.Required("message"): cv.string, vol.Optional("title"): cv.string})
+    hass = MagicMock()
+    hass.services.async_call = AsyncMock(side_effect=lambda _domain, _service, data, **_kwargs: schema(data))
+    with patch("custom_components.roommind.utils.notification_utils.async_create") as fallback:
+        await async_send_mold_notification(hass, "room", "Room", [{"entity_id": "notify.phone"}], "Risk", "RoomMind")
+    fallback.assert_not_called()
+    assert hass.services.async_call.call_args.kwargs["blocking"] is True
+
+
+@pytest.mark.asyncio
 async def test_send_notification_with_targets():
     """Should call notify.send_message for each target."""
     hass = MagicMock()
@@ -83,7 +97,8 @@ async def test_send_notification_with_targets():
         assert call[0][0] == "notify"
         assert call[0][1] == "send_message"
         assert call[0][2]["message"] == "Test mold alert"
-        assert call[0][2]["data"]["tag"] == "roommind_mold_living_room_risk"
+        assert "data" not in call[0][2]
+        assert call.kwargs["blocking"] is True
 
 
 @pytest.mark.asyncio
@@ -194,26 +209,17 @@ async def test_send_notification_person_unavailable_treated_as_home():
 
 @pytest.mark.asyncio
 async def test_send_notification_custom_tag_suffix():
-    """Custom tag_suffix should be reflected in notification tag."""
+    """Custom tag_suffix identifies the persistent fallback, not unsupported entity data."""
     hass = MagicMock()
     hass.services.async_call = AsyncMock()
 
-    targets = [
-        {"entity_id": "notify.mobile_app_kevin", "person_entity": "", "notify_when": "always"},
-    ]
-
-    await async_send_mold_notification(
-        hass,
-        "bedroom",
-        "Schlafzimmer",
-        targets,
-        message="Prevention active",
-        title="RoomMind",
-        tag_suffix="prevention",
+    with patch("custom_components.roommind.utils.notification_utils.async_create") as fallback:
+        await async_send_mold_notification(
+            hass, "bedroom", "Schlafzimmer", [], "Prevention active", "RoomMind", tag_suffix="prevention"
+        )
+    fallback.assert_called_once_with(
+        hass, "Prevention active", title="RoomMind", notification_id="roommind_mold_bedroom_prevention"
     )
-
-    call_data = hass.services.async_call.call_args[0][2]["data"]
-    assert call_data["tag"] == "roommind_mold_bedroom_prevention"
 
 
 # --- dismiss_mold_notification ---

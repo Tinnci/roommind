@@ -2,6 +2,14 @@ name: CI
 
 on:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        default: ""
+      release_tag:
+        type: string
+        default: ""
   schedule:
     - cron: "17 3 * * *"
   push:
@@ -13,7 +21,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ inputs.ref || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -31,6 +39,8 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v7.0.0
@@ -64,6 +74,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v7.0.0
@@ -105,8 +117,20 @@ jobs:
         working-directory: frontend
         run: bun --bun vite build
 
-      - name: Package smoke test
-        run: uv run --locked python scripts/build_release_package.py --output dist/roommind.zip
+      - name: Build installable package
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          args=()
+          if [ -n "$RELEASE_TAG" ]; then args+=(--tag "$RELEASE_TAG"); fi
+          uv run --locked python scripts/build_release_package.py --output dist/roommind.zip "${args[@]}"
+
+      - name: Upload verified package
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: roommind-package
+          path: dist/roommind.zip
+          if-no-files-found: error
 
   lint:
     name: Lint
@@ -114,6 +138,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v7.0.0
@@ -144,6 +170,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Validate GitHub Actions
         uses: reviewdog/action-actionlint@v1.73.1
@@ -158,11 +186,13 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: HACS validation
         uses: hacs/action@22.5.0
         env:
-          REPOSITORY_REF: ${{ github.event.pull_request.head.sha || github.sha }}
+          REPOSITORY_REF: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
         with:
           category: integration
           comment: false
@@ -173,6 +203,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Hassfest validation
         uses: home-assistant/actions/hassfest@master

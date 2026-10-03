@@ -33,6 +33,12 @@ The workflow verifies, builds and uploads that tag. HACS uses `REPOSITORY_REF`
 to inspect the same revision, since changing `GITHUB_REF` alone does not select
 its API reads. Release creation requires an existing tag.
 
+CI is reusable through `workflow_call`. Release resolves the existing tag,
+passes that same ref to every CI job, and waits for backend, frontend, Ruff,
+mypy, dependency audit, HACS, Hassfest and workflow validation. The frontend job
+uploads `roommind-package`; publishing downloads that exact ZIP rather than
+rebuilding it. A failure in any verification job prevents publication.
+
 The release workflow obtains notes from the matching changelog section. The
 maintained repository owns its support links and HACS custom entry; upstream
 attribution and licensing remain in place.

@@ -160,37 +160,45 @@ def test_release_workflows_publish_the_hacs_filename():
     release_workflow = (REPO_ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
     ci_workflow = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
 
-    assert f"uv run --locked python scripts/build_release_package.py --output dist/{filename}" in release_workflow
-    assert f"path: dist/{filename}" in release_workflow
+    assert "name: roommind-package" in release_workflow
+    assert f"path: dist/{filename}" in ci_workflow
     assert f'gh release upload "$tag" dist/{filename}' in release_workflow
     assert f'gh release create "$tag" dist/{filename}' in release_workflow
     assert f"uv run --locked python scripts/build_release_package.py --output dist/{filename}" in ci_workflow
 
 
 def test_release_workflow_runs_backend_gates_before_packaging():
-    release_workflow = (REPO_ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
-
-    sync_index = release_workflow.index("uv sync --locked --group dev")
-    pytest_index = release_workflow.index(
-        "uv run pytest tests/ -v --cov=custom_components/roommind --cov-report=term --cov-fail-under=90"
-    )
-    ruff_index = release_workflow.index("uv run ruff check .")
-    ruff_format_index = release_workflow.index("uv run ruff format --check custom_components/ tests/ scripts/")
-    mypy_index = release_workflow.index("uv run mypy --explicit-package-bases custom_components/roommind")
-    package_index = release_workflow.index("scripts/build_release_package.py")
-
-    assert sync_index < pytest_index < ruff_index < ruff_format_index < mypy_index < package_index
+    release = yaml.safe_load((REPO_ROOT / ".github/workflows/release.yml").read_text())
+    verify = release["jobs"]["verify"]
+    assert verify["uses"] == "./.github/workflows/ci.yml"
+    assert verify["needs"] == "resolve"
+    assert verify["with"]["ref"] == "refs/tags/${{ needs.resolve.outputs.tag }}"
+    assert verify["with"]["release_tag"] == "${{ needs.resolve.outputs.tag }}"
+    assert release["jobs"]["build-and-upload"]["needs"] == ["resolve", "verify"]
+    ci = (REPO_ROOT / ".github/workflows/ci.yml").read_text()
+    for command in (
+        "uv sync --locked --group dev",
+        "uv run pytest tests/ -v --cov=custom_components/roommind --cov-report=term --cov-fail-under=90",
+        "uv run ruff check .",
+        "uv run ruff format --check custom_components/ tests/ scripts/",
+        "uv run mypy --explicit-package-bases custom_components/roommind",
+    ):
+        assert command in ci
 
 
 def test_release_workflow_runs_hacs_and_hassfest_before_packaging():
-    release_workflow = (REPO_ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
-
-    hacs_index = release_workflow.index("uses: hacs/action@")
-    hassfest_index = release_workflow.index("uses: home-assistant/actions/hassfest@master")
-    package_index = release_workflow.index("scripts/build_release_package.py")
-
-    assert "timeout-minutes: 30" in release_workflow
-    assert hacs_index < hassfest_index < package_index
+    ci = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
+    assert any(step.get("uses", "").startswith("hacs/action@") for step in ci["jobs"]["hacs"]["steps"])
+    assert any(
+        step.get("uses", "") == "home-assistant/actions/hassfest@master" for step in ci["jobs"]["hassfest"]["steps"]
+    )
+    for job in ci["jobs"].values():
+        checkouts = [step for step in job["steps"] if step.get("uses", "").startswith("actions/checkout@")]
+        assert checkouts and all(step["with"]["ref"] == "${{ inputs.ref }}" for step in checkouts)
+    release = yaml.safe_load((REPO_ROOT / ".github/workflows/release.yml").read_text())
+    steps = release["jobs"]["build-and-upload"]["steps"]
+    assert any(step.get("uses", "").startswith("actions/download-artifact@") for step in steps)
+    assert not any("scripts/build_release_package.py" in step.get("run", "") for step in steps)
 
 
 def test_release_workflow_validates_manual_tag_input_before_checkout():
@@ -210,7 +218,7 @@ def test_release_workflow_validates_manual_tag_input_before_checkout():
 @pytest.mark.parametrize("tag", ["v1.8.0", "v01.8.0", "v1.8.0;touch injected", "v$(>injected)"])
 def test_release_tag_is_data_and_uses_stable_semver(tmp_path: Path, tag: str):
     workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/release.yml").read_text())
-    resolver = workflow["jobs"]["build-and-upload"]["steps"][0]["run"]
+    resolver = workflow["jobs"]["resolve"]["steps"][0]["run"]
     output = tmp_path / "output"
     result = subprocess.run(
         ["bash", "-e", "-c", resolver],

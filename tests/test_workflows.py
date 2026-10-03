@@ -72,8 +72,11 @@ def test_build_workflows_pin_bun_and_git_default_branch():
         assert "GIT_CONFIG_KEY_0: init.defaultBranch" in workflow
         assert "GIT_CONFIG_VALUE_0: main" in workflow
 
-    for filename in ("ci.yml", "release.yml"):
+    for filename in ("ci.yml",):
         workflow = (REPO_ROOT / ".github/workflows" / filename).read_text(encoding="utf-8")
 
         assert "bun-version: 1.3.14" in workflow
         assert "bun-version: latest" not in workflow
+
+    release = (REPO_ROOT / ".github/workflows/release.yml").read_text()
+    assert "uses: ./.github/workflows/ci.yml" in release
