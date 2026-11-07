@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.8.1 - 2026-11-07
+
+- Preserve translated Home Assistant notification failure reasons in diagnostics.
+- Align development requirements and tests with Home Assistant 2026.10.4.
+
 ## 1.8.0 - 2026-09-13
 
 - Separate room comfort targets from device setpoints, pace AC adjustments and

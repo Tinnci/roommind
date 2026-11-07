@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import voluptuous as vol
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 
 from custom_components.roommind.utils.notification_utils import (
@@ -58,6 +59,23 @@ class TestNotificationThrottler:
 
 
 # --- async_send_mold_notification ---
+
+
+@pytest.mark.asyncio
+async def test_local_push_failure_exposes_actionable_reason(caplog):
+    hass = MagicMock()
+    hass.services.async_call = AsyncMock(
+        side_effect=HomeAssistantError(
+            translation_domain="mobile_app",
+            translation_key="device_not_connected_for_local_push_notifications",
+        )
+    )
+    with patch("custom_components.roommind.utils.notification_utils.async_create") as fallback:
+        await async_send_mold_notification(
+            hass, "bedroom", "Bedroom", [{"entity_id": "notify.phone"}], "Risk", "RoomMind"
+        )
+    assert "device_not_connected_for_local_push_notifications" in caplog.text
+    fallback.assert_called_once()
 
 
 @pytest.mark.asyncio

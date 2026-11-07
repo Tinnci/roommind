@@ -4,8 +4,8 @@
 
 # Testing — pytest-homeassistant-custom-component pins exact versions
 # of many sub-dependencies, so avoid version constraints that conflict.
-homeassistant==2026.9.4
-pytest-homeassistant-custom-component==0.13.367
+homeassistant==2026.10.4
+pytest-homeassistant-custom-component==0.13.375
 pytest-cov>=7.0.0
 pytest-freezer>=0.4.9
 pytest-sugar>=1.0.0

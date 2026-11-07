@@ -115,7 +115,8 @@ async def async_send_mold_notification(
             )
             sent_any = True
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("Failed to send mold notification to %s (%s)", entity_id, type(err).__name__)
+            reason = getattr(err, "translation_key", None) or type(err).__name__
+            _LOGGER.warning("Failed to send mold notification to %s (%s)", entity_id, reason)
 
     if not sent_any:
         # All targets skipped or failed → persistent fallback
