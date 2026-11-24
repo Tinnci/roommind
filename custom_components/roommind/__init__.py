@@ -20,6 +20,7 @@ from homeassistant.helpers.typing import ConfigType
 from .const import DOMAIN, PLATFORMS, VERSION
 from .coordinator import RoomMindCoordinator
 from .store import RoomMindStore
+from .utils.i18n import async_preload_translations
 from .websocket_api import async_register_websocket_commands
 
 _LOGGER = logging.getLogger(__name__)
@@ -43,6 +44,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         store = RoomMindStore(hass)
         await store.async_load()
         hass.data[DOMAIN]["store"] = store
+
+    await async_preload_translations(hass)
 
     coordinator = RoomMindCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()

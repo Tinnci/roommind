@@ -47,6 +47,20 @@ def _lookup(data: dict[str, Any], key: str) -> str | None:
     return current if isinstance(current, str) else None
 
 
+def preload_translations(language: str | None = None) -> None:
+    """Warm translation caches off the event loop before get_translation runs."""
+    normalized = _normalise_language(language)
+    for lang in dict.fromkeys((normalized, _DEFAULT_LANGUAGE)):
+        _load_runtime_language(lang)
+        _load_language(lang)
+
+
+async def async_preload_translations(hass: HomeAssistant) -> None:
+    """Preload runtime and backend translations in Home Assistant's executor."""
+    language = getattr(getattr(hass, "config", None), "language", None)
+    await hass.async_add_executor_job(preload_translations, language)
+
+
 def get_translation(hass: HomeAssistant, key: str, **placeholders: Any) -> str:
     """Return a translated backend string using Home Assistant's configured language."""
     language = _normalise_language(getattr(getattr(hass, "config", None), "language", None))

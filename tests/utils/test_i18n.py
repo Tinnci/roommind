@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from custom_components.roommind.utils.i18n import get_translation
+from custom_components.roommind.utils import i18n
+from custom_components.roommind.utils.i18n import async_preload_translations, get_translation
 
 LANGUAGES = ("en", "de", "zh-Hans")
 BACKEND_TRANSLATION_ROOT = Path("custom_components/roommind/translations")
@@ -134,3 +135,26 @@ def test_backend_translation_falls_back_to_english_for_unknown_language() -> Non
     hass.config.language = "fr"
 
     assert get_translation(hass, "notifications.mold_prevention.title") == "RoomMind: Mold prevention"
+
+
+async def test_async_preload_translations_warms_cache_via_executor() -> None:
+    """Preloading caches language files via executor so get_translation avoids disk reads."""
+    i18n._load_language.cache_clear()
+    i18n._load_runtime_language.cache_clear()
+
+    hass = MagicMock()
+    hass.config.language = "zh-CN"
+
+    async def _run_in_executor(fn, *args):
+        return fn(*args)
+
+    hass.async_add_executor_job = AsyncMock(side_effect=_run_in_executor)
+
+    await async_preload_translations(hass)
+
+    hass.async_add_executor_job.assert_awaited_once_with(i18n.preload_translations, "zh-CN")
+    with patch.object(Path, "read_text", side_effect=AssertionError("unexpected event-loop file read")):
+        text = get_translation(hass, "notifications.mold_prevention.title")
+        fallback = get_translation(MagicMock(config=MagicMock(language="en")), "notifications.mold_prevention.title")
+    assert text
+    assert fallback == "RoomMind: Mold prevention"

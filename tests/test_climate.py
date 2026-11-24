@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import importlib.util
 import time
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from homeassistant.components.climate import HVACMode
+from homeassistant.components.climate import ClimateEntity, HVACMode
+from homeassistant.const import UnitOfTemperature
 
 from custom_components.roommind.climate import (
     RoomMindComfortClimate,
@@ -290,3 +293,29 @@ async def test_async_setup_entry_no_rooms():
     await async_setup_entry(hass, entry, async_add_entities)
 
     async_add_entities.assert_not_called()
+
+
+def test_native_climate_temperature_properties_when_supported(mock_coordinator, monkeypatch):
+    """When HA exposes ClimateEntity.native_target_temperature, RoomMind uses native_* properties."""
+    coordinator, store = mock_coordinator
+    store.get_room.return_value = {
+        "override_temp": 23.5,
+        "override_until": None,
+        "override_type": "custom",
+    }
+    coordinator.data = {"rooms": {"living_room": {"current_temp": 21.0, "target_temp": 22.0}}}
+
+    monkeypatch.setattr(ClimateEntity, "native_target_temperature", property(lambda self: None), raising=False)
+    climate_path = Path(__file__).resolve().parents[1] / "custom_components" / "roommind" / "climate.py"
+    spec = importlib.util.spec_from_file_location("custom_components.roommind._climate_native_test", climate_path)
+    assert spec is not None
+    assert spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    comfort = mod.RoomMindComfortClimate(coordinator, "living_room")
+    override = mod.RoomMindOverrideClimate(coordinator, "living_room")
+    assert comfort._attr_native_temperature_unit == UnitOfTemperature.CELSIUS
+    assert comfort.native_current_temperature == 21.0
+    assert comfort.native_target_temperature == 22.0
+    assert override.native_target_temperature == 23.5

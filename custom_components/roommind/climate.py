@@ -53,11 +53,17 @@ async def async_setup_entry(
         async_add_entities(entities)
 
 
+_HAS_NATIVE_CLIMATE_TEMPS = hasattr(ClimateEntity, "native_target_temperature")
+
+
 class _RoomMindClimate(CoordinatorEntity, ClimateEntity):
     """Shared room observations and serialized comfort-policy writes."""
 
     _attr_has_entity_name = True
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    if _HAS_NATIVE_CLIMATE_TEMPS:
+        _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
+    else:
+        _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_target_temperature_step = 0.5
     _attr_min_temp = 5.0
     _attr_max_temp = 35.0
@@ -85,20 +91,42 @@ class _RoomMindClimate(CoordinatorEntity, ClimateEntity):
         """Return True if override is currently active."""
         return is_override_active(self._room)
 
-    @property
-    def target_temperature(self) -> float | None:
+    def _resolve_target_temperature(self) -> float | None:
         """Read the Effective Target Plan, never a device's overdrive setpoint."""
         value = self._live.get("target_temp")
         return float(value) if isinstance(value, int | float) else None
 
-    @property
-    def current_temperature(self) -> float | None:
+    def _resolve_current_temperature(self) -> float | None:
         """Return the room's current temperature from coordinator data."""
         room_data = self._live
         if "current_temp_raw" in room_data and room_data["current_temp_raw"] is None:
             return None
         val = room_data.get("current_temp")
         return float(val) if isinstance(val, (int, float)) else None
+
+    if _HAS_NATIVE_CLIMATE_TEMPS:
+
+        @property
+        def native_target_temperature(self) -> float | None:
+            """Read the Effective Target Plan, never a device's overdrive setpoint."""
+            return self._resolve_target_temperature()
+
+        @property
+        def native_current_temperature(self) -> float | None:
+            """Return the room's current temperature from coordinator data."""
+            return self._resolve_current_temperature()
+
+    else:
+
+        @property
+        def target_temperature(self) -> float | None:
+            """Read the Effective Target Plan, never a device's overdrive setpoint."""
+            return self._resolve_target_temperature()
+
+        @property
+        def current_temperature(self) -> float | None:
+            """Return the room's current temperature from coordinator data."""
+            return self._resolve_current_temperature()
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         """Set override temperature."""
@@ -186,7 +214,9 @@ class RoomMindComfortClimate(_RoomMindClimate):
             "cool_target": live.get("cool_target"),
             "target_temperature_unit": UnitOfTemperature.CELSIUS,
             "control_target": live.get("effective_control_target"),
-            "perceived_temperature": live.get("perceived_temp") if self.current_temperature is not None else None,
+            "perceived_temperature": live.get("perceived_temp")
+            if self._resolve_current_temperature() is not None
+            else None,
             "override_active": is_override_active(room),
             "override_temperature": room.get("override_temp"),
             "override_until": room.get("override_until"),
@@ -201,7 +231,7 @@ class RoomMindComfortClimate(_RoomMindClimate):
         elif preset_mode == "hold":
             if self._is_override_active():
                 return
-            target = self.target_temperature
+            target = self._resolve_target_temperature()
             if target is None:
                 raise ServiceValidationError("Wait for a room comfort target before selecting Hold")
             await self._async_write_override(target)
@@ -230,14 +260,25 @@ class RoomMindOverrideClimate(_RoomMindClimate):
     def hvac_mode(self) -> HVACMode:
         return HVACMode.AUTO if self._is_override_active() else HVACMode.OFF
 
-    @property
-    def target_temperature(self) -> float:
+    def _resolve_override_target_temperature(self) -> float:
         if self._is_override_active():
             value = self._room.get("override_temp")
             if isinstance(value, int | float):
                 return float(value)
-        target = super().target_temperature
+        target = self._resolve_target_temperature()
         return target if target is not None else DEFAULT_COMFORT_TEMP
+
+    if _HAS_NATIVE_CLIMATE_TEMPS:
+
+        @property
+        def native_target_temperature(self) -> float:
+            return self._resolve_override_target_temperature()
+
+    else:
+
+        @property
+        def target_temperature(self) -> float:
+            return self._resolve_override_target_temperature()
 
     @property
     def extra_state_attributes(self) -> dict[str, str]:
@@ -260,7 +301,7 @@ class RoomMindOverrideClimate(_RoomMindClimate):
                 await store.async_update_room(
                     self._area_id,
                     {
-                        "override_temp": self.target_temperature,
+                        "override_temp": self._resolve_override_target_temperature(),
                         "override_until": None,
                         "override_type": OVERRIDE_CUSTOM,
                     },
