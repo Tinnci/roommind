@@ -1,10 +1,10 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import type { HomeAssistant, HassArea, RoomConfig } from "../types";
+import type { CompressorGroup, HomeAssistant, HassArea, RoomConfig } from "../types";
 import {
   getComfortDelta,
+  getDisplayMode,
   getModeClass,
-  getObservedMode,
   formatMode,
   isTemperatureCached,
 } from "../utils/room-state";
@@ -13,6 +13,8 @@ import { localize } from "../utils/localize";
 import { mdiEyeOff } from "../utils/icons";
 import { formatTemp, tempUnit, toDisplayDelta } from "../utils/temperature";
 import { isOverrideEffective } from "../utils/room-overview-status";
+import { buildThermostatFleet } from "../utils/thermostat-fleet";
+import "./rs-thermal-band";
 
 @customElement("rs-area-card")
 export class RsAreaCard extends LitElement {
@@ -26,6 +28,7 @@ export class RsAreaCard extends LitElement {
   @property({ type: Boolean }) public reordering = false;
   @property({ type: Boolean }) public canMoveUp = false;
   @property({ type: Boolean }) public canMoveDown = false;
+  @property({ attribute: false }) public compressorGroups: CompressorGroup[] = [];
 
   static override styles = [
     modeStyles,
@@ -63,8 +66,13 @@ export class RsAreaCard extends LitElement {
         --room-glow: color-mix(in srgb, var(--roommind-warning-color) 10%, transparent);
       }
 
-      ha-card[data-activity="cooling"] {
+      ha-card[data-activity="cooling"],
+      ha-card[data-activity="dry"] {
         --room-glow: color-mix(in srgb, var(--roommind-info-color) 10%, transparent);
+      }
+
+      ha-card[data-activity="fan_only"] {
+        --room-glow: color-mix(in srgb, var(--roommind-success-color) 9%, transparent);
       }
 
       ha-card:hover {
@@ -245,6 +253,56 @@ export class RsAreaCard extends LitElement {
       }
 
       /* Footer row: humidity + MPC status */
+      .unit-strip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 8px;
+      }
+
+      .unit-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 10.5px;
+        font-weight: 600;
+        padding: 2px 7px;
+        border-radius: 6px;
+        background: var(--roommind-surface-subtle, rgba(0, 0, 0, 0.04));
+        border: var(--roommind-border-faint, 1px solid rgba(0, 0, 0, 0.08));
+        color: var(--secondary-text-color);
+        max-width: 100%;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .unit-pill[data-mode="heat"] {
+        color: var(--roommind-warning-color, #ef6c00);
+        background: var(--roommind-warning-tint, rgba(255, 152, 0, 0.1));
+      }
+
+      .unit-pill[data-mode="cool"],
+      .unit-pill[data-mode="dry"] {
+        color: var(--roommind-info-color, #1565c0);
+        background: var(--roommind-info-tint, rgba(33, 150, 243, 0.1));
+      }
+
+      .unit-pill[data-mode="fan_only"] {
+        color: var(--roommind-success-color, #00796b);
+        background: var(--roommind-success-tint, rgba(38, 166, 154, 0.1));
+      }
+
+      .unit-pill[data-conflict="true"] {
+        color: var(--roommind-error-color, #c62828);
+        background: var(--roommind-error-tint, rgba(244, 67, 54, 0.12));
+      }
+
+      .unit-pill-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 110px;
+      }
+
       .card-footer {
         display: flex;
         align-items: flex-start;
@@ -499,7 +557,7 @@ export class RsAreaCard extends LitElement {
     const isOutdoor = this.config?.is_outdoor ?? false;
     const isConfigured = this.config !== null && hasClimateSelected && !isOutdoor;
     const live = this.config?.live;
-    const mode = getObservedMode(live);
+    const mode = getDisplayMode(live, this.config);
 
     return html`
       <ha-card
@@ -613,6 +671,8 @@ export class RsAreaCard extends LitElement {
         </div>
       </div>
       ${this._renderDeltaLine(live)}
+      <rs-thermal-band .hass=${this.hass} .config=${this.config} compact></rs-thermal-band>
+      ${this._renderUnitStrip()}
       <div class="card-footer">
         <span class="humidity-info">
           ${
@@ -734,6 +794,43 @@ export class RsAreaCard extends LitElement {
         </span>`;
 
     return html`${targetDisplay}`;
+  }
+
+  private _renderUnitStrip() {
+    if (!this.config || !this.hass) return nothing;
+    const fleet = buildThermostatFleet(this.config, this.hass, this.compressorGroups);
+    if (fleet.total < 2 && !fleet.hasConflict) return nothing;
+    const u = tempUnit(this.hass);
+    const visible = fleet.units.slice(0, 3);
+    const extra = fleet.units.length - visible.length;
+
+    return html`
+      <div class="unit-strip">
+        ${visible.map(
+          (unit) => html`
+            <span
+              class="unit-pill"
+              data-mode=${unit.hvacMode ?? "off"}
+              data-conflict=${String(unit.hasConflict)}
+            >
+              <span class="unit-pill-name">${unit.name}</span>
+              ${
+                unit.setpointC != null
+                  ? html`<span>${formatTemp(unit.setpointC, this.hass)}${u}</span>`
+                  : nothing
+              }
+            </span>
+          `,
+        )}
+        ${
+          extra > 0
+            ? html`<span class="unit-pill"
+                >${localize("fleet.more_units", this.hass.language, { count: extra })}</span
+              >`
+            : nothing
+        }
+      </div>
+    `;
   }
 
   private _renderDeltaLine(live: NonNullable<RoomConfig["live"]>) {

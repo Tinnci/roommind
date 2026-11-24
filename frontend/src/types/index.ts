@@ -2,9 +2,11 @@
  * Core type definitions for RoomMind frontend.
  */
 
-export type ClimateMode = "auto" | "heat_only" | "cool_only";
+export type ClimateMode = "auto" | "heat_only" | "cool_only" | "dry" | "fan_only" | "off";
 
-export type RoomMode = "idle" | "heating" | "cooling" | "fan_only";
+export type RoomMode = "idle" | "heating" | "cooling" | "dry" | "fan_only";
+
+export type DisplayMode = RoomMode | "off";
 
 export type OverrideType = "boost" | "eco" | "custom";
 
@@ -436,6 +438,13 @@ export interface HassArea {
   name: string;
   picture: string | null;
   floor_id: string | null;
+}
+
+export interface AreaInfo {
+  area: HassArea;
+  config: RoomConfig | null;
+  climateEntityCount: number;
+  tempSensorCount: number;
 }
 
 export interface HassFloor {

@@ -15,7 +15,7 @@ export class RsClimateModeSelector extends LitElement {
 
     .mode-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
       gap: 8px;
     }
 
@@ -50,6 +50,49 @@ export class RsClimateModeSelector extends LitElement {
       box-shadow: 0 2px 8px rgba(var(--rgb-primary-color, 3, 169, 244), 0.12);
     }
 
+    .mode-card[active][data-mode="cool_only"],
+    .mode-card[active][data-mode="dry"] {
+      border-color: var(--roommind-info-color, #2196f3);
+      background: var(--roommind-info-tint, rgba(33, 150, 243, 0.12));
+    }
+
+    .mode-card[active][data-mode="cool_only"] .mode-card-icon,
+    .mode-card[active][data-mode="cool_only"] .mode-card-label,
+    .mode-card[active][data-mode="dry"] .mode-card-icon,
+    .mode-card[active][data-mode="dry"] .mode-card-label {
+      color: var(--roommind-info-color, #1976d2);
+    }
+
+    .mode-card[active][data-mode="heat_only"] {
+      border-color: var(--roommind-warning-color, #ff9800);
+      background: var(--roommind-warning-tint, rgba(255, 152, 0, 0.12));
+    }
+
+    .mode-card[active][data-mode="heat_only"] .mode-card-icon,
+    .mode-card[active][data-mode="heat_only"] .mode-card-label {
+      color: var(--roommind-warning-color, #ef6c00);
+    }
+
+    .mode-card[active][data-mode="fan_only"] {
+      border-color: var(--roommind-success-color, #26a69a);
+      background: var(--roommind-success-tint, rgba(38, 166, 154, 0.12));
+    }
+
+    .mode-card[active][data-mode="fan_only"] .mode-card-icon,
+    .mode-card[active][data-mode="fan_only"] .mode-card-label {
+      color: var(--roommind-success-color, #00796b);
+    }
+
+    .mode-card[active][data-mode="off"] {
+      border-color: var(--secondary-text-color);
+      background: var(--roommind-surface-muted, rgba(0, 0, 0, 0.06));
+    }
+
+    .mode-card[active][data-mode="off"] .mode-card-icon,
+    .mode-card[active][data-mode="off"] .mode-card-label {
+      color: var(--secondary-text-color);
+    }
+
     .mode-card-icon {
       --mdc-icon-size: 24px;
     }
@@ -75,9 +118,12 @@ export class RsClimateModeSelector extends LitElement {
       labelKey: TranslationKey;
       icon: string;
     }[] = [
-      { value: "auto", labelKey: "mode.auto", icon: "mdi:autorenew" },
-      { value: "heat_only", labelKey: "mode.heat_only", icon: "mdi:fire" },
+      { value: "off", labelKey: "mode.off", icon: "mdi:power" },
       { value: "cool_only", labelKey: "mode.cool_only", icon: "mdi:snowflake" },
+      { value: "heat_only", labelKey: "mode.heat_only", icon: "mdi:fire" },
+      { value: "dry", labelKey: "mode.dry", icon: "mdi:water-percent" },
+      { value: "fan_only", labelKey: "mode.fan_only", icon: "mdi:fan" },
+      { value: "auto", labelKey: "mode.auto", icon: "mdi:autorenew" },
     ];
 
     return html`
@@ -86,7 +132,10 @@ export class RsClimateModeSelector extends LitElement {
           (m) => html`
             <button
               class="mode-card"
+              type="button"
+              data-mode=${m.value}
               ?active=${this.climateMode === m.value}
+              aria-pressed=${this.climateMode === m.value}
               @click=${() => this._onModeClick(m.value)}
             >
               <ha-icon class="mode-card-icon" icon=${m.icon}></ha-icon>

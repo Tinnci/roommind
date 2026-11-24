@@ -1,17 +1,13 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { HomeAssistant, HassArea, RoomConfig } from "../types";
-import {
-  getModeClass,
-  getObservedMode,
-  formatMode,
-  isTemperatureCached,
-} from "../utils/room-state";
+import { getDisplayMode, getModeClass, formatMode, isTemperatureCached } from "../utils/room-state";
 import { modeStyles } from "../styles/shared-mode-styles";
 import { localize } from "../utils/localize";
 import { formatTemp, tempUnit, toDisplayDelta } from "../utils/temperature";
 import { selectHeroMetricIds, type HeroMetricId } from "../utils/hero-metrics";
 import "./shared/rs-info-icon";
+import "./rs-thermal-band";
 
 const PENCIL_PATH =
   "M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z";
@@ -54,8 +50,13 @@ export class RsHeroStatus extends LitElement {
         --hero-glow: color-mix(in srgb, var(--roommind-warning-color) 12%, transparent);
       }
 
-      ha-card[data-activity="cooling"] {
+      ha-card[data-activity="cooling"],
+      ha-card[data-activity="dry"] {
         --hero-glow: color-mix(in srgb, var(--roommind-info-color) 12%, transparent);
+      }
+
+      ha-card[data-activity="fan_only"] {
+        --hero-glow: color-mix(in srgb, var(--roommind-success-color) 10%, transparent);
       }
 
       .hero-header {
@@ -618,7 +619,7 @@ export class RsHeroStatus extends LitElement {
 
   override render() {
     const live = this.config?.live;
-    const mode = getObservedMode(live);
+    const mode = getDisplayMode(live, this.config);
 
     return html`
       <ha-card data-activity=${mode ?? "unknown"}>
@@ -761,6 +762,14 @@ export class RsHeroStatus extends LitElement {
                   </div>
                   ${!this.isOutdoor ? this._renderTargetSection(live) : nothing}
                 </div>
+                ${
+                  !this.isOutdoor
+                    ? html`<rs-thermal-band
+                        .hass=${this.hass}
+                        .config=${this.config}
+                      ></rs-thermal-band>`
+                    : nothing
+                }
                 <div class="hero-metrics">
                   ${selectHeroMetricIds({
                     live,

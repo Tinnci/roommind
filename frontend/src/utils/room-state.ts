@@ -3,8 +3,10 @@
  */
 import type {
   ClimateMode,
+  DisplayMode,
   HassDeviceRegistryEntry,
   HassEntityRegistryEntry,
+  RoomConfig,
   RoomLiveData,
   RoomMode,
 } from "../types";
@@ -46,6 +48,7 @@ export function getComfortDelta(
   >,
   mode: ClimateMode,
 ): number | null {
+  if (mode === "off" || mode === "fan_only" || mode === "dry") return null;
   const current =
     live.effective_control_target === "perceived_temperature"
       ? live.perceived_temp
@@ -88,16 +91,56 @@ export function getEntitiesForArea(
 }
 
 /**
+ * Resolve the user-facing activity badge mode for UI components, surfacing
+ * Asian HVAC modes (dry, fan_only, off) from commanded state and live device
+ * observations without altering thermal EKF observation semantics.
+ */
+export function getDisplayMode(
+  live:
+    | Pick<
+        RoomLiveData,
+        "mode" | "observed_mode" | "observation_status" | "commanded_mode" | "device_observations"
+      >
+    | undefined,
+  config?: Pick<RoomConfig, "climate_mode"> | null,
+): DisplayMode | null {
+  if (!live) return null;
+  const observed = getObservedMode(live);
+  if (observed === "heating" || observed === "cooling") return observed;
+
+  const observations = live.device_observations ?? [];
+  const observedNonThermal = observations.find(
+    (obs) =>
+      obs.available &&
+      !obs.assumed_state &&
+      (obs.hvac_mode === "dry" || obs.hvac_mode === "fan_only"),
+  );
+  if (observedNonThermal?.hvac_mode === "dry") return "dry";
+  if (observedNonThermal?.hvac_mode === "fan_only") return "fan_only";
+
+  if (live.commanded_mode === "dry") return "dry";
+  if (live.commanded_mode === "fan_only") return "fan_only";
+  if (config?.climate_mode === "off" && (live.commanded_mode ?? "idle") === "idle") {
+    return "off";
+  }
+  return observed;
+}
+
+/**
  * Return the CSS class name corresponding to a room mode.
  */
-export function getModeClass(mode: RoomMode | null | undefined): string {
+export function getModeClass(mode: DisplayMode | null | undefined): string {
   switch (mode) {
     case "heating":
       return "mode-heating";
     case "cooling":
       return "mode-cooling";
+    case "dry":
+      return "mode-dry";
     case "fan_only":
-      return "mode-idle";
+      return "mode-fan";
+    case "off":
+      return "mode-off";
     case "idle":
       return "mode-idle";
     default:
@@ -105,16 +148,18 @@ export function getModeClass(mode: RoomMode | null | undefined): string {
   }
 }
 
-const modeKeys: Record<RoomMode, TranslationKey> = {
+const modeKeys: Record<DisplayMode, TranslationKey> = {
   heating: "mode.heating",
   cooling: "mode.cooling",
+  dry: "mode.dry",
   fan_only: "mode.fan_only",
+  off: "mode.off",
   idle: "mode.idle",
 };
 
 /**
  * Format a room mode for display (localized).
  */
-export function formatMode(mode: RoomMode, language: string): string {
+export function formatMode(mode: DisplayMode, language: string): string {
   return localize(modeKeys[mode], language);
 }

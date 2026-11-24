@@ -37,6 +37,30 @@ export const modeStyles = css`
     background: var(--roommind-info-color);
   }
 
+  .mode-dry {
+    color: var(--roommind-dry-color, #009688);
+    background: color-mix(in srgb, var(--roommind-dry-color, #009688) 14%, transparent);
+  }
+  .mode-dry .mode-dot {
+    background: var(--roommind-dry-color, #009688);
+  }
+
+  .mode-fan {
+    color: var(--roommind-fan-color, #00acc1);
+    background: color-mix(in srgb, var(--roommind-fan-color, #00acc1) 14%, transparent);
+  }
+  .mode-fan .mode-dot {
+    background: var(--roommind-fan-color, #00acc1);
+  }
+
+  .mode-off {
+    color: var(--disabled-text-color, #9e9e9e);
+    background: var(--roommind-surface-muted);
+  }
+  .mode-off .mode-dot {
+    background: var(--disabled-text-color, #9e9e9e);
+  }
+
   .mode-idle {
     color: var(--secondary-text-color, #757575);
     background: var(--roommind-surface-muted);

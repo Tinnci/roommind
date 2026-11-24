@@ -105,5 +105,5 @@ class RoomMindModeSensor(_RoomMindBaseSensor):
             if room.get("observation_status") == "unknown":
                 return None
             val = room.get("observed_mode", room.get("mode"))
-            return str(val) if val in {"idle", "heating", "cooling", "fan_only"} else None
+            return str(val) if val in {"idle", "heating", "cooling", "dry", "fan_only"} else None
         return None

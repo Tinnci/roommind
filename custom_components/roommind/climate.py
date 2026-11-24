@@ -198,6 +198,7 @@ class RoomMindComfortClimate(_RoomMindClimate):
             "cooling": HVACAction.COOLING,
             "idle": HVACAction.IDLE,
             "fan_only": HVACAction.FAN,
+            "dry": HVACAction.DRYING,
         }.get(mode)
 
     @property

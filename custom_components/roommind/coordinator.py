@@ -20,7 +20,10 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import (
     CLIMATE_MODE_COOL_ONLY,
+    CLIMATE_MODE_DRY,
+    CLIMATE_MODE_FAN_ONLY,
     CLIMATE_MODE_HEAT_ONLY,
+    CLIMATE_MODE_OFF,
     DEFAULT_OUTDOOR_HEATING_MAX,
     DOMAIN,
     HISTORY_ROTATE_CYCLES,
@@ -1443,6 +1446,8 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             target_temp = targets.cool
         elif climate_mode == CLIMATE_MODE_HEAT_ONLY:
             target_temp = targets.heat
+        elif climate_mode in (CLIMATE_MODE_DRY, CLIMATE_MODE_FAN_ONLY, CLIMATE_MODE_OFF):
+            target_temp = None
         else:  # auto
             if mode == MODE_HEATING and targets.heat is not None:
                 target_temp = targets.heat

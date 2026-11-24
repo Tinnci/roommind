@@ -58,6 +58,7 @@ def test_room_target_is_effective_comfort_and_dispatch_does_not_imply_cooling(co
         ("heating", HVACAction.HEATING),
         ("idle", HVACAction.IDLE),
         ("fan_only", HVACAction.FAN),
+        ("dry", HVACAction.DRYING),
     ],
 )
 def test_room_action_comes_only_from_the_observation(comfort_entity, mode, action):

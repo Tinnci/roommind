@@ -10,7 +10,10 @@ from homeassistant.core import HomeAssistant
 
 from ..const import (
     CLIMATE_MODE_COOL_ONLY,
+    CLIMATE_MODE_DRY,
+    CLIMATE_MODE_FAN_ONLY,
     CLIMATE_MODE_HEAT_ONLY,
+    CLIMATE_MODE_OFF,
 )
 from ..control.mpc_controller import (
     DEFAULT_OUTDOOR_TEMP_FALLBACK,
@@ -162,6 +165,8 @@ async def _compute_target_forecast(
             target = cool_target
         elif climate_mode == CLIMATE_MODE_HEAT_ONLY:
             target = heat_target
+        elif climate_mode in (CLIMATE_MODE_DRY, CLIMATE_MODE_FAN_ONLY, CLIMATE_MODE_OFF):
+            target = None
         else:
             # Auto mode: show heat target (primary for chart line)
             target = heat_target

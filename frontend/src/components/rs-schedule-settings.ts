@@ -183,25 +183,38 @@ export class RsScheduleSettings extends RsScheduleBase {
                 })}
               </div>
             `
-          : html`
-              <div class="view-temps">
-                ${localize("schedule.view_comfort", l, {
-                  temp: formatTemp(
-                    this.climateMode === "cool_only" ? this.comfortCool : this.comfortHeat,
-                    this.hass,
-                  ),
-                  unit: tempUnit(this.hass),
-                })}
-                 · 
-                ${localize("schedule.view_eco", l, {
-                  temp: formatTemp(
-                    this.climateMode === "cool_only" ? this.ecoCool : this.ecoHeat,
-                    this.hass,
-                  ),
-                  unit: tempUnit(this.hass),
-                })}
-              </div>
-            `
+          : this.climateMode === "cool_only" || this.climateMode === "heat_only"
+            ? html`
+                <div class="view-temps">
+                  ${localize("schedule.view_comfort", l, {
+                    temp: formatTemp(
+                      this.climateMode === "cool_only" ? this.comfortCool : this.comfortHeat,
+                      this.hass,
+                    ),
+                    unit: tempUnit(this.hass),
+                  })}
+                   · 
+                  ${localize("schedule.view_eco", l, {
+                    temp: formatTemp(
+                      this.climateMode === "cool_only" ? this.ecoCool : this.ecoHeat,
+                      this.hass,
+                    ),
+                    unit: tempUnit(this.hass),
+                  })}
+                </div>
+              `
+            : html`
+                <div class="view-temps">
+                  ${localize(
+                    this.climateMode === "dry"
+                      ? "mode.dry_desc"
+                      : this.climateMode === "fan_only"
+                        ? "mode.fan_only_desc"
+                        : "mode.off_desc",
+                    l,
+                  )}
+                </div>
+              `
       }
       ${
         this.scheduleSelectorEntity
@@ -280,6 +293,25 @@ export class RsScheduleSettings extends RsScheduleBase {
   // ─── Temperature inputs ────────────────────────────────────────
 
   private _renderTemperatureInputs(l: string) {
+    if (
+      this.climateMode === "off" ||
+      this.climateMode === "dry" ||
+      this.climateMode === "fan_only"
+    ) {
+      return html`
+        <div class="fallback-hint">
+          ${localize(
+            this.climateMode === "dry"
+              ? "mode.dry_desc"
+              : this.climateMode === "fan_only"
+                ? "mode.fan_only_desc"
+                : "mode.off_desc",
+            l,
+          )}
+        </div>
+      `;
+    }
+
     if (this.climateMode === "auto") {
       return html`
         <div class="temp-grid-auto">

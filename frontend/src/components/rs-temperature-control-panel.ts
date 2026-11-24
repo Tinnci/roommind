@@ -357,6 +357,31 @@ export class RsTemperatureControlPanel extends LitElement {
         color: var(--primary-color);
       }
 
+      .mode-button[active][data-mode="cool_only"],
+      .mode-button[active][data-mode="dry"] {
+        border-color: var(--roommind-info-color, #2196f3);
+        background: var(--roommind-info-tint, rgba(33, 150, 243, 0.14));
+        color: var(--roommind-info-color, #1976d2);
+      }
+
+      .mode-button[active][data-mode="heat_only"] {
+        border-color: var(--roommind-warning-color, #ff9800);
+        background: var(--roommind-warning-tint, rgba(255, 152, 0, 0.14));
+        color: var(--roommind-warning-color, #ef6c00);
+      }
+
+      .mode-button[active][data-mode="fan_only"] {
+        border-color: var(--roommind-success-color, #26a69a);
+        background: var(--roommind-success-tint, rgba(38, 166, 154, 0.14));
+        color: var(--roommind-success-color, #00796b);
+      }
+
+      .mode-button[active][data-mode="off"] {
+        border-color: var(--secondary-text-color);
+        background: var(--roommind-surface-muted, rgba(0, 0, 0, 0.06));
+        color: var(--secondary-text-color);
+      }
+
       .preset-buttons {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -488,6 +513,14 @@ export class RsTemperatureControlPanel extends LitElement {
     const ov = this.getEffectiveOverride();
     const targetC = this._targetC(ov);
     const disabled = !this.config || !this.climateControlEnabled || this._busy;
+    const isNonTempMode = ["off", "fan_only", "dry"].includes(this.climateMode);
+    const tempDisabled = disabled || isNonTempMode;
+    const comfortIcon =
+      this.climateMode === "cool_only"
+        ? "mdi:snowflake"
+        : this.climateMode === "heat_only"
+          ? "mdi:fire"
+          : "mdi:thermometer";
 
     return html`
       <ha-card>
@@ -520,7 +553,7 @@ export class RsTemperatureControlPanel extends LitElement {
                   type="button"
                   title=${localize("common.decrease", this.language)}
                   aria-label=${localize("common.decrease", this.language)}
-                  ?disabled=${disabled}
+                  ?disabled=${tempDisabled}
                   @click=${() => this._nudgeTarget(-1)}
                 >
                   <span aria-hidden="true">−</span>
@@ -534,7 +567,7 @@ export class RsTemperatureControlPanel extends LitElement {
                     max=${tempRange(5, 35, this.hass).max}
                     step=${tempStep(this.hass)}
                     .value=${this._targetDisplayValue(targetC)}
-                    ?disabled=${disabled}
+                    ?disabled=${tempDisabled}
                     @input=${this._onTargetInput}
                     @keydown=${this._onTargetKeyDown}
                   />
@@ -545,7 +578,7 @@ export class RsTemperatureControlPanel extends LitElement {
                   type="button"
                   title=${localize("common.increase", this.language)}
                   aria-label=${localize("common.increase", this.language)}
-                  ?disabled=${disabled}
+                  ?disabled=${tempDisabled}
                   @click=${() => this._nudgeTarget(1)}
                 >
                   <span aria-hidden="true">+</span>
@@ -555,7 +588,7 @@ export class RsTemperatureControlPanel extends LitElement {
                 <button
                   class="action-button primary"
                   type="button"
-                  ?disabled=${disabled}
+                  ?disabled=${tempDisabled}
                   @click=${this._onApplyTarget}
                 >
                   <ha-icon icon="mdi:check"></ha-icon>
@@ -597,13 +630,13 @@ export class RsTemperatureControlPanel extends LitElement {
                   >${localize("room.temperature_panel.hold", this.language)}</span
                 >
                 <div class="duration-buttons">
-                  ${this._renderDurationButton(1, "room.temperature_panel.hold_1h", disabled)}
-                  ${this._renderDurationButton(2, "room.temperature_panel.hold_2h", disabled)}
-                  ${this._renderDurationButton(4, "room.temperature_panel.hold_4h", disabled)}
+                  ${this._renderDurationButton(1, "room.temperature_panel.hold_1h", tempDisabled)}
+                  ${this._renderDurationButton(2, "room.temperature_panel.hold_2h", tempDisabled)}
+                  ${this._renderDurationButton(4, "room.temperature_panel.hold_4h", tempDisabled)}
                   ${this._renderDurationButton(
                     0,
                     "room.temperature_panel.hold_permanent",
-                    disabled,
+                    tempDisabled,
                   )}
                 </div>
               </div>
@@ -615,9 +648,12 @@ export class RsTemperatureControlPanel extends LitElement {
                   >${localize("room.temperature_panel.mode", this.language)}</span
                 >
                 <div class="mode-buttons">
-                  ${this._renderModeButton("auto", "mode.auto", "mdi:autorenew")}
-                  ${this._renderModeButton("heat_only", "mode.heat_only", "mdi:fire")}
+                  ${this._renderModeButton("off", "mode.off", "mdi:power")}
                   ${this._renderModeButton("cool_only", "mode.cool_only", "mdi:snowflake")}
+                  ${this._renderModeButton("heat_only", "mode.heat_only", "mdi:fire")}
+                  ${this._renderModeButton("dry", "mode.dry", "mdi:water-percent")}
+                  ${this._renderModeButton("fan_only", "mode.fan_only", "mdi:fan")}
+                  ${this._renderModeButton("auto", "mode.auto", "mdi:autorenew")}
                 </div>
               </div>
 
@@ -626,8 +662,13 @@ export class RsTemperatureControlPanel extends LitElement {
                   >${localize("room.temperature_panel.shortcuts", this.language)}</span
                 >
                 <div class="preset-buttons">
-                  ${this._renderPresetButton("boost", "override.comfort", "mdi:fire", disabled)}
-                  ${this._renderPresetButton("eco", "override.eco", "mdi:leaf", disabled)}
+                  ${this._renderPresetButton(
+                    "boost",
+                    "override.comfort",
+                    comfortIcon,
+                    tempDisabled,
+                  )}
+                  ${this._renderPresetButton("eco", "override.eco", "mdi:leaf", tempDisabled)}
                 </div>
               </div>
             </section>
@@ -660,6 +701,7 @@ export class RsTemperatureControlPanel extends LitElement {
       <button
         class="mode-button"
         type="button"
+        data-mode=${mode}
         ?active=${this.climateMode === mode}
         aria-pressed=${this.climateMode === mode}
         ?disabled=${disabled}
@@ -712,6 +754,20 @@ export class RsTemperatureControlPanel extends LitElement {
             : localize("override.custom", this.language);
       const temp = ov.temp != null ? ` · ${this._formatTemp(ov.temp)}` : "";
       return `${label}${temp} · ${this._overrideDurationText(ov.until)}`;
+    }
+    if (
+      this.climateMode === "off" ||
+      this.climateMode === "dry" ||
+      this.climateMode === "fan_only"
+    ) {
+      return localize(
+        this.climateMode === "dry"
+          ? "mode.dry_desc"
+          : this.climateMode === "fan_only"
+            ? "mode.fan_only_desc"
+            : "mode.off_desc",
+        this.language,
+      );
     }
     return this.climateControlActive
       ? localize("room.temperature_panel.status_on", this.language)

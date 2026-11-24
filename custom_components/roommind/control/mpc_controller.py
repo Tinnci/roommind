@@ -17,11 +17,15 @@ from ..const import (
     BANGBANG_COOL_HYSTERESIS,
     BANGBANG_HEAT_HYSTERESIS,
     CLIMATE_MODE_COOL_ONLY,
+    CLIMATE_MODE_DRY,
+    CLIMATE_MODE_FAN_ONLY,
     CLIMATE_MODE_HEAT_ONLY,
+    CLIMATE_MODE_OFF,
     DEFAULT_OUTDOOR_COOLING_MIN,
     DEFAULT_OUTDOOR_HEATING_MAX,
     HEATING_BOOST_TARGET,
     MODE_COOLING,
+    MODE_DRY,
     MODE_FAN_ONLY,
     MODE_HEATING,
     MODE_IDLE,
@@ -34,6 +38,7 @@ from ..utils.device_utils import (
     get_ac_eids,
     get_device_by_eid,
     get_direct_setpoint_eids,
+    get_idle_action,
     get_trv_eids,
     has_reliable_hvac_modes,
 )
@@ -216,6 +221,8 @@ def get_can_heat_cool(
     because the user has explicitly requested a specific target temperature.
     """
     climate_mode = room_config.get("climate_mode", "auto")
+    if climate_mode in (CLIMATE_MODE_DRY, CLIMATE_MODE_FAN_ONLY, CLIMATE_MODE_OFF):
+        return False, False
     can_heat = climate_mode != CLIMATE_MODE_COOL_ONLY and (
         bool(get_trv_eids(room_config.get("devices", []))) or acs_can_heat
     )
@@ -377,6 +384,15 @@ class MPCController:
         targets: TargetTemps,
     ) -> tuple[str, float]:
         """Evaluate dual-target control intent as ``(mode, power_fraction)``."""
+        if self.climate_mode in (CLIMATE_MODE_OFF, CLIMATE_MODE_DRY, CLIMATE_MODE_FAN_ONLY):
+            self.last_airflow_level = 0.0
+            self.last_airflow_mix_level = 0.0
+            self.last_airflow_vent_level = 0.0
+            if self.climate_mode == CLIMATE_MODE_OFF or not self.acs:
+                return MODE_IDLE, 0.0
+            if self.climate_mode == CLIMATE_MODE_DRY:
+                return MODE_DRY, 1.0
+            return MODE_FAN_ONLY, 1.0
 
         if not self.has_external_sensor:
             self.last_airflow_level = 0.0
@@ -681,6 +697,9 @@ class MPCController:
             return MODE_IDLE
 
         can_heat, can_cool = self._get_can_heat_cool()
+
+        if self.climate_mode in (CLIMATE_MODE_OFF, CLIMATE_MODE_DRY, CLIMATE_MODE_FAN_ONLY):
+            return MODE_IDLE
 
         if self.climate_mode == CLIMATE_MODE_COOL_ONLY:
             return MODE_COOLING if can_cool else MODE_IDLE
@@ -1045,10 +1064,99 @@ class MPCController:
     async def _async_apply_standard(self, context: DeviceApplyContext) -> AppliedCommandReport:
         """Dispatch the standard device strategy for the requested mode."""
         if context.mode == MODE_IDLE:
+            if self.climate_mode == CLIMATE_MODE_OFF:
+                return await self._async_apply_force_off(context)
             return await self._async_apply_idle(context)
+        if context.mode == MODE_DRY:
+            return await self._async_apply_dry(context)
+        if context.mode == MODE_FAN_ONLY:
+            return await self._async_apply_fan_only(context)
         if context.mode == MODE_COOLING:
             return await self._async_apply_cooling(context)
         return await self._async_apply_heating(context)
+
+    async def _async_apply_force_off(self, context: DeviceApplyContext) -> AppliedCommandReport:
+        """Turn all climate devices off when the room mode is explicitly Off."""
+        report = AppliedCommandReport()
+        for eid in (*context.thermostats, *self.acs):
+            if eid in context.forced_on:
+                await self._async_idle_device(eid, targets=context.targets, report=report)
+                continue
+            state = self._device_state(eid)
+            hvac_modes = (state.attributes.get("hvac_modes") or []) if state else []
+            if not hvac_modes or "off" in hvac_modes:
+                ops = await async_turn_off_climate(
+                    self.hass,
+                    eid,
+                    area_id=self._area_id,
+                    protect_valve=(eid in context.thermostats),
+                    observations=self._cycle_observations,
+                )
+                for result in ops:
+                    self._record_dispatch_result(result)
+                report.record(eid, active=False, operations=ops)
+            else:
+                await self._async_idle_device(eid, targets=context.targets, report=report)
+        return report
+
+    async def _async_apply_dry(self, context: DeviceApplyContext) -> AppliedCommandReport:
+        """Command ACs to dehumidify (dry), falling back to cooling if dry is unsupported."""
+        report = AppliedCommandReport()
+        for eid in self.acs:
+            if eid in context.forced_off:
+                await self._async_idle_device(eid, targets=context.targets, report=report)
+                continue
+            ac_state = self._device_state(eid)
+            ac_modes = _effective_ac_modes(ac_state)
+            if not ac_modes or "dry" in ac_modes:
+                mode_result = await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "dry"})
+                report.record(eid, active=True, operations=(mode_result,))
+            elif "cool" in ac_modes:
+                mode_result = await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "cool"})
+                if context.targets.cool is not None:
+                    ha_t = self._plan_device_temperature(eid, context, heating=False)
+                    temp_result = await self._call(
+                        "set_temperature",
+                        {"entity_id": eid, "temperature": ha_t, "hvac_mode": "cool"},
+                        temp_intent="cool",
+                    )
+                    report.record(eid, active=True, operations=(mode_result, temp_result))
+                else:
+                    report.record(eid, active=True, operations=(mode_result,))
+            else:
+                await self._async_idle_device(eid, targets=self._idle_targets, report=report)
+        for eid in context.thermostats:
+            await self._async_idle_device(eid, targets=self._idle_targets, report=report)
+        return report
+
+    async def _async_apply_fan_only(self, context: DeviceApplyContext) -> AppliedCommandReport:
+        """Command ACs to fan-only circulation mode while idling TRVs."""
+        report = AppliedCommandReport()
+        for eid in self.acs:
+            if eid in context.forced_off:
+                await self._async_idle_device(eid, targets=context.targets, report=report)
+                continue
+            ac_state = self._device_state(eid)
+            ac_modes = _effective_ac_modes(ac_state)
+            if not ac_modes or "fan_only" in ac_modes:
+                operations: list[DeviceActuationResult] = []
+                mode_result = await self._call("set_hvac_mode", {"entity_id": eid, "hvac_mode": "fan_only"})
+                operations.append(mode_result)
+                _, idle_fan_mode = get_idle_action(self._devices, eid)
+                attrs = ac_state.attributes if ac_state else {}
+                fan_modes = attrs.get("fan_modes") or []
+                if idle_fan_mode and idle_fan_mode in fan_modes and attrs.get("fan_mode") != idle_fan_mode:
+                    fan_result = await self._call(
+                        "set_fan_mode",
+                        {"entity_id": eid, "fan_mode": idle_fan_mode},
+                    )
+                    operations.append(fan_result)
+                report.record(eid, active=True, operations=tuple(operations))
+            else:
+                await self._async_idle_device(eid, targets=self._idle_targets, report=report)
+        for eid in context.thermostats:
+            await self._async_idle_device(eid, targets=self._idle_targets, report=report)
+        return report
 
     async def _async_apply_heating(self, context: DeviceApplyContext) -> AppliedCommandReport:
         """Apply standard heating commands to thermostats and capable ACs."""
@@ -1215,7 +1323,7 @@ class MPCController:
         else:
             target_temp = targets.heat if targets.heat is not None else targets.cool
 
-        if mode != MODE_IDLE and target_temp is None:
+        if mode not in (MODE_IDLE, MODE_DRY, MODE_FAN_ONLY) and target_temp is None:
             mode = MODE_IDLE
 
         self._paced_entities = (
@@ -1257,7 +1365,14 @@ class MPCController:
         # both can self-regulate against the target temperature.
         if (
             not self.has_external_sensor
-            and self.climate_mode not in (CLIMATE_MODE_HEAT_ONLY, CLIMATE_MODE_COOL_ONLY)
+            and self.climate_mode
+            not in (
+                CLIMATE_MODE_HEAT_ONLY,
+                CLIMATE_MODE_COOL_ONLY,
+                CLIMATE_MODE_DRY,
+                CLIMATE_MODE_FAN_ONLY,
+                CLIMATE_MODE_OFF,
+            )
             and mode != MODE_IDLE
         ):
             report = await self._async_apply_managed_auto(

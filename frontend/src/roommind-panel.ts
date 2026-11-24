@@ -1,7 +1,7 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import type { HomeAssistant, HassArea, RoomConfig } from "./types";
-import { getEntitiesForArea, getObservedMode, isRoomMindEntity } from "./utils/room-state";
+import type { AreaInfo, CompressorGroup, HomeAssistant, RoomConfig } from "./types";
+import { getDisplayMode, getEntitiesForArea, isRoomMindEntity } from "./utils/room-state";
 import { loadHaElements } from "./load-ha-elements";
 import { localize } from "./utils/localize";
 import { mdiEyeOff } from "./utils/icons";
@@ -9,8 +9,15 @@ import { roommindThemeStyles } from "./styles/theme-styles";
 import { formatTemp, tempUnit } from "./utils/temperature";
 import { DEFAULT_CONTROL_MODE, DEFAULT_SETBACK_OFFSET } from "./utils/constants";
 import { isRoomControlEffective, summarizeRoomOverview } from "./utils/room-overview-status";
+import {
+  type FleetFilter,
+  matchesFleetFilter,
+  summarizeFleetOverview,
+} from "./utils/fleet-overview";
+import { buildThermostatFleet } from "./utils/thermostat-fleet";
 import "./components/rs-settings";
 import "./components/rs-analytics";
+import "./components/rs-fleet-overview";
 
 const BACK_PATH = "M20,11V13H8L13.5,18.5L12.08,19.92L4.16,12L12.08,4.08L13.5,5.5L8,11H20Z";
 
@@ -24,13 +31,6 @@ const THERMOMETER_PATH =
   "M15 13V5A3 3 0 0 0 9 5V13A5 5 0 1 0 15 13M12 4A1 1 0 0 1 13 5V8H11V5A1 1 0 0 1 12 4Z";
 
 type TabId = "areas" | "analytics" | "settings";
-
-interface AreaInfo {
-  area: HassArea;
-  config: RoomConfig | null;
-  climateEntityCount: number;
-  tempSensorCount: number;
-}
 
 type AreaGroupTone = "attention" | "active" | "normal" | "setup";
 
@@ -71,6 +71,8 @@ export class RoomMindPanel extends LitElement {
   @state() private _groupByFloor = false;
   @state() private _reorderMode = false;
   @state() private _elementsLoaded = false;
+  @state() private _compressorGroups: CompressorGroup[] = [];
+  @state() private _fleetFilter: FleetFilter = "all";
 
   private _refreshInterval: ReturnType<typeof setInterval> | undefined;
   private _routeApplied = false;
@@ -744,6 +746,7 @@ export class RoomMindPanel extends LitElement {
             .climateControlActive=${this._climateControlActive}
             .valveProtectionEnabled=${this._valveProtectionEnabled}
             .globalSetbackOffset=${this._setbackOffset}
+            .compressorGroups=${this._compressorGroups}
             @back-clicked=${this._onBackFromDetail}
             @room-updated=${this._onRoomUpdated}
           ></rs-room-detail>
@@ -776,6 +779,21 @@ export class RoomMindPanel extends LitElement {
     }
 
     const configuredCount = areaInfos.filter((i) => i.config).length;
+    const fleetStats = summarizeFleetOverview(
+      areaInfos,
+      this.hass,
+      this._climateControlActive,
+      this._compressorGroups,
+    );
+    const filteredAreaInfos = areaInfos.filter((info) =>
+      matchesFleetFilter(
+        info,
+        this._fleetFilter,
+        this.hass,
+        this._climateControlActive,
+        this._compressorGroups,
+      ),
+    );
     const overviewStatus = summarizeRoomOverview(
       areaInfos.flatMap((info) => (info.config ? [info.config] : [])),
       this._climateControlActive,
@@ -999,7 +1017,17 @@ export class RoomMindPanel extends LitElement {
             `
           : nothing
       }
-      ${this._renderAreaGroups(areaInfos)}
+      <rs-fleet-overview
+        .language=${l}
+        .stats=${fleetStats}
+        .filter=${this._fleetFilter}
+        @fleet-filter-changed=${this._onFleetFilterChanged}
+      ></rs-fleet-overview>
+      ${
+        filteredAreaInfos.length === 0 && this._fleetFilter !== "all"
+          ? html`<div class="placeholder"><p>${localize("overview.filter.empty", l)}</p></div>`
+          : this._renderAreaGroups(filteredAreaInfos)
+      }
     `;
   }
 
@@ -1045,6 +1073,7 @@ export class RoomMindPanel extends LitElement {
         .hass=${this.hass}
         .controlMode=${this._controlMode}
         .climateControlActive=${this._climateControlActive}
+        .compressorGroups=${this._compressorGroups}
         .reordering=${this._reorderMode}
         .canMoveUp=${idx > 0}
         .canMoveDown=${idx < groupLength - 1}
@@ -1092,25 +1121,31 @@ export class RoomMindPanel extends LitElement {
     return groups.filter((group) => group.items.length > 0);
   }
 
+  private _onFleetFilterChanged(e: CustomEvent<{ filter: FleetFilter }>) {
+    this._fleetFilter = e.detail.filter;
+  }
+
   private _areaPriorityGroupId(info: AreaInfo): AreaGroup["id"] {
     const live = info.config?.live;
-    const mode = getObservedMode(live);
+    const mode = getDisplayMode(live, info.config);
     const hasClimateSelected =
       (info.config?.devices?.length ?? 0) > 0 ||
       (info.config?.thermostats?.length ?? 0) > 0 ||
       (info.config?.acs?.length ?? 0) > 0;
     if (!info.config || (!hasClimateSelected && !info.config.is_outdoor)) return "setup";
+    const fleet = buildThermostatFleet(info.config, this.hass, this._compressorGroups);
     if (
       live?.window_open ||
       live?.mold_risk_level === "warning" ||
       live?.mold_risk_level === "critical" ||
-      live?.learning_paused_reason
+      live?.learning_paused_reason ||
+      fleet.hasConflict
     ) {
       return "attention";
     }
     if (
       isRoomControlEffective(info.config, this._climateControlActive) &&
-      (mode === "heating" || mode === "cooling")
+      (mode === "heating" || mode === "cooling" || mode === "dry" || mode === "fan_only")
     ) {
       return "active";
     }
@@ -1230,10 +1265,12 @@ export class RoomMindPanel extends LitElement {
         schedule_off_action: "eco" | "off";
         valve_protection_enabled: boolean;
         setback_offset?: number;
+        compressor_groups?: CompressorGroup[];
       }>({
         type: "roommind/rooms/list",
       });
       this._rooms = result.rooms;
+      this._compressorGroups = result.compressor_groups ?? [];
       this._vacationActive = result.vacation_active ?? false;
       this._vacationTemp = result.vacation_temp ?? null;
       this._vacationUntil = result.vacation_until ?? null;

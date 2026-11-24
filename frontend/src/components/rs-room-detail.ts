@@ -9,8 +9,10 @@ import type {
   CoverScheduleEntry,
   DeviceConfig,
   AirflowDeviceConfig,
+  CompressorGroup,
 } from "../types";
 import "./rs-hero-status";
+import "./rs-thermostat-fleet";
 import "./rs-temperature-control-panel";
 import "./rs-control-details";
 import "./rs-schedule-settings";
@@ -48,6 +50,7 @@ export class RsRoomDetail extends LitElement {
   @property({ type: Boolean }) public presenceEnabled = false;
   @property({ attribute: false }) public presencePersons: string[] = [];
   @property({ type: Boolean }) public climateControlActive = true;
+  @property({ attribute: false }) public compressorGroups: CompressorGroup[] = [];
 
   @property({ type: Boolean }) public valveProtectionEnabled = false;
   @property({ type: Number }) public globalSetbackOffset = DEFAULT_SETBACK_OFFSET;
@@ -601,6 +604,15 @@ export class RsRoomDetail extends LitElement {
           .climateControlActive=${this.climateControlActive && this._climateControlEnabled}
           @display-name-changed=${this._onDisplayNameChanged}
         ></rs-hero-status>
+        ${
+          !this._isOutdoor && this.config
+            ? html`<rs-thermostat-fleet
+                .hass=${this.hass}
+                .config=${this.config}
+                .compressorGroups=${this.compressorGroups}
+              ></rs-thermostat-fleet>`
+            : nothing
+        }
         ${!this._isOutdoor ? this._renderTemperatureControlPanel() : nothing}
         ${
           !this._isOutdoor
