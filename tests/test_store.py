@@ -23,15 +23,15 @@ def test_runtime_version_matches_manifest() -> None:
 
 @pytest.mark.asyncio
 async def test_writes_serialize_mutation_and_persistence_as_one_transaction(store):
-    """A later mutation cannot enter memory while an earlier snapshot is saving."""
+    """Config writes serialize on _store while thermal writes use _thermal_store independently."""
     await store.async_load()
     first_save_started = asyncio.Event()
     release_first_save = asyncio.Event()
-    saved: list[dict] = []
+    saved_config: list[dict] = []
 
     async def save_snapshot(payload):
-        saved.append(payload)
-        if len(saved) == 1:
+        saved_config.append(payload)
+        if len(saved_config) == 1:
             first_save_started.set()
             await release_first_save.wait()
 
@@ -41,14 +41,14 @@ async def test_writes_serialize_mutation_and_persistence_as_one_transaction(stor
     thermal_write = asyncio.create_task(store.async_save_thermal_data({"room": {"samples": 1}}))
     await asyncio.sleep(0)
 
-    assert store.get_thermal_data() == {}
-    assert saved[0]["thermal_data"] == {}
+    assert "thermal_data" not in saved_config[0]
 
     release_first_save.set()
     await asyncio.gather(settings_write, thermal_write)
 
-    assert saved[1]["settings"]["prediction_enabled"] is False
-    assert saved[1]["thermal_data"] == {"room": {"samples": 1}}
+    assert saved_config[0]["settings"]["prediction_enabled"] is False
+    assert store._store.async_save.await_count == 1
+    assert store._thermal_store.async_save.await_args.args[0] == {"thermal_data": {"room": {"samples": 1}}}
 
 
 @pytest.mark.asyncio
@@ -59,6 +59,7 @@ async def test_identical_writes_do_not_rewrite_storage(store):
     await store.async_save_settings({"nested": {"value": 1}})
     await store.async_save_thermal_data({"model": {"samples": 10}})
     store._store.async_save.reset_mock()
+    store._thermal_store.async_save.reset_mock()
 
     await store.async_save_room("bedroom", {"comfort_temp": 25.01})
     await store.async_save_settings({"nested": {"value": 1}})
@@ -66,8 +67,10 @@ async def test_identical_writes_do_not_rewrite_storage(store):
     await store.async_clear_thermal_data_room("absent")
 
     store._store.async_save.assert_not_awaited()
+    store._thermal_store.async_save.assert_not_awaited()
     await store.async_save_room("bedroom", {"comfort_temp": 25.02})
     store._store.async_save.assert_awaited_once()
+    store._thermal_store.async_save.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -477,6 +480,25 @@ async def test_thermal_data_migration_from_old_store(store):
     await store.async_load()
     # After fresh load, thermal data should be empty dict
     assert store.get_thermal_data() == {}
+
+
+@pytest.mark.asyncio
+async def test_legacy_embedded_thermal_data_migrates_to_split_store(store):
+    """Legacy storage with embedded thermal_data migrates to _thermal_store and cleans config."""
+    store._store.async_load = AsyncMock(
+        return_value={
+            "rooms": {},
+            "settings": {"outdoor_temp_sensor": "sensor.out"},
+            "thermal_data": {"living": {"alpha": 0.42}},
+        }
+    )
+    await store.async_load()
+
+    assert store.get_thermal_data() == {"living": {"alpha": 0.42}}
+    store._thermal_store.async_save.assert_awaited_once_with({"thermal_data": {"living": {"alpha": 0.42}}})
+    saved_config = store._store.async_save.call_args.args[0]
+    assert "thermal_data" not in saved_config
+    assert saved_config["settings"] == {"outdoor_temp_sensor": "sensor.out"}
 
 
 # ---------------------------------------------------------------------------

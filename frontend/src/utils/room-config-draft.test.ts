@@ -7,6 +7,7 @@ import {
   buildRoomSavePayload,
   createRoomConfigDraft,
   createEmptyRoomConfigDraft,
+  mergeAreaSuggestionsIntoDraft,
   patchRoomConfigDraft,
 } from "./room-config-draft";
 import type { RoomConfig } from "../types";
@@ -274,5 +275,55 @@ describe("room config draft", () => {
     expect(next.comfortHeat).toBe(20.5);
     expect(next.ecoCool).toBe(draft.ecoCool);
     expect(next.selectedTempSensors).toBe(draft.selectedTempSensors);
+  });
+
+  test("merges non-duplicate HA area suggestions into draft", () => {
+    const draft = createRoomConfigDraft({
+      area_id: "living",
+      thermostats: [],
+      acs: ["climate.existing_ac"],
+      temperature_sensor: "",
+      humidity_sensor: "",
+      window_sensors: [],
+      window_open_delay: 0,
+      window_close_delay: 0,
+      climate_mode: "auto",
+      schedules: [],
+      schedule_selector_entity: "",
+      comfort_heat: 21,
+      comfort_cool: 24,
+      eco_heat: 17,
+      eco_cool: 27,
+    });
+
+    const result = mergeAreaSuggestionsIntoDraft(draft, {
+      area_id: "living",
+      devices: [
+        { entity_id: "climate.existing_ac", type: "ac", role: "auto" },
+        { entity_id: "climate.second_ac", type: "ac", role: "auto" },
+      ],
+      temperature_sensors: ["sensor.living_temp"],
+      humidity_sensors: ["sensor.living_rh"],
+      window_sensors: ["binary_sensor.living_window"],
+      occupancy_sensors: ["binary_sensor.living_motion"],
+      covers: ["cover.living_blinds"],
+      airflow_devices: [
+        {
+          entity_id: "fan.living_fan",
+          role: "circulation",
+          controllable: true,
+          control_enabled: false,
+        },
+      ],
+    });
+
+    expect(result.addedCount).toBe(7);
+    expect(result.draft.devices.map((d) => d.entity_id)).toEqual([
+      "climate.existing_ac",
+      "climate.second_ac",
+    ]);
+    expect(result.draft.selectedTempSensor).toBe("sensor.living_temp");
+    expect(result.draft.selectedHumiditySensor).toBe("sensor.living_rh");
+    expect([...result.draft.selectedCovers]).toEqual(["cover.living_blinds"]);
   });
 });

@@ -935,5 +935,8 @@
   "overview.filter.heating": "Heating",
   "overview.filter.off": "Off",
   "overview.filter.attention": "Attention",
-  "overview.filter.empty": "No rooms match the selected filter."
+  "overview.filter.empty": "No rooms match the selected filter.",
+  "room.config.auto_detect": "Auto-detect from HA Area",
+  "room.config.auto_detect_added": "Added {count} entities from HA Area",
+  "room.config.auto_detect_none": "All area entities are already configured"
 }

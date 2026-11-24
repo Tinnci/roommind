@@ -16,6 +16,8 @@ from homeassistant.components.persistent_notification import async_dismiss as as
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import area_registry as ar
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import (
@@ -125,6 +127,7 @@ class EntityPlatform(StrEnum):
 
     SENSOR = "sensor"
     CLIMATE = "climate"
+    CLIMATE_MODE_SELECT = "climate_mode_select"
     CLIMATE_CONTROL_SWITCH = "climate_control_switch"
     COVER_SWITCH = "cover_switch"
     COVER_BINARY_SENSOR = "cover_binary_sensor"
@@ -1051,6 +1054,7 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if self._outdoor_warning_sent:
                 self._outdoor_warning_sent = False
                 async_dismiss_notification(self.hass, OUTDOOR_UNAVAILABLE_NOTIFICATION_ID)
+            self._delete_outdoor_repair_issue()
             return
 
         self._outdoor_unavailable_cycles += 1
@@ -1080,7 +1084,31 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             title=payload.title,
             notification_id=OUTDOOR_UNAVAILABLE_NOTIFICATION_ID,
         )
+        self._create_outdoor_repair_issue(sensor_id, weather_eid)
         self._outdoor_warning_sent = True
+
+    def _create_outdoor_repair_issue(self, sensor_id: str, weather_eid: str) -> None:
+        """Surface an outdoor temperature outage in HA Repairs safely."""
+        try:
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                "outdoor_temp_unavailable",
+                is_fixable=False,
+                is_persistent=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="outdoor_temp_unavailable",
+                translation_placeholders={"sensor": sensor_id, "weather": weather_eid},
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _delete_outdoor_repair_issue(self) -> None:
+        """Clear any active outdoor temperature HA Repairs issue safely."""
+        try:
+            ir.async_delete_issue(self.hass, DOMAIN, "outdoor_temp_unavailable")
+        except Exception:  # noqa: BLE001
+            pass
 
     def _select_airflow_curve(self, room: dict, key: str) -> list[dict[str, float]]:
         """Merge airflow curves from configured climate/HVAC fan devices."""
@@ -2151,6 +2179,7 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         self._add_entity_platform_room(EntityPlatform.SENSOR, area_id)
         self._add_entity_platform_room(EntityPlatform.CLIMATE, area_id)
+        self._add_entity_platform_room(EntityPlatform.CLIMATE_MODE_SELECT, area_id)
         self._add_entity_platform_room(EntityPlatform.CLIMATE_CONTROL_SWITCH, area_id)
 
         # Cover entities: only create when covers are configured.
@@ -2177,6 +2206,14 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         for entity_id in entries_to_remove:
             registry.async_remove(entity_id)
+
+        try:
+            device_reg = dr.async_get(self.hass)
+            device = device_reg.async_get_device(identifiers={(DOMAIN, area_id)})
+            if device is not None:
+                device_reg.async_remove_device(device.id)
+        except Exception:  # noqa: BLE001
+            pass
 
         # Clean up in-memory state
         self._window_manager.remove_room(area_id)
@@ -2209,10 +2246,10 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         registry = er.async_get(self.hass)
 
         # Known valid suffixes for each condition
-        always_valid = ("_target_temp", "_mode", "_override", "_comfort", "_climate_control")
+        always_valid = ("_target_temp", "_mode", "_override", "_comfort", "_climate_control", "_climate_mode")
         cover_only = ("_cover_auto", "_cover_paused")
         # Global entities (not per-room) that should never be cleaned up
-        global_uids = {f"{DOMAIN}_vacation"}
+        global_uids = {f"{DOMAIN}_vacation", f"{DOMAIN}_climate_control"}
 
         to_remove: list[str] = []
         for entity_entry in registry.entities.values():

@@ -1,0 +1,110 @@
+set_climate_mode:
+  name: Set room HVAC mode
+  description: Change the active RoomMind HVAC operating mode for a configured room.
+  fields:
+    area_id:
+      name: Room area ID
+      description: Home Assistant area ID managed by RoomMind (for example, living_room).
+      required: true
+      example: living_room
+      selector:
+        area:
+    climate_mode:
+      name: HVAC mode
+      description: Target operating mode for the room.
+      required: true
+      selector:
+        select:
+          options:
+            - auto
+            - cool_only
+            - heat_only
+            - dry
+            - fan_only
+            - "off"
+
+set_override:
+  name: Set room temperature override
+  description: Apply a temporary or permanent temperature override for a configured room.
+  fields:
+    area_id:
+      name: Room area ID
+      description: Home Assistant area ID managed by RoomMind.
+      required: true
+      example: living_room
+      selector:
+        area:
+    override_type:
+      name: Override type
+      description: Use a room preset or specify a custom setpoint.
+      required: false
+      default: custom
+      selector:
+        select:
+          options:
+            - custom
+            - boost
+            - eco
+    temperature:
+      name: Target temperature
+      description: Target temperature in Celsius (required when override_type is custom).
+      required: false
+      selector:
+        number:
+          min: 5
+          max: 35
+          step: 0.5
+          unit_of_measurement: "°C"
+    duration_hours:
+      name: Duration (hours)
+      description: Duration in hours. Leave unset or 0 for a permanent hold until cleared.
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 168
+          step: 0.5
+          unit_of_measurement: "h"
+
+clear_override:
+  name: Clear room temperature override
+  description: Cancel any active override and return the room to its schedule policy.
+  fields:
+    area_id:
+      name: Room area ID
+      description: Home Assistant area ID managed by RoomMind.
+      required: true
+      example: living_room
+      selector:
+        area:
+
+set_vacation:
+  name: Set vacation mode
+  description: Enable or disable whole-home vacation setback mode.
+  fields:
+    enabled:
+      name: Enabled
+      description: Turn vacation mode on or off.
+      required: true
+      selector:
+        boolean:
+    temperature:
+      name: Vacation temperature
+      description: Target temperature in Celsius while vacation mode is active.
+      required: false
+      selector:
+        number:
+          min: 5
+          max: 30
+          step: 0.5
+          unit_of_measurement: "°C"
+    duration_hours:
+      name: Duration (hours)
+      description: Optional duration in hours before vacation mode expires automatically.
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 8760
+          step: 1
+          unit_of_measurement: "h"

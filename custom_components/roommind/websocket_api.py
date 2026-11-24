@@ -13,10 +13,6 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 
 from .const import (
-    DEFAULT_COMFORT_COOL,
-    DEFAULT_COMFORT_HEAT,
-    DEFAULT_ECO_COOL,
-    DEFAULT_ECO_HEAT,
     DOMAIN,
     OVERRIDE_TYPES,
     build_override_live,
@@ -29,6 +25,7 @@ from .services.analytics_service import (
     _safe_float,  # noqa: F401 - re-exported for tests
     build_analytics_data,
 )
+from .services.ha_services import resolve_override_temperature
 from .settings_config import (
     DEFAULT_CONTROL_MODE,
     SETTINGS_FIELDS,
@@ -36,6 +33,7 @@ from .settings_config import (
     SettingsValidationError,
     validate_settings_changes,
 )
+from .utils.area_discovery import suggest_area_entities
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -386,23 +384,11 @@ async def websocket_override_set(
         return
 
     # Resolve override temperature
-    if override_type == "boost":
-        climate_mode = room.get("climate_mode", "auto")
-        if climate_mode == "cool_only":
-            override_temp = room.get("comfort_cool", DEFAULT_COMFORT_COOL)
-        else:
-            override_temp = room.get("comfort_heat", room.get("comfort_temp", DEFAULT_COMFORT_HEAT))
-    elif override_type == "eco":
-        climate_mode = room.get("climate_mode", "auto")
-        if climate_mode == "cool_only":
-            override_temp = room.get("eco_cool", DEFAULT_ECO_COOL)
-        else:
-            override_temp = room.get("eco_heat", room.get("eco_temp", DEFAULT_ECO_HEAT))
-    else:  # custom
-        override_temp = msg.get("temperature")
-        if override_temp is None:
-            connection.send_error(msg["id"], "invalid", "Custom override requires temperature")
-            return
+    try:
+        override_temp = resolve_override_temperature(room, override_type, msg.get("temperature"))
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid", str(err))
+        return
 
     override_until = (time.time() + duration_hours * 3600) if duration_hours else None
 
@@ -683,6 +669,22 @@ async def websocket_get_diagnostics(
     connection.send_result(msg["id"], result)
 
 
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "roommind/area/suggest",
+        vol.Required("area_id"): str,
+    }
+)
+@websocket_api.async_response
+async def websocket_area_suggest(
+    hass: HomeAssistant,
+    connection: ActiveConnection,
+    msg: dict,
+) -> None:
+    """Return auto-discovered HA Area entities suitable for RoomMind configuration."""
+    connection.send_result(msg["id"], suggest_area_entities(hass, msg["area_id"]))
+
+
 # ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
@@ -703,3 +705,4 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_thermal_reset_all)
     websocket_api.async_register_command(hass, websocket_boost_learning)
     websocket_api.async_register_command(hass, websocket_get_diagnostics)
+    websocket_api.async_register_command(hass, websocket_area_suggest)

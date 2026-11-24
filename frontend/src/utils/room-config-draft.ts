@@ -1,5 +1,6 @@
 import type {
   AirflowDeviceConfig,
+  AreaSuggestion,
   ClimateMode,
   CoverScheduleEntry,
   DeviceConfig,
@@ -379,6 +380,82 @@ export function humiditySensorIdsForSave(
     if (id && !ids.includes(id)) ids.push(id);
   }
   return ids;
+}
+
+export function mergeAreaSuggestionsIntoDraft(
+  draft: RoomConfigDraft,
+  suggestion: AreaSuggestion,
+): { draft: RoomConfigDraft; addedCount: number } {
+  let addedCount = 0;
+
+  const existingDeviceIds = new Set(draft.devices.map((d) => d.entity_id));
+  const newDevices = suggestion.devices.filter((d) => !existingDeviceIds.has(d.entity_id));
+  addedCount += newDevices.length;
+  const devices = [...draft.devices, ...newDevices];
+
+  const existingAirflowIds = new Set(draft.airflowDevices.map((d) => d.entity_id));
+  const newAirflow = suggestion.airflow_devices.filter((d) => !existingAirflowIds.has(d.entity_id));
+  addedCount += newAirflow.length;
+  const airflowDevices = [...draft.airflowDevices, ...newAirflow];
+
+  const selectedTempSensors = new Set(draft.selectedTempSensors);
+  let selectedTempSensor = draft.selectedTempSensor;
+  for (const eid of suggestion.temperature_sensors) {
+    if (!selectedTempSensors.has(eid)) {
+      selectedTempSensors.add(eid);
+      addedCount += 1;
+    }
+    if (!selectedTempSensor) selectedTempSensor = eid;
+  }
+
+  const selectedHumiditySensors = new Set(draft.selectedHumiditySensors);
+  let selectedHumiditySensor = draft.selectedHumiditySensor;
+  for (const eid of suggestion.humidity_sensors) {
+    if (!selectedHumiditySensors.has(eid)) {
+      selectedHumiditySensors.add(eid);
+      addedCount += 1;
+    }
+    if (!selectedHumiditySensor) selectedHumiditySensor = eid;
+  }
+
+  const selectedWindowSensors = new Set(draft.selectedWindowSensors);
+  for (const eid of suggestion.window_sensors) {
+    if (!selectedWindowSensors.has(eid)) {
+      selectedWindowSensors.add(eid);
+      addedCount += 1;
+    }
+  }
+
+  const selectedOccupancySensors = new Set(draft.selectedOccupancySensors);
+  for (const eid of suggestion.occupancy_sensors) {
+    if (!selectedOccupancySensors.has(eid)) {
+      selectedOccupancySensors.add(eid);
+      addedCount += 1;
+    }
+  }
+
+  const selectedCovers = new Set(draft.selectedCovers);
+  for (const eid of suggestion.covers) {
+    if (!selectedCovers.has(eid)) {
+      selectedCovers.add(eid);
+      addedCount += 1;
+    }
+  }
+
+  return {
+    addedCount,
+    draft: patchRoomConfigDraft(draft, {
+      devices,
+      airflowDevices,
+      selectedTempSensor,
+      selectedTempSensors,
+      selectedHumiditySensor,
+      selectedHumiditySensors,
+      selectedWindowSensors,
+      selectedOccupancySensors,
+      selectedCovers,
+    }),
+  };
 }
 
 export function buildRoomSavePayload(

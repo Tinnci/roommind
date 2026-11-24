@@ -15,6 +15,8 @@ export class RsRoomConfigurationHub extends LitElement {
   @property({ attribute: false }) public metrics: ConfigurationHubMetrics = {};
   @property({ type: Boolean }) public isOutdoor = false;
   @property({ type: String }) public language = "en";
+  @property({ type: String }) public autoDetectStatus = "";
+  @property({ type: Boolean }) public autoDetectBusy = false;
 
   override render() {
     if (this.sections.length === 0) return nothing;
@@ -25,6 +27,25 @@ export class RsRoomConfigurationHub extends LitElement {
         icon="mdi:tune-variant"
         .heading=${localize("room.section.configuration", this.language)}
       >
+        ${
+          !this.isOutdoor
+            ? html`<button
+                slot="header-extras"
+                type="button"
+                class="auto-detect-btn"
+                ?disabled=${this.autoDetectBusy}
+                @click=${this._emitAutoDetect}
+              >
+                <ha-icon icon="mdi:auto-fix"></ha-icon>
+                <span>${localize("room.config.auto_detect", this.language)}</span>
+              </button>`
+            : nothing
+        }
+        ${
+          this.autoDetectStatus
+            ? html`<div class="auto-detect-status">${this.autoDetectStatus}</div>`
+            : nothing
+        }
         <div class="config-grid">
           ${items.map((item) =>
             item.editable
@@ -108,9 +129,49 @@ export class RsRoomConfigurationHub extends LitElement {
     );
   }
 
+  private _emitAutoDetect() {
+    this.dispatchEvent(
+      new CustomEvent("auto-detect-area", {
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
   static override styles = css`
     :host {
       display: block;
+    }
+
+    .auto-detect-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(var(--rgb-primary-color, 3, 169, 244), 0.35);
+      background: rgba(var(--rgb-primary-color, 3, 169, 244), 0.08);
+      color: var(--primary-color);
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .auto-detect-btn:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+
+    .auto-detect-btn ha-icon {
+      --mdc-icon-size: 15px;
+    }
+
+    .auto-detect-status {
+      font-size: 12px;
+      color: var(--primary-color);
+      margin-bottom: 10px;
+      font-weight: 500;
     }
 
     .config-grid {

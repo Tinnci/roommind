@@ -26,6 +26,7 @@ class TestStoreRoundTrip:
 
         reloaded = RoomMindStore(hass)
         reloaded._store = real_store._store
+        reloaded._thermal_store = real_store._thermal_store
         reloaded._store.async_load.return_value = copy.deepcopy(saved_snapshot)
         await reloaded.async_load()
         assert reloaded.get_settings()["setback_offset"] == 3.0
@@ -73,5 +74,6 @@ class TestStoreRoundTrip:
         thermal = {"living_room": {"alpha": 0.5, "beta_h": 0.3}}
         await real_store.async_save_thermal_data(thermal)
 
-        assert real_store._store.async_save.called
+        assert real_store._thermal_store.async_save.called
+        assert not real_store._store.async_save.called
         assert real_store.get_thermal_data() == thermal

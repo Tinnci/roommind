@@ -15,10 +15,33 @@ def _make_state(entity_id: str, state: str) -> MagicMock:
 
 
 def test_presence_enabled_but_no_persons_returns_false():
-    """When presence_enabled but presence_persons is empty, return False."""
+    """When presence_enabled, persons empty, and no zone.home count exists, return False."""
     hass = MagicMock()
+    hass.states.get = MagicMock(return_value=None)
     settings = {"presence_enabled": True, "presence_persons": []}
     assert is_presence_away(hass, {}, settings) is False
+
+
+def test_presence_falls_back_to_zone_home():
+    """Empty persons list delegates to native HA zone.home person count."""
+    hass = MagicMock()
+    hass.states.get = MagicMock(return_value=_make_state("zone.home", "0"))
+    settings = {"presence_enabled": True, "presence_persons": []}
+    assert is_presence_away(hass, {}, settings) is True
+
+    hass.states.get = MagicMock(return_value=_make_state("zone.home", "2"))
+    assert is_presence_away(hass, {}, settings) is False
+
+    hass.states.get = MagicMock(return_value=_make_state("zone.home", "unavailable"))
+    assert is_presence_away(hass, {}, settings) is False
+
+
+def test_room_persons_used_even_when_global_persons_empty():
+    """Room-level persons work even if global presence_persons is empty."""
+    hass = MagicMock()
+    hass.states.get = MagicMock(return_value=_make_state("person.lisa", "not_home"))
+    settings = {"presence_enabled": True, "presence_persons": []}
+    assert is_presence_away(hass, {"presence_persons": ["person.lisa"]}, settings) is True
 
 
 def test_binary_sensor_off_counts_as_away():

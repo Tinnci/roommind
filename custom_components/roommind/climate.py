@@ -20,6 +20,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DEFAULT_COMFORT_TEMP, DOMAIN, OVERRIDE_CUSTOM, is_override_active
 from .coordinator import EntityPlatform, RoomMindCoordinator
+from .utils.device_info import room_device_info
 from .utils.entity_translation import room_translation_placeholders
 
 
@@ -74,6 +75,7 @@ class _RoomMindClimate(CoordinatorEntity, ClimateEntity):
         self._attr_unique_id = f"{DOMAIN}_{area_id}_{suffix}"
         self._attr_translation_key = suffix
         self._attr_translation_placeholders = room_translation_placeholders(coordinator, area_id)
+        self._attr_device_info = room_device_info(coordinator, area_id)
         self.entity_id = f"climate.{DOMAIN}_{area_id}_{suffix}"
 
     @property

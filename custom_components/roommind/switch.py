@@ -13,6 +13,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, VACATION_SENTINEL_UNTIL
 from .coordinator import EntityPlatform, RoomMindCoordinator
+from .utils.device_info import hub_device_info, room_device_info
 from .utils.entity_translation import room_translation_placeholders
 
 
@@ -40,8 +41,11 @@ async def async_setup_entry(
     """Set up RoomMind switch entities from a config entry."""
     coordinator: RoomMindCoordinator = hass.data[DOMAIN][entry.entry_id]
     store = hass.data[DOMAIN]["store"]
-    # Global vacation switch (always created)
-    entities: list[SwitchEntity] = [RoomMindVacationSwitch(coordinator)]
+    # Global hub switches (always created)
+    entities: list[SwitchEntity] = [
+        RoomMindVacationSwitch(coordinator),
+        RoomMindGlobalClimateControlSwitch(coordinator),
+    ]
 
     rooms = store.get_rooms()
     coordinator.register_entity_platform(
@@ -75,6 +79,7 @@ class RoomMindCoverAutoSwitch(CoordinatorEntity, SwitchEntity):
         self._attr_unique_id = f"{DOMAIN}_{area_id}_cover_auto"
         self._attr_translation_key = "cover_auto"
         self._attr_translation_placeholders = room_translation_placeholders(coordinator, area_id)
+        self._attr_device_info = room_device_info(coordinator, area_id)
         self._attr_icon = "mdi:blinds-horizontal"
         self.entity_id = f"switch.{DOMAIN}_{area_id}_cover_auto"
 
@@ -107,6 +112,7 @@ class RoomMindClimateControlSwitch(CoordinatorEntity, SwitchEntity):
         self._attr_unique_id = f"{DOMAIN}_{area_id}_climate_control"
         self._attr_translation_key = "climate_control"
         self._attr_translation_placeholders = room_translation_placeholders(coordinator, area_id)
+        self._attr_device_info = room_device_info(coordinator, area_id)
         self._attr_icon = "mdi:thermostat"
         self.entity_id = f"switch.{DOMAIN}_{area_id}_climate_control"
 
@@ -136,6 +142,7 @@ class RoomMindVacationSwitch(CoordinatorEntity, SwitchEntity):
         super().__init__(coordinator)
         self._attr_unique_id = f"{DOMAIN}_vacation"
         self._attr_translation_key = "vacation_mode"
+        self._attr_device_info = hub_device_info()
         self._attr_icon = "mdi:beach"
         self.entity_id = f"switch.{DOMAIN}_vacation"
 
@@ -164,4 +171,37 @@ class RoomMindVacationSwitch(CoordinatorEntity, SwitchEntity):
         """Deactivate vacation mode."""
         store = self.coordinator.hass.data[DOMAIN]["store"]
         await store.async_save_settings({"vacation_until": None})
+        await self.coordinator.async_request_refresh()
+
+
+class RoomMindGlobalClimateControlSwitch(CoordinatorEntity, SwitchEntity):
+    """Master switch to enable or suspend RoomMind climate control globally."""
+
+    _attr_has_entity_name = True
+
+    def __init__(self, coordinator: RoomMindCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{DOMAIN}_climate_control"
+        self._attr_translation_key = "global_climate_control"
+        self._attr_device_info = hub_device_info()
+        self._attr_icon = "mdi:home-thermometer"
+        self.entity_id = f"switch.{DOMAIN}_climate_control"
+
+    @property
+    def is_on(self) -> bool:
+        """Return True if whole-home RoomMind climate control is active."""
+        store = self.coordinator.hass.data[DOMAIN]["store"]
+        settings = store.get_settings()
+        return bool(settings.get("climate_control_active", True))
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Enable whole-home RoomMind climate control."""
+        store = self.coordinator.hass.data[DOMAIN]["store"]
+        await store.async_save_settings({"climate_control_active": True})
+        await self.coordinator.async_request_refresh()
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Suspend whole-home RoomMind climate control."""
+        store = self.coordinator.hass.data[DOMAIN]["store"]
+        await store.async_save_settings({"climate_control_active": False})
         await self.coordinator.async_request_refresh()

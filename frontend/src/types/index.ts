@@ -447,6 +447,17 @@ export interface AreaInfo {
   tempSensorCount: number;
 }
 
+export interface AreaSuggestion {
+  area_id: string;
+  devices: DeviceConfig[];
+  temperature_sensors: string[];
+  humidity_sensors: string[];
+  window_sensors: string[];
+  occupancy_sensors: string[];
+  covers: string[];
+  airflow_devices: AirflowDeviceConfig[];
+}
+
 export interface HassFloor {
   floor_id: string;
   name: string;

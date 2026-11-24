@@ -177,4 +177,7 @@ def store(hass):
     s._store = AsyncMock()
     s._store.async_load = AsyncMock(return_value=None)
     s._store.async_save = AsyncMock()
+    s._thermal_store = AsyncMock()
+    s._thermal_store.async_load = AsyncMock(return_value=None)
+    s._thermal_store.async_save = AsyncMock()
     return s

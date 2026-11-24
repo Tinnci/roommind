@@ -1879,14 +1879,32 @@ async def test_analytics_model_has_occupancy_sensors_false(ws_hass, store, conne
 
 
 def test_register_websocket_commands(hass):
-    """async_register_websocket_commands registers all 11 commands."""
+    """async_register_websocket_commands registers all 13 commands."""
     from unittest.mock import patch
 
     from custom_components.roommind.websocket_api import async_register_websocket_commands
 
     with patch("custom_components.roommind.websocket_api.websocket_api.async_register_command") as mock_reg:
         async_register_websocket_commands(hass)
-        assert mock_reg.call_count == 12
+        assert mock_reg.call_count == 13
+
+
+@pytest.mark.asyncio
+async def test_websocket_area_suggest(ws_hass, connection, monkeypatch):
+    """roommind/area/suggest returns entities discovered from the HA Area."""
+    from custom_components.roommind.websocket_api import websocket_area_suggest
+
+    monkeypatch.setattr(
+        "custom_components.roommind.websocket_api.suggest_area_entities",
+        lambda _hass, area_id: {"area_id": area_id, "devices": [{"entity_id": "climate.ac", "type": "ac"}]},
+    )
+    await websocket_area_suggest.__wrapped__(
+        ws_hass, connection, {"id": 9, "type": "roommind/area/suggest", "area_id": "living"}
+    )
+    connection.send_result.assert_called_once_with(
+        9,
+        {"area_id": "living", "devices": [{"entity_id": "climate.ac", "type": "ac"}]},
+    )
 
 
 # ---------------------------------------------------------------------------

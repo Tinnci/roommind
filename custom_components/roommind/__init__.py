@@ -19,6 +19,7 @@ from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN, PLATFORMS, VERSION
 from .coordinator import RoomMindCoordinator
+from .services.ha_services import async_register_services, async_unregister_services
 from .store import RoomMindStore
 from .utils.i18n import async_preload_translations
 from .websocket_api import async_register_websocket_commands
@@ -32,6 +33,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the RoomMind integration (YAML, runs once)."""
     hass.data.setdefault(DOMAIN, {})
     async_register_websocket_commands(hass)
+    await async_register_services(hass)
     return True
 
 
@@ -127,6 +129,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Remove panel if no entries remain
     if not hass.data[DOMAIN]:
         async_remove_panel(hass, "roommind")
+        await async_unregister_services(hass)
 
     return unload_ok
 

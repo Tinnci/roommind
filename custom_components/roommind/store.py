@@ -21,6 +21,7 @@ _LOGGER = logging.getLogger(__name__)
 
 STORAGE_VERSION = 1
 STORAGE_KEY = DOMAIN
+THERMAL_STORAGE_KEY = f"{DOMAIN}_thermal"
 
 
 _ORPHAN_SETTINGS_KEYS = ("heating_threshold", "cooling_threshold")
@@ -32,22 +33,33 @@ class RoomMindStore:
     def __init__(self, hass: HomeAssistant) -> None:
         """Initialise the store."""
         self._store: Store[dict] = Store(hass, STORAGE_VERSION, STORAGE_KEY)
+        self._thermal_store: Store[dict] = Store(hass, STORAGE_VERSION, THERMAL_STORAGE_KEY)
         self._data: dict[str, dict] = {}
         self._settings: dict = {}
         self._thermal_data: dict = {}
         self._write_lock = asyncio.Lock()
+        self._thermal_write_lock = asyncio.Lock()
         self._last_saved_snapshot: dict | None = None
+        self._last_saved_thermal_snapshot: dict | None = None
 
     @property
     def _write_transaction(self) -> asyncio.Lock:
-        """Return the write lock, tolerating legacy test/store construction."""
+        """Return the config write lock, tolerating legacy test/store construction."""
         lock = getattr(self, "_write_lock", None)
         if lock is None:
             lock = self._write_lock = asyncio.Lock()
         return lock
 
+    @property
+    def _thermal_transaction(self) -> asyncio.Lock:
+        """Return the thermal write lock, tolerating partial test construction."""
+        lock = getattr(self, "_thermal_write_lock", None)
+        if lock is None:
+            lock = self._thermal_write_lock = asyncio.Lock()
+        return lock
+
     async def async_load(self) -> None:
-        """Load room data from the HA store."""
+        """Load room configuration and split thermal data from the HA stores."""
         stored = await self._store.async_load()
         if stored and "rooms" in stored:
             self._data = stored["rooms"]
@@ -55,10 +67,23 @@ class RoomMindStore:
             self._data = {}
 
         self._settings = stored.get("settings", {}) if stored else {}
-        self._thermal_data = stored.get("thermal_data", {}) if stored else {}
+        legacy_thermal = stored.get("thermal_data") if isinstance(stored, dict) else None
+
+        thermal_store = getattr(self, "_thermal_store", None)
+        thermal_stored = await thermal_store.async_load() if thermal_store is not None else None
+        if isinstance(thermal_stored, dict) and "thermal_data" in thermal_stored:
+            self._thermal_data = thermal_stored.get("thermal_data", {})
+            self._last_saved_thermal_snapshot = copy.deepcopy({"thermal_data": self._thermal_data})
+        elif isinstance(legacy_thermal, dict):
+            self._thermal_data = copy.deepcopy(legacy_thermal)
+            self._last_saved_thermal_snapshot = None
+        else:
+            self._thermal_data = {}
+            self._last_saved_thermal_snapshot = None
+
         self._last_saved_snapshot = (
-            copy.deepcopy({"rooms": self._data, "settings": self._settings, "thermal_data": self._thermal_data})
-            if stored
+            copy.deepcopy({"rooms": self._data, "settings": self._settings})
+            if stored and not isinstance(legacy_thermal, dict)
             else None
         )
 
@@ -75,7 +100,10 @@ class RoomMindStore:
             if migration.airflow_ttl_migrated:
                 airflow_ttl_migrated += 1
         orphan_settings_removed = [k for k in _ORPHAN_SETTINGS_KEYS if self._settings.pop(k, None) is not None]
-        if device_migrated or hp_migrated or airflow_ttl_migrated or orphan_settings_removed:
+        had_legacy_thermal = isinstance(stored, dict) and "thermal_data" in stored
+        if had_legacy_thermal and not (isinstance(thermal_stored, dict) and "thermal_data" in thermal_stored):
+            await self._async_save_thermal()
+        if device_migrated or hp_migrated or airflow_ttl_migrated or orphan_settings_removed or had_legacy_thermal:
             await self._async_save()
         if device_migrated:
             _LOGGER.info("Migrated %d room(s) to unified device model", device_migrated)
@@ -85,20 +113,38 @@ class RoomMindStore:
             _LOGGER.info("Migrated airflow assumed-state TTL in %d room(s)", airflow_ttl_migrated)
         if orphan_settings_removed:
             _LOGGER.info("Removed orphan setting(s): %s", ", ".join(orphan_settings_removed))
+        if had_legacy_thermal:
+            _LOGGER.info("Migrated thermal model data into separate store '%s'", THERMAL_STORAGE_KEY)
 
     async def _async_save(self) -> None:
-        """Persist current room data to the HA store."""
+        """Persist current room configuration to the config HA store."""
         async with self._write_transaction:
             await self._async_save_locked()
 
     async def _async_save_locked(self) -> None:
-        """Persist one immutable snapshot while holding the write transaction."""
-        snapshot = copy.deepcopy({"rooms": self._data, "settings": self._settings, "thermal_data": self._thermal_data})
+        """Persist one immutable config snapshot while holding the write transaction."""
+        snapshot = copy.deepcopy({"rooms": self._data, "settings": self._settings})
         if snapshot == getattr(self, "_last_saved_snapshot", None):
             return
         await self._store.async_save(snapshot)
         # Remember only successful writes so an identical retry remains durable.
         self._last_saved_snapshot = copy.deepcopy(snapshot)
+
+    async def _async_save_thermal(self) -> None:
+        """Persist current thermal learning data to its dedicated HA store."""
+        async with self._thermal_transaction:
+            await self._async_save_thermal_locked()
+
+    async def _async_save_thermal_locked(self) -> None:
+        """Persist one immutable thermal snapshot while holding the thermal transaction."""
+        thermal_store = getattr(self, "_thermal_store", None)
+        if thermal_store is None:
+            return
+        snapshot = copy.deepcopy({"thermal_data": self._thermal_data})
+        if snapshot == getattr(self, "_last_saved_thermal_snapshot", None):
+            return
+        await thermal_store.async_save(snapshot)
+        self._last_saved_thermal_snapshot = copy.deepcopy(snapshot)
 
     def get_rooms(self) -> dict[str, dict]:
         """Return a deep copy of all rooms (with migration applied)."""
@@ -135,21 +181,21 @@ class RoomMindStore:
     async def async_save_thermal_data(self, data: dict) -> None:
         """Replace thermal learning data and persist."""
         data = copy.deepcopy(data)
-        async with self._write_transaction:
+        async with self._thermal_transaction:
             self._thermal_data = data
-            await self._async_save_locked()
+            await self._async_save_thermal_locked()
 
     async def async_clear_thermal_data_room(self, area_id: str) -> None:
         """Clear thermal learning data for a single room."""
-        async with self._write_transaction:
+        async with self._thermal_transaction:
             self._thermal_data.pop(area_id, None)
-            await self._async_save_locked()
+            await self._async_save_thermal_locked()
 
     async def async_clear_all_thermal_data(self) -> None:
         """Clear all thermal learning data."""
-        async with self._write_transaction:
+        async with self._thermal_transaction:
             self._thermal_data = {}
-            await self._async_save_locked()
+            await self._async_save_thermal_locked()
 
     async def async_save_room(self, area_id: str, config: dict) -> dict:
         """Create or update room configuration for an area."""

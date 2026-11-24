@@ -21,6 +21,10 @@
           }
         }
       }
+    },
+    "outdoor_temp_unavailable": {
+      "title": "室外温度不可用",
+      "description": "由于室外传感器（{sensor}）和天气实体（{weather}）均未提供有效温度，RoomMind 已暂停热力学学习。"
     }
   },
   "entity": {
@@ -44,8 +48,24 @@
       "climate_control": {
         "name": "{room} 温控"
       },
+      "global_climate_control": {
+        "name": "全局温控开关"
+      },
       "vacation_mode": {
         "name": "度假模式"
+      }
+    },
+    "select": {
+      "climate_mode": {
+        "name": "{room} 运行模式",
+        "state": {
+          "auto": "自动智能",
+          "cool_only": "制冷",
+          "heat_only": "制热",
+          "dry": "除湿",
+          "fan_only": "送风",
+          "off": "关闭"
+        }
       }
     },
     "climate": {

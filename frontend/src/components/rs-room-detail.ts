@@ -10,6 +10,7 @@ import type {
   DeviceConfig,
   AirflowDeviceConfig,
   CompressorGroup,
+  AreaSuggestion,
 } from "../types";
 import "./rs-hero-status";
 import "./rs-thermostat-fleet";
@@ -35,6 +36,7 @@ import {
   buildRoomSavePayload,
   createEmptyRoomConfigDraft,
   createRoomConfigDraft,
+  mergeAreaSuggestionsIntoDraft,
   patchRoomConfigDraft,
   temperatureSensorIdsForSave,
   type RoomConfigDraft,
@@ -59,6 +61,8 @@ export class RsRoomDetail extends LitElement {
   @state() private _error = "";
   @state() private _dirty = false;
   @state() private _editing: RoomEditSection | null = null;
+  @state() private _autoDetectStatus = "";
+  @state() private _autoDetectBusy = false;
 
   private _prevAreaId: string | null = null;
   private _saveDebounce?: ReturnType<typeof setTimeout>;
@@ -631,8 +635,11 @@ export class RsRoomDetail extends LitElement {
             .metrics=${this._configurationMetrics()}
             .isOutdoor=${this._isOutdoor}
             .language=${this.hass.language}
+            .autoDetectStatus=${this._autoDetectStatus}
+            .autoDetectBusy=${this._autoDetectBusy}
             @configuration-edit=${this._onConfigurationEdit}
             @outdoor-changed=${this._onOutdoorToggle}
+            @auto-detect-area=${this._onAutoDetectArea}
           ></rs-room-configuration-hub>
         </div>
         ${this._error ? html`<div class="error">${this._error}</div>` : nothing}
@@ -925,6 +932,35 @@ export class RsRoomDetail extends LitElement {
   private _onOutdoorToggle(e: CustomEvent<boolean>) {
     this._isOutdoor = e.detail;
     this._autoSave();
+  }
+
+  private async _onAutoDetectArea() {
+    if (!this.area || this._autoDetectBusy) return;
+    this._autoDetectBusy = true;
+    this._autoDetectStatus = "";
+    try {
+      const suggestion = await this.hass.callWS<AreaSuggestion>({
+        type: "roommind/area/suggest",
+        area_id: this.area.area_id,
+      });
+      const merged = mergeAreaSuggestionsIntoDraft(this._currentDraft(), suggestion);
+      if (merged.addedCount > 0) {
+        this._draft = merged.draft;
+        this._autoDetectStatus = localize("room.config.auto_detect_added", this.hass.language, {
+          count: merged.addedCount,
+        });
+        this._autoSave();
+      } else {
+        this._autoDetectStatus = localize("room.config.auto_detect_none", this.hass.language);
+      }
+    } catch (err: unknown) {
+      this._error =
+        err instanceof Error
+          ? err.message
+          : localize("room.error_save_fallback", this.hass.language);
+    } finally {
+      this._autoDetectBusy = false;
+    }
   }
 
   // ---- Auto-save ----

@@ -21,6 +21,10 @@
           }
         }
       }
+    },
+    "outdoor_temp_unavailable": {
+      "title": "Outdoor temperature unavailable",
+      "description": "RoomMind has paused thermal learning because neither outdoor sensor ({sensor}) nor weather entity ({weather}) is delivering a temperature."
     }
   },
   "entity": {
@@ -44,8 +48,24 @@
       "climate_control": {
         "name": "{room} climate control"
       },
+      "global_climate_control": {
+        "name": "Climate control"
+      },
       "vacation_mode": {
         "name": "Vacation mode"
+      }
+    },
+    "select": {
+      "climate_mode": {
+        "name": "{room} HVAC mode",
+        "state": {
+          "auto": "Auto",
+          "cool_only": "Cool",
+          "heat_only": "Heat",
+          "dry": "Dry",
+          "fan_only": "Fan",
+          "off": "Off"
+        }
       }
     },
     "climate": {

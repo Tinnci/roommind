@@ -935,5 +935,8 @@
   "overview.filter.heating": "制热",
   "overview.filter.off": "已关闭",
   "overview.filter.attention": "需关注",
-  "overview.filter.empty": "没有符合当前筛选条件的房间。"
+  "overview.filter.empty": "没有符合当前筛选条件的房间。",
+  "room.config.auto_detect": "从 HA 区域自动识别设备",
+  "room.config.auto_detect_added": "已从 HA 区域添加 {count} 个实体",
+  "room.config.auto_detect_none": "该区域内可识别的实体均已配置"
 }

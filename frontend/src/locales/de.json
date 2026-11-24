@@ -935,5 +935,8 @@
   "overview.filter.heating": "Heizen",
   "overview.filter.off": "Aus",
   "overview.filter.attention": "Hinweis",
-  "overview.filter.empty": "Keine Räume entsprechen dem gewählten Filter."
+  "overview.filter.empty": "Keine Räume entsprechen dem gewählten Filter.",
+  "room.config.auto_detect": "Aus HA-Bereich erkennen",
+  "room.config.auto_detect_added": "{count} Entitäten aus HA-Bereich hinzugefügt",
+  "room.config.auto_detect_none": "Alle Bereichs-Entitäten sind bereits konfiguriert"
 }

@@ -303,6 +303,8 @@ async def test_notification_dismissed_when_outdoor_returns(hass, mock_config_ent
     resets the cycle counter so a future outage can re-notify."""
     create_mock = MagicMock()
     dismiss_mock = MagicMock()
+    issue_create = MagicMock()
+    issue_delete = MagicMock()
     monkeypatch.setattr(
         "custom_components.roommind.coordinator.async_create_notification",
         create_mock,
@@ -310,6 +312,14 @@ async def test_notification_dismissed_when_outdoor_returns(hass, mock_config_ent
     monkeypatch.setattr(
         "custom_components.roommind.coordinator.async_dismiss_notification",
         dismiss_mock,
+    )
+    monkeypatch.setattr(
+        "custom_components.roommind.coordinator.ir.async_create_issue",
+        issue_create,
+    )
+    monkeypatch.setattr(
+        "custom_components.roommind.coordinator.ir.async_delete_issue",
+        issue_delete,
     )
 
     store = _make_store_mock(rooms={"living_room_abc12345": SAMPLE_ROOM})
@@ -336,10 +346,12 @@ async def test_notification_dismissed_when_outdoor_returns(hass, mock_config_ent
     for _ in range(OUTDOOR_UNAVAILABLE_NOTIFY_CYCLES):
         await coordinator._async_update_data()
     assert create_mock.called
+    assert issue_create.called
 
     # Outdoor returns → dismiss
     outdoor_value["v"] = 6.0
     await coordinator._async_update_data()
     assert dismiss_mock.called
+    assert issue_delete.called
     assert coordinator._outdoor_unavailable_cycles == 0
     assert coordinator._outdoor_warning_sent is False

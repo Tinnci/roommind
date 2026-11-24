@@ -21,6 +21,10 @@
           }
         }
       }
+    },
+    "outdoor_temp_unavailable": {
+      "title": "Außentemperatur nicht verfügbar",
+      "description": "RoomMind hat das thermische Lernen pausiert, da weder der Außensensor ({sensor}) noch die Wetterentität ({weather}) eine Temperatur liefert."
     }
   },
   "entity": {
@@ -44,8 +48,24 @@
       "climate_control": {
         "name": "{room} Klimasteuerung"
       },
+      "global_climate_control": {
+        "name": "Klimasteuerung"
+      },
       "vacation_mode": {
         "name": "Urlaubsmodus"
+      }
+    },
+    "select": {
+      "climate_mode": {
+        "name": "{room} HLK-Modus",
+        "state": {
+          "auto": "Auto",
+          "cool_only": "Kühlen",
+          "heat_only": "Heizen",
+          "dry": "Entfeuchten",
+          "fan_only": "Lüften",
+          "off": "Aus"
+        }
       }
     },
     "climate": {
