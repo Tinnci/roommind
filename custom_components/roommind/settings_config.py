@@ -77,6 +77,7 @@ SETTINGS_SCHEMA: dict[vol.Marker, object] = {
     ],
 }
 SETTINGS_FIELDS = tuple(marker.schema for marker in SETTINGS_SCHEMA)
+UI_PREF_FIELDS = frozenset({"room_order", "group_by_floor", "hidden_rooms"})
 
 
 def mpc_control_enabled(settings: dict) -> bool:

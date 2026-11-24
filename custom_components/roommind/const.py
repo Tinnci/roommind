@@ -199,6 +199,9 @@ DEFAULT_CONFLICT_RESOLUTION = CONFLICT_RESOLUTION_HEATING_PRIORITY
 # Far-future sentinel: vacation active indefinitely (year 2999)
 VACATION_SENTINEL_UNTIL = 32503680000.0
 
+# Native HA event bus name for actionable alerts (automations/blueprints)
+EVENT_ROOMMIND_ALERT = f"{DOMAIN}_alert"
+
 
 def is_override_active(room: dict) -> bool:
     """Return True when a manual override is currently active."""

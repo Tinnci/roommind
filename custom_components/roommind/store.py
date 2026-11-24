@@ -16,6 +16,7 @@ from .room_config import (
     normalize_room_sensor_sources,
     upsert_room_config,
 )
+from .settings_config import UI_PREF_FIELDS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,6 +37,7 @@ class RoomMindStore:
         self._thermal_store: Store[dict] = Store(hass, STORAGE_VERSION, THERMAL_STORAGE_KEY)
         self._data: dict[str, dict] = {}
         self._settings: dict = {}
+        self._ui_prefs: dict = {}
         self._thermal_data: dict = {}
         self._write_lock = asyncio.Lock()
         self._thermal_write_lock = asyncio.Lock()
@@ -67,6 +69,9 @@ class RoomMindStore:
             self._data = {}
 
         self._settings = stored.get("settings", {}) if stored else {}
+        self._ui_prefs = (
+            copy.deepcopy(stored.get("ui_prefs", {})) if isinstance(stored, dict) and "ui_prefs" in stored else {}
+        )
         legacy_thermal = stored.get("thermal_data") if isinstance(stored, dict) else None
 
         thermal_store = getattr(self, "_thermal_store", None)
@@ -81,9 +86,16 @@ class RoomMindStore:
             self._thermal_data = {}
             self._last_saved_thermal_snapshot = None
 
+        ui_prefs_migrated = False
+        for key in list(UI_PREF_FIELDS):
+            if key in self._settings:
+                val = self._settings.pop(key)
+                self._ui_prefs.setdefault(key, val)
+                ui_prefs_migrated = True
+
         self._last_saved_snapshot = (
-            copy.deepcopy({"rooms": self._data, "settings": self._settings})
-            if stored and not isinstance(legacy_thermal, dict)
+            self._build_config_snapshot()
+            if stored and not isinstance(legacy_thermal, dict) and not ui_prefs_migrated
             else None
         )
 
@@ -103,7 +115,14 @@ class RoomMindStore:
         had_legacy_thermal = isinstance(stored, dict) and "thermal_data" in stored
         if had_legacy_thermal and not (isinstance(thermal_stored, dict) and "thermal_data" in thermal_stored):
             await self._async_save_thermal()
-        if device_migrated or hp_migrated or airflow_ttl_migrated or orphan_settings_removed or had_legacy_thermal:
+        if (
+            device_migrated
+            or hp_migrated
+            or airflow_ttl_migrated
+            or orphan_settings_removed
+            or had_legacy_thermal
+            or ui_prefs_migrated
+        ):
             await self._async_save()
         if device_migrated:
             _LOGGER.info("Migrated %d room(s) to unified device model", device_migrated)
@@ -115,6 +134,16 @@ class RoomMindStore:
             _LOGGER.info("Removed orphan setting(s): %s", ", ".join(orphan_settings_removed))
         if had_legacy_thermal:
             _LOGGER.info("Migrated thermal model data into separate store '%s'", THERMAL_STORAGE_KEY)
+        if ui_prefs_migrated:
+            _LOGGER.info("Separated UI preferences into 'ui_prefs' storage section")
+
+    def _build_config_snapshot(self) -> dict:
+        """Build an immutable configuration snapshot separating policy from UI prefs."""
+        snapshot: dict = {"rooms": self._data, "settings": self._settings}
+        ui_prefs = getattr(self, "_ui_prefs", {})
+        if ui_prefs:
+            snapshot["ui_prefs"] = ui_prefs
+        return copy.deepcopy(snapshot)
 
     async def _async_save(self) -> None:
         """Persist current room configuration to the config HA store."""
@@ -123,7 +152,7 @@ class RoomMindStore:
 
     async def _async_save_locked(self) -> None:
         """Persist one immutable config snapshot while holding the write transaction."""
-        snapshot = copy.deepcopy({"rooms": self._data, "settings": self._settings})
+        snapshot = self._build_config_snapshot()
         if snapshot == getattr(self, "_last_saved_snapshot", None):
             return
         await self._store.async_save(snapshot)
@@ -163,16 +192,46 @@ class RoomMindStore:
         return result
 
     def get_settings(self) -> dict:
-        """Return a deep copy of global settings."""
+        """Return a deep copy of global settings merged with UI preferences."""
+        merged = dict(self._settings)
+        merged.update(getattr(self, "_ui_prefs", {}))
+        return copy.deepcopy(merged)
+
+    def get_policy_settings(self) -> dict:
+        """Return a deep copy of control-policy settings (excluding UI layout prefs)."""
         return copy.deepcopy(dict(self._settings))
 
+    def get_ui_prefs(self) -> dict:
+        """Return a deep copy of frontend UI layout preferences."""
+        return copy.deepcopy(dict(getattr(self, "_ui_prefs", {})))
+
     async def async_save_settings(self, changes: dict) -> dict:
-        """Merge changes into global settings and persist."""
+        """Merge changes into policy settings and UI preferences and persist."""
         changes = copy.deepcopy(changes)
         async with self._write_transaction:
-            self._settings.update(changes)
+            ui_prefs = getattr(self, "_ui_prefs", None)
+            if ui_prefs is None:
+                ui_prefs = self._ui_prefs = {}
+            for key, value in changes.items():
+                if key in UI_PREF_FIELDS:
+                    ui_prefs[key] = value
+                else:
+                    self._settings[key] = value
             await self._async_save_locked()
-            return copy.deepcopy(self._settings)
+            return self.get_settings()
+
+    async def async_save_ui_prefs(self, changes: dict) -> dict:
+        """Merge UI-only preferences and persist without altering control policy."""
+        filtered = {k: v for k, v in changes.items() if k in UI_PREF_FIELDS}
+        if not filtered:
+            return self.get_ui_prefs()
+        async with self._write_transaction:
+            ui_prefs = getattr(self, "_ui_prefs", None)
+            if ui_prefs is None:
+                ui_prefs = self._ui_prefs = {}
+            ui_prefs.update(copy.deepcopy(filtered))
+            await self._async_save_locked()
+            return self.get_ui_prefs()
 
     def get_thermal_data(self) -> dict:
         """Return a deep copy of thermal learning data."""

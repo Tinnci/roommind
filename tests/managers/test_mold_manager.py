@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -510,3 +510,44 @@ async def test_no_humidity_returns_early(mm):
     assert result.risk_level == "ok"
     assert result.surface_rh is None
     assert result.prevention_active is False
+
+
+@pytest.mark.asyncio
+async def test_prevention_falls_back_to_detection_targets_and_fires_alert_event(mm, hass):
+    """Prevention uses mold_notification_targets when specific list is empty and fires roommind_alert."""
+    hass.bus.async_fire = MagicMock()
+    settings = _settings_prevention_notify(
+        mold_prevention_notify_targets=[],
+        mold_notification_targets=[{"entity_id": "notify.shared"}],
+    )
+
+    with (
+        patch(
+            "custom_components.roommind.managers.mold_manager.calculate_mold_risk",
+            return_value=("warning", 75.0),
+        ),
+        patch(
+            "custom_components.roommind.managers.mold_manager.mold_prevention_delta",
+            return_value=2.0,
+        ),
+        patch(
+            "custom_components.roommind.managers.mold_manager.async_send_mold_notification",
+            new_callable=AsyncMock,
+        ) as mock_notify,
+    ):
+        await mm.evaluate(
+            area_id="living",
+            area_name="Living Room",
+            current_temp=18.0,
+            current_humidity=75.0,
+            outdoor_temp=-5.0,
+            settings=settings,
+            celsius_delta_to_ha_fn=lambda x: x,
+            ha_temp_unit_str_fn=lambda: "°C",
+        )
+
+    prevention_call = [c for c in mock_notify.call_args_list if c.kwargs.get("tag_suffix") == "prevention"][0]
+    assert prevention_call.args[3] == [{"entity_id": "notify.shared"}]
+    alert_types = [c.args[1]["alert_type"] for c in hass.bus.async_fire.call_args_list if c.args[0] == "roommind_alert"]
+    assert "mold_risk" in alert_types
+    assert "mold_prevention" in alert_types

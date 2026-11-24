@@ -13,6 +13,24 @@ from ..utils.temp_utils import ha_temp_to_celsius
 _LOGGER = logging.getLogger(__name__)
 
 
+def resolve_weather_entity(hass: HomeAssistant, settings: dict) -> str:
+    """Return configured weather_entity or auto-select when exactly one valid weather.* exists."""
+    configured = str(settings.get("weather_entity") or "")
+    if configured:
+        return configured
+    states = getattr(hass, "states", None)
+    async_all = getattr(states, "async_all", None) if states is not None else None
+    if not callable(async_all):
+        return ""
+    candidates = async_all("weather")
+    if not isinstance(candidates, list):
+        return ""
+    valid = [s for s in candidates if getattr(s, "state", None) not in ("unavailable", "unknown", None)]
+    if len(valid) == 1:
+        return str(valid[0].entity_id)
+    return ""
+
+
 class WeatherManager:
     """Manages weather forecast retrieval and conversion."""
 
@@ -26,8 +44,8 @@ class WeatherManager:
         return self._outdoor_forecast
 
     async def async_read_forecast(self, settings: dict) -> list[dict]:
-        """Read weather forecast from configured weather entity."""
-        weather_entity = settings.get("weather_entity", "")
+        """Read weather forecast from configured weather entity or single HA fallback."""
+        weather_entity = resolve_weather_entity(self.hass, settings)
         if not weather_entity:
             self._outdoor_forecast = []
             return []

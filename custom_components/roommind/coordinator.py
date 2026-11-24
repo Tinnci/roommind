@@ -28,6 +28,7 @@ from .const import (
     CLIMATE_MODE_OFF,
     DEFAULT_OUTDOOR_HEATING_MAX,
     DOMAIN,
+    EVENT_ROOMMIND_ALERT,
     HISTORY_ROTATE_CYCLES,
     HISTORY_WRITE_CYCLES,
     MAX_PREDICTION_DELTA,
@@ -95,7 +96,7 @@ from .managers.residual_heat_tracker import ResidualHeatSimulationState, Residua
 from .managers.room_coupling_manager import RoomCouplingManager
 from .managers.sensor_fusion_manager import SensorFusionManager
 from .managers.valve_manager import ValveManager
-from .managers.weather_manager import WeatherManager
+from .managers.weather_manager import WeatherManager, resolve_weather_entity
 from .managers.window_manager import WindowManager
 from .room_config import resolve_setback_offset
 from .settings_config import mpc_control_enabled
@@ -548,7 +549,7 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._cover_orchestrator.set_cloud_series(WeatherManager.extract_cloud_series(outdoor_forecast))
 
         cloud_coverage = None
-        weather_entity = settings.get("weather_entity")
+        weather_entity = resolve_weather_entity(self.hass, settings)
         if weather_entity:
             ws = self.hass.states.get(weather_entity)
             if ws:
@@ -1028,7 +1029,7 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self.outdoor_temp is not None:
             return self.outdoor_temp, "sensor"
 
-        weather_eid = settings.get("weather_entity") or ""
+        weather_eid = resolve_weather_entity(self.hass, settings)
         if weather_eid:
             ws = self.hass.states.get(weather_eid)
             if ws is not None and ws.state not in ("unavailable", "unknown"):
@@ -1085,6 +1086,17 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             notification_id=OUTDOOR_UNAVAILABLE_NOTIFICATION_ID,
         )
         self._create_outdoor_repair_issue(sensor_id, weather_eid)
+        bus = getattr(self.hass, "bus", None)
+        async_fire = getattr(bus, "async_fire", None) if bus is not None else None
+        if callable(async_fire):
+            async_fire(
+                EVENT_ROOMMIND_ALERT,
+                {
+                    "alert_type": "outdoor_temp_unavailable",
+                    "sensor": sensor_id,
+                    "weather": weather_eid,
+                },
+            )
         self._outdoor_warning_sent = True
 
     def _create_outdoor_repair_issue(self, sensor_id: str, weather_eid: str) -> None:

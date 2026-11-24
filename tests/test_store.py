@@ -501,6 +501,41 @@ async def test_legacy_embedded_thermal_data_migrates_to_split_store(store):
     assert saved_config["settings"] == {"outdoor_temp_sensor": "sensor.out"}
 
 
+@pytest.mark.asyncio
+async def test_ui_prefs_stored_separately_and_migrated_cleanly(store):
+    """UI layout prefs persist under 'ui_prefs' without polluting policy settings."""
+    store._store.async_load = AsyncMock(
+        return_value={
+            "rooms": {},
+            "settings": {
+                "outdoor_temp_sensor": "sensor.out",
+                "room_order": ["living", "bedroom"],
+                "group_by_floor": True,
+            },
+        }
+    )
+    await store.async_load()
+
+    # Migrated from settings into ui_prefs
+    assert store.get_policy_settings() == {"outdoor_temp_sensor": "sensor.out"}
+    assert store.get_ui_prefs() == {"room_order": ["living", "bedroom"], "group_by_floor": True}
+    assert store.get_settings()["room_order"] == ["living", "bedroom"]
+
+    saved_snapshot = store._store.async_save.call_args.args[0]
+    assert saved_snapshot["settings"] == {"outdoor_temp_sensor": "sensor.out"}
+    assert saved_snapshot["ui_prefs"] == {"room_order": ["living", "bedroom"], "group_by_floor": True}
+
+    store._store.async_save.reset_mock()
+    await store.async_save_ui_prefs({"hidden_rooms": ["garage"]})
+    assert store.get_policy_settings() == {"outdoor_temp_sensor": "sensor.out"}
+    assert store.get_ui_prefs()["hidden_rooms"] == ["garage"]
+
+    # async_save_settings also routes UI pref fields into ui_prefs
+    await store.async_save_settings({"room_order": ["bedroom", "living"], "control_mode": "mpc"})
+    assert store.get_policy_settings() == {"outdoor_temp_sensor": "sensor.out", "control_mode": "mpc"}
+    assert store.get_ui_prefs()["room_order"] == ["bedroom", "living"]
+
+
 # ---------------------------------------------------------------------------
 # Split heat/cool temperature migration
 # ---------------------------------------------------------------------------

@@ -233,3 +233,23 @@ async def test_unavailable_weather_entity_skips_service_call():
     assert result == []
     assert mgr.forecast == []
     hass.services.async_call.assert_not_called()
+
+
+def test_resolve_weather_entity_single_fallback_and_ambiguity():
+    """Auto-selects single valid weather.* entity; skips when zero or multiple."""
+    from types import SimpleNamespace
+
+    from custom_components.roommind.managers.weather_manager import resolve_weather_entity
+
+    hass = _make_hass()
+    hass.states.async_all = MagicMock(return_value=[SimpleNamespace(entity_id="weather.home", state="cloudy")])
+    assert resolve_weather_entity(hass, {}) == "weather.home"
+    assert resolve_weather_entity(hass, {"weather_entity": "weather.explicit"}) == "weather.explicit"
+
+    hass.states.async_all = MagicMock(
+        return_value=[
+            SimpleNamespace(entity_id="weather.a", state="cloudy"),
+            SimpleNamespace(entity_id="weather.b", state="sunny"),
+        ]
+    )
+    assert resolve_weather_entity(hass, {}) == ""

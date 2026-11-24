@@ -347,6 +347,7 @@ async def test_notification_dismissed_when_outdoor_returns(hass, mock_config_ent
         await coordinator._async_update_data()
     assert create_mock.called
     assert issue_create.called
+    assert any(c.args[0] == "roommind_alert" for c in hass.bus.async_fire.call_args_list)
 
     # Outdoor returns → dismiss
     outdoor_value["v"] = 6.0

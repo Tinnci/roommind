@@ -13,6 +13,7 @@ from ..const import (
     DEFAULT_MOLD_COOLDOWN_MINUTES,
     DEFAULT_MOLD_HUMIDITY_THRESHOLD,
     DEFAULT_MOLD_SUSTAINED_MINUTES,
+    EVENT_ROOMMIND_ALERT,
     MOLD_HYSTERESIS,
     MOLD_RISK_CRITICAL,
     MOLD_RISK_OK,
@@ -136,6 +137,14 @@ class MoldManager:
                         title=payload.title,
                         tag_suffix=payload.tag_suffix,
                     )
+                    self._fire_alert_event(
+                        "mold_risk",
+                        area_id=area_id,
+                        area_name=area_name,
+                        risk_level=risk_level,
+                        humidity=current_humidity,
+                        surface_rh=surface_rh_value,
+                    )
                     self._throttler.record_sent(f"detect_{area_id}")
 
             # Activate prevention
@@ -151,9 +160,10 @@ class MoldManager:
                         and celsius_delta_to_ha_fn is not None
                         and ha_temp_unit_str_fn is not None
                     ):
-                        prev_targets = settings.get(
-                            "mold_prevention_notify_targets",
-                            [],
+                        prev_targets = (
+                            settings.get("mold_prevention_notify_targets")
+                            or settings.get("mold_notification_targets")
+                            or []
                         )
                         payload = build_mold_prevention_payload(
                             translate,
@@ -169,6 +179,14 @@ class MoldManager:
                             message=payload.message,
                             title=payload.title,
                             tag_suffix=payload.tag_suffix,
+                        )
+                        self._fire_alert_event(
+                            "mold_prevention",
+                            area_id=area_id,
+                            area_name=area_name,
+                            risk_level=risk_level,
+                            humidity=current_humidity,
+                            surface_rh=surface_rh,
                         )
                         self._throttler.record_sent(
                             f"prevent_{area_id}",
@@ -194,6 +212,13 @@ class MoldManager:
                 self._throttler.clear(f"prevent_{area_id}")
 
         return result
+
+    def _fire_alert_event(self, alert_type: str, **event_data: object) -> None:
+        """Emit an HA bus event for automations without requiring duplicate notify targets."""
+        bus = getattr(self.hass, "bus", None)
+        async_fire = getattr(bus, "async_fire", None) if bus is not None else None
+        if callable(async_fire):
+            async_fire(EVENT_ROOMMIND_ALERT, {"alert_type": alert_type, **event_data})
 
     def remove_room(self, area_id: str) -> None:
         """Clean up state for a removed room."""
