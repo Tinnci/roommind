@@ -4,6 +4,7 @@ import { ROOM_EDIT_SECTIONS, roomEditDialogHasInfo } from "./room-edit-dialog";
 describe("room edit dialog routing", () => {
   test("declares every editable room section exactly once", () => {
     expect(ROOM_EDIT_SECTIONS).toEqual([
+      "targets",
       "schedule",
       "devices",
       "sensors",
@@ -16,6 +17,7 @@ describe("room edit dialog routing", () => {
   });
 
   test("marks only dialogs with explanatory panels as info dialogs", () => {
+    expect(roomEditDialogHasInfo("targets")).toBe(false);
     expect(roomEditDialogHasInfo("schedule")).toBe(true);
     expect(roomEditDialogHasInfo("devices")).toBe(true);
     expect(roomEditDialogHasInfo("sensors")).toBe(false);

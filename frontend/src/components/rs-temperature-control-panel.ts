@@ -23,11 +23,13 @@ export class RsTemperatureControlPanel extends LitElement {
   @property({ type: Number }) public comfortCool = 24.0;
   @property({ type: Number }) public ecoHeat = 17.0;
   @property({ type: Number }) public ecoCool = 27.0;
+  @property({ type: Boolean }) public hasSchedule = false;
   @property() public language = "en";
 
   @state() private _targetTempC = 21;
   @state() private _targetDirty = false;
   @state() private _durationHours = 2;
+  @state() private _durationTouched = false;
   @state() private _overrideError = "";
   @state() private _optimisticOverride: {
     type: OverrideType;
@@ -604,7 +606,12 @@ export class RsTemperatureControlPanel extends LitElement {
                           @click=${this._onClearOverride}
                         >
                           <ha-icon icon="mdi:autorenew"></ha-icon>
-                          ${localize("room.temperature_panel.restore", this.language)}
+                          ${localize(
+                            this.hasSchedule
+                              ? "room.temperature_panel.restore"
+                              : "room.temperature_panel.revert_target",
+                            this.language,
+                          )}
                         </button>
                       `
                     : nothing
@@ -635,7 +642,9 @@ export class RsTemperatureControlPanel extends LitElement {
                   ${this._renderDurationButton(4, "room.temperature_panel.hold_4h", tempDisabled)}
                   ${this._renderDurationButton(
                     0,
-                    "room.temperature_panel.hold_permanent",
+                    this.hasSchedule
+                      ? "room.temperature_panel.hold_permanent"
+                      : "room.temperature_panel.direct_label",
                     tempDisabled,
                   )}
                 </div>
@@ -678,15 +687,21 @@ export class RsTemperatureControlPanel extends LitElement {
     `;
   }
 
+  private _effectiveDurationHours(): number {
+    return this._durationTouched ? this._durationHours : this.hasSchedule ? this._durationHours : 0;
+  }
+
   private _renderDurationButton(hours: number, labelKey: TranslationKey, disabled: boolean) {
+    const active = this._effectiveDurationHours() === hours;
     return html`
       <button
         class="duration-button"
         type="button"
-        ?active=${this._durationHours === hours}
-        aria-pressed=${this._durationHours === hours}
+        ?active=${active}
+        aria-pressed=${active}
         ?disabled=${disabled}
         @click=${() => {
+          this._durationTouched = true;
           this._durationHours = hours;
         }}
       >
@@ -799,7 +814,7 @@ export class RsTemperatureControlPanel extends LitElement {
   }
 
   private _durationLabel(): string {
-    switch (this._durationHours) {
+    switch (this._effectiveDurationHours()) {
       case 1:
         return localize("room.temperature_panel.hold_1h", this.language);
       case 2:
@@ -807,11 +822,21 @@ export class RsTemperatureControlPanel extends LitElement {
       case 4:
         return localize("room.temperature_panel.hold_4h", this.language);
       default:
-        return localize("room.temperature_panel.hold_permanent", this.language);
+        return localize(
+          this.hasSchedule
+            ? "room.temperature_panel.hold_permanent"
+            : "room.temperature_panel.direct_label",
+          this.language,
+        );
     }
   }
 
   private _applyLabel(targetC: number): string {
+    if (!this.hasSchedule && this._effectiveDurationHours() === 0) {
+      return localize("room.temperature_panel.set_target", this.language, {
+        target: this._formatTemp(targetC),
+      });
+    }
     return localize("room.temperature_panel.apply_value", this.language, {
       target: this._formatTemp(targetC),
       duration: this._durationLabel(),
@@ -879,7 +904,23 @@ export class RsTemperatureControlPanel extends LitElement {
   }
 
   private _onApplyTarget = async (): Promise<void> => {
-    await this._setOverride("custom", this._targetC(), this._durationHours);
+    const durationHours = this._effectiveDurationHours();
+    const targetC = this._targetC();
+    if (!this.hasSchedule && durationHours === 0) {
+      this.dispatchEvent(
+        new CustomEvent("baseline-target-changed", {
+          detail: { temperature: targetC },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      this._targetDirty = false;
+      if (this.getEffectiveOverride().active) {
+        await this._onClearOverride();
+      }
+      return;
+    }
+    await this._setOverride("custom", targetC, durationHours);
   };
 
   private _onPreset = async (type: Extract<OverrideType, "boost" | "eco">): Promise<void> => {
@@ -893,7 +934,7 @@ export class RsTemperatureControlPanel extends LitElement {
           : this.ecoHeat;
     this._targetTempC = temp;
     this._targetDirty = false;
-    await this._setOverride(type, temp, this._durationHours);
+    await this._setOverride(type, temp, this._effectiveDurationHours());
   };
 
   private async _setOverride(

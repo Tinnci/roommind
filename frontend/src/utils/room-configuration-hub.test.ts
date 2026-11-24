@@ -73,4 +73,24 @@ describe("buildConfigurationHubItems", () => {
       actionKey: "room.config.action_add_primary_sensor",
     });
   });
+
+  test("summarizes targets and optional schedule state", () => {
+    const items = buildConfigurationHubItems(["targets", "schedule"], {
+      targetsSummaryComfort: "24.0°C",
+      targetsSummaryEco: "27.0°C",
+      scheduleCount: 0,
+    });
+
+    expect(items[0]).toMatchObject({
+      section: "targets",
+      tone: "complete",
+      metaKey: "room.config.targets_summary",
+      metaParams: { comfort: "24.0°C", eco: "27.0°C" },
+    });
+    expect(items[1]).toMatchObject({
+      section: "schedule",
+      tone: "inactive",
+      metaKey: "room.config.schedule_optional",
+    });
+  });
 });

@@ -938,5 +938,14 @@
   "overview.filter.empty": "Keine Räume entsprechen dem gewählten Filter.",
   "room.config.auto_detect": "Aus HA-Bereich erkennen",
   "room.config.auto_detect_added": "{count} Entitäten aus HA-Bereich hinzugefügt",
-  "room.config.auto_detect_none": "Alle Bereichs-Entitäten sind bereits konfiguriert"
+  "room.config.auto_detect_none": "Alle Bereichs-Entitäten sind bereits konfiguriert",
+  "room.section.targets": "Zieltemperaturen",
+  "room.config.targets_summary": "Komfort {comfort} · Eco {eco}",
+  "room.config.schedule_summary": "{count} Zeitplan/Zeitpläne verknüpft",
+  "room.config.schedule_optional": "Optional · Nutzt Zieltemperaturen",
+  "room.config.action_review_targets": "Ziele bearbeiten",
+  "room.config.action_review_schedule": "Zeitplan verwalten",
+  "room.temperature_panel.set_target": "Ziel setzen: {target}",
+  "room.temperature_panel.revert_target": "Auf Ziel zurücksetzen",
+  "room.temperature_panel.direct_label": "Direkt"
 }

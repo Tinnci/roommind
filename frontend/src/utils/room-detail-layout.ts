@@ -1,9 +1,18 @@
 import type { DeviceConfig } from "../types";
 
-export type PrimaryRoomSection = "schedule";
+export type PrimaryRoomSection = never;
 
 export type ConfigurationRoomSection =
-  "devices" | "sensors" | "comfort" | "airflow" | "presence" | "covers" | "heatSource" | "outdoor";
+  | "targets"
+  | "devices"
+  | "sensors"
+  | "comfort"
+  | "airflow"
+  | "presence"
+  | "schedule"
+  | "covers"
+  | "heatSource"
+  | "outdoor";
 
 export interface RoomDetailLayoutInput {
   isOutdoor: boolean;
@@ -26,6 +35,7 @@ export function getRoomDetailLayout(input: RoomDetailLayoutInput): RoomDetailLay
   }
 
   const configurationSections: ConfigurationRoomSection[] = [
+    "targets",
     "devices",
     "sensors",
     "comfort",
@@ -36,7 +46,7 @@ export function getRoomDetailLayout(input: RoomDetailLayoutInput): RoomDetailLay
     configurationSections.push("presence");
   }
 
-  configurationSections.push("covers");
+  configurationSections.push("schedule", "covers");
 
   const hasTrv = input.devices.some((device) => device.type === "trv");
   const hasAc = input.devices.some((device) => device.type === "ac");
@@ -47,7 +57,7 @@ export function getRoomDetailLayout(input: RoomDetailLayoutInput): RoomDetailLay
   configurationSections.push("outdoor");
 
   return {
-    primarySections: ["schedule"],
+    primarySections: [],
     configurationSections,
   };
 }

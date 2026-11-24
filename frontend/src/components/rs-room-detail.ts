@@ -16,20 +16,16 @@ import "./rs-hero-status";
 import "./rs-thermostat-fleet";
 import "./rs-temperature-control-panel";
 import "./rs-control-details";
-import "./rs-schedule-settings";
-import "./rs-section-card";
 import "./rs-room-configuration-hub";
 import "./rs-room-edit-dialog-router";
 import { localize } from "../utils/localize";
 import { fireSaveStatus } from "../utils/events";
+import { formatTemp, tempUnit } from "../utils/temperature";
 import { DEFAULT_SETBACK_OFFSET } from "../utils/constants";
 import { roommindThemeStyles } from "../styles/theme-styles";
+import { getRoomDetailLayout, type ConfigurationRoomSection } from "../utils/room-detail-layout";
 import {
-  getRoomDetailLayout,
-  type ConfigurationRoomSection,
-  type PrimaryRoomSection,
-} from "../utils/room-detail-layout";
-import {
+  applyBaselineTargetChange,
   applyCoverSelectionChange,
   applyDeviceConfigChange,
   applySensorConfigChange,
@@ -567,6 +563,19 @@ export class RsRoomDetail extends LitElement {
   };
 
   private _configurationMetrics() {
+    const unit = tempUnit(this.hass);
+    const comfortStr =
+      this._climateMode === "cool_only"
+        ? `${formatTemp(this._comfortCool, this.hass)}${unit}`
+        : this._climateMode === "heat_only"
+          ? `${formatTemp(this._comfortHeat, this.hass)}${unit}`
+          : `${formatTemp(this._comfortHeat, this.hass)}–${formatTemp(this._comfortCool, this.hass)}${unit}`;
+    const ecoStr =
+      this._climateMode === "cool_only"
+        ? `${formatTemp(this._ecoCool, this.hass)}${unit}`
+        : this._climateMode === "heat_only"
+          ? `${formatTemp(this._ecoHeat, this.hass)}${unit}`
+          : `${formatTemp(this._ecoHeat, this.hass)}–${formatTemp(this._ecoCool, this.hass)}${unit}`;
     return {
       deviceCount: this._devices.length,
       temperatureSensorCount: this._temperatureSensorIdsForSave().length,
@@ -580,6 +589,9 @@ export class RsRoomDetail extends LitElement {
       presencePersonCount: this._selectedPresencePersons.length,
       coverCount: this._selectedCovers.size,
       heatSourceOrchestration: this._heatSourceOrchestration,
+      targetsSummaryComfort: comfortStr,
+      targetsSummaryEco: ecoStr,
+      scheduleCount: this._schedules.length,
     };
   }
 
@@ -628,20 +640,17 @@ export class RsRoomDetail extends LitElement {
             : nothing
         }
 
-        <div class="detail-grid">
-          ${layout.primarySections.map((section) => this._renderPrimarySection(section))}
-          <rs-room-configuration-hub
-            .sections=${layout.configurationSections}
-            .metrics=${this._configurationMetrics()}
-            .isOutdoor=${this._isOutdoor}
-            .language=${this.hass.language}
-            .autoDetectStatus=${this._autoDetectStatus}
-            .autoDetectBusy=${this._autoDetectBusy}
-            @configuration-edit=${this._onConfigurationEdit}
-            @outdoor-changed=${this._onOutdoorToggle}
-            @auto-detect-area=${this._onAutoDetectArea}
-          ></rs-room-configuration-hub>
-        </div>
+        <rs-room-configuration-hub
+          .sections=${layout.configurationSections}
+          .metrics=${this._configurationMetrics()}
+          .isOutdoor=${this._isOutdoor}
+          .language=${this.hass.language}
+          .autoDetectStatus=${this._autoDetectStatus}
+          .autoDetectBusy=${this._autoDetectBusy}
+          @configuration-edit=${this._onConfigurationEdit}
+          @outdoor-changed=${this._onOutdoorToggle}
+          @auto-detect-area=${this._onAutoDetectArea}
+        ></rs-room-configuration-hub>
         ${this._error ? html`<div class="error">${this._error}</div>` : nothing}
         <rs-room-edit-dialog-router
           .editing=${this._editing}
@@ -688,9 +697,11 @@ export class RsRoomDetail extends LitElement {
         .comfortCool=${this._comfortCool}
         .ecoHeat=${this._ecoHeat}
         .ecoCool=${this._ecoCool}
+        .hasSchedule=${this._schedules.length > 0}
         .language=${this.hass.language}
         @climate-control-toggle=${this._onClimateControlToggle}
         @mode-changed=${this._onModeChanged}
+        @baseline-target-changed=${this._onBaselineTargetChanged}
       ></rs-temperature-control-panel>
     `;
   }
@@ -700,40 +711,12 @@ export class RsRoomDetail extends LitElement {
     return String(this.hass.states[entityId]?.attributes.friendly_name || entityId);
   }
 
-  private _renderPrimarySection(section: PrimaryRoomSection) {
-    switch (section) {
-      case "schedule":
-        return html`
-          <rs-section-card
-            icon="mdi:calendar"
-            .heading=${localize("room.section.schedule", this.hass.language)}
-            editable
-            @edit-click=${this._openEdit("schedule")}
-          >
-            <rs-schedule-settings
-              .hass=${this.hass}
-              .schedules=${this._schedules}
-              .scheduleSelectorEntity=${this._scheduleSelectorEntity}
-              .activeScheduleIndex=${this.config?.live?.active_schedule_index ?? -1}
-              .comfortHeat=${this._comfortHeat}
-              .comfortCool=${this._comfortCool}
-              .ecoHeat=${this._ecoHeat}
-              .ecoCool=${this._ecoCool}
-              .climateMode=${this._climateMode}
-              .editing=${false}
-              @schedules-changed=${this._onSchedulesChanged}
-              @schedule-selector-changed=${this._onScheduleSelectorChanged}
-              @comfort-heat-changed=${this._onComfortHeatChanged}
-              @comfort-cool-changed=${this._onComfortCoolChanged}
-              @eco-heat-changed=${this._onEcoHeatChanged}
-              @eco-cool-changed=${this._onEcoCoolChanged}
-            ></rs-schedule-settings>
-          </rs-section-card>
-        `;
-    }
-  }
-
   // ---- Child event handlers ----
+
+  private _onBaselineTargetChanged(e: CustomEvent<{ temperature: number }>) {
+    this._draft = applyBaselineTargetChange(this._currentDraft(), e.detail.temperature);
+    this._autoSave();
+  }
 
   private _onModeChanged(e: CustomEvent<{ mode: ClimateMode }>) {
     this._climateMode = e.detail.mode;

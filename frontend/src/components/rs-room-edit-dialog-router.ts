@@ -6,6 +6,7 @@ import type { RoomConfigDraft } from "../utils/room-config-draft";
 import { roomEditDialogHasInfo, type RoomEditSection } from "../utils/room-edit-dialog";
 import { localize } from "../utils/localize";
 import { resolveHeatingSystemType } from "../utils/device-utils";
+import "./rs-targets-section";
 import "./rs-schedule-settings";
 import "./rs-device-section";
 import "./rs-sensor-section";
@@ -195,6 +196,19 @@ export class RsRoomEditDialogRouter extends LitElement {
     const draft = this.draft;
     const live = this.config?.live;
     switch (section) {
+      case "targets":
+        return html`<rs-targets-section
+          .hass=${this.hass}
+          .climateMode=${draft.climateMode}
+          .comfortHeat=${draft.comfortHeat}
+          .comfortCool=${draft.comfortCool}
+          .ecoHeat=${draft.ecoHeat}
+          .ecoCool=${draft.ecoCool}
+          @comfort-heat-changed=${this._forward("comfort-heat-changed")}
+          @comfort-cool-changed=${this._forward("comfort-cool-changed")}
+          @eco-heat-changed=${this._forward("eco-heat-changed")}
+          @eco-cool-changed=${this._forward("eco-cool-changed")}
+        ></rs-targets-section>`;
       case "schedule":
         return html`<rs-schedule-settings
           .hass=${this.hass}
@@ -209,10 +223,6 @@ export class RsRoomEditDialogRouter extends LitElement {
           .editing=${true}
           @schedules-changed=${this._forward("schedules-changed")}
           @schedule-selector-changed=${this._forward("schedule-selector-changed")}
-          @comfort-heat-changed=${this._forward("comfort-heat-changed")}
-          @comfort-cool-changed=${this._forward("comfort-cool-changed")}
-          @eco-heat-changed=${this._forward("eco-heat-changed")}
-          @eco-cool-changed=${this._forward("eco-cool-changed")}
         ></rs-schedule-settings>`;
       case "devices":
         return html`<rs-device-section
@@ -346,8 +356,10 @@ export class RsRoomEditDialogRouter extends LitElement {
 
   private _icon(section: RoomEditSection): string {
     switch (section) {
+      case "targets":
+        return "mdi:thermometer-lines";
       case "schedule":
-        return "mdi:calendar";
+        return "mdi:calendar-clock";
       case "devices":
         return "mdi:power-plug";
       case "sensors":
@@ -367,6 +379,8 @@ export class RsRoomEditDialogRouter extends LitElement {
 
   private _heading(section: RoomEditSection, lang: string): string {
     switch (section) {
+      case "targets":
+        return localize("room.section.targets", lang);
       case "schedule":
         return localize("room.section.schedule", lang);
       case "devices":

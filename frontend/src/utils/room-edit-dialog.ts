@@ -1,4 +1,5 @@
 export const ROOM_EDIT_SECTIONS = [
+  "targets",
   "schedule",
   "devices",
   "sensors",

@@ -4,7 +4,7 @@ import { getRoomDetailLayout } from "./room-detail-layout";
 import type { DeviceConfig } from "../types";
 
 describe("getRoomDetailLayout", () => {
-  test("keeps schedule primary and moves setup-heavy sections to configuration", () => {
+  test("places targets and optional schedule inside configuration hub", () => {
     const devices: DeviceConfig[] = [
       { entity_id: "climate.radiator", type: "trv", role: "primary" },
       { entity_id: "climate.ac", type: "ac", role: "secondary" },
@@ -17,13 +17,15 @@ describe("getRoomDetailLayout", () => {
       devices,
     });
 
-    expect(layout.primarySections).toEqual(["schedule"]);
+    expect(layout.primarySections).toEqual([]);
     expect(layout.configurationSections).toEqual([
+      "targets",
       "devices",
       "sensors",
       "comfort",
       "airflow",
       "presence",
+      "schedule",
       "covers",
       "heatSource",
       "outdoor",
@@ -51,10 +53,12 @@ describe("getRoomDetailLayout", () => {
     });
 
     expect(layout.configurationSections).toEqual([
+      "targets",
       "devices",
       "sensors",
       "comfort",
       "airflow",
+      "schedule",
       "covers",
       "outdoor",
     ]);

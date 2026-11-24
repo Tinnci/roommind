@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  applyBaselineTargetChange,
   applyCoverSelectionChange,
   applyDeviceConfigChange,
   applySensorConfigChange,
@@ -325,5 +326,22 @@ describe("room config draft", () => {
     expect(result.draft.selectedTempSensor).toBe("sensor.living_temp");
     expect(result.draft.selectedHumiditySensor).toBe("sensor.living_rh");
     expect([...result.draft.selectedCovers]).toEqual(["cover.living_blinds"]);
+  });
+
+  test("updates baseline comfort target cleanly for cool_only, heat_only, and auto modes", () => {
+    const coolDraft = { ...createEmptyRoomConfigDraft(), climateMode: "cool_only" as const };
+    expect(applyBaselineTargetChange(coolDraft, 25.5).comfortCool).toBe(25.5);
+
+    const heatDraft = { ...createEmptyRoomConfigDraft(), climateMode: "heat_only" as const };
+    expect(applyBaselineTargetChange(heatDraft, 20.0).comfortHeat).toBe(20.0);
+
+    const autoDraft = {
+      ...createEmptyRoomConfigDraft(),
+      climateMode: "auto" as const,
+      comfortHeat: 20,
+      comfortCool: 24,
+    };
+    expect(applyBaselineTargetChange(autoDraft, 26).comfortCool).toBe(26);
+    expect(applyBaselineTargetChange(autoDraft, 19).comfortHeat).toBe(19);
   });
 });

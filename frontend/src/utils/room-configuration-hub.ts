@@ -16,6 +16,9 @@ export interface ConfigurationHubMetrics {
   presencePersonCount?: number;
   coverCount?: number;
   heatSourceOrchestration?: boolean;
+  targetsSummaryComfort?: string;
+  targetsSummaryEco?: string;
+  scheduleCount?: number;
 }
 
 export type ConfigurationHubTone = "complete" | "partial" | "missing" | "inactive";
@@ -51,6 +54,8 @@ export function buildConfigurationHubItems(
 
 function configurationIcon(section: ConfigurationRoomSection) {
   const icons: Record<ConfigurationRoomSection, string> = {
+    targets: "mdi:thermometer-lines",
+    schedule: "mdi:calendar-clock",
     devices: "mdi:power-plug",
     sensors: "mdi:thermometer",
     comfort: "mdi:weather-night",
@@ -65,6 +70,8 @@ function configurationIcon(section: ConfigurationRoomSection) {
 
 function configurationTitleKey(section: ConfigurationRoomSection): TranslationKey {
   const keys: Record<ConfigurationRoomSection, TranslationKey> = {
+    targets: "room.section.targets",
+    schedule: "room.section.schedule",
     devices: "room.section.devices",
     sensors: "room.section.sensors",
     comfort: "room.section.comfort",
@@ -82,6 +89,31 @@ function configurationStatus(
   metrics: ConfigurationHubMetrics,
 ): Pick<ConfigurationHubItem, "metaKey" | "metaParams" | "actionKey" | "actionParams" | "tone"> {
   switch (section) {
+    case "targets":
+      return {
+        metaKey: "room.config.targets_summary",
+        metaParams: {
+          comfort: metrics.targetsSummaryComfort ?? "--",
+          eco: metrics.targetsSummaryEco ?? "--",
+        },
+        actionKey: "room.config.action_review_targets",
+        tone: "complete",
+      };
+    case "schedule": {
+      const count = metrics.scheduleCount ?? 0;
+      return count > 0
+        ? {
+            metaKey: "room.config.schedule_summary",
+            metaParams: { count: String(count) },
+            actionKey: "room.config.action_review_schedule",
+            tone: "complete",
+          }
+        : {
+            metaKey: "room.config.schedule_optional",
+            actionKey: "room.config.action_optional",
+            tone: "inactive",
+          };
+    }
     case "devices": {
       const count = metrics.deviceCount ?? 0;
       return {

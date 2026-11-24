@@ -458,6 +458,33 @@ export function mergeAreaSuggestionsIntoDraft(
   };
 }
 
+export function applyBaselineTargetChange(
+  draft: RoomConfigDraft,
+  targetC: number,
+): RoomConfigDraft {
+  if (draft.climateMode === "cool_only") {
+    return patchRoomConfigDraft(draft, { comfortCool: targetC });
+  }
+  if (draft.climateMode === "heat_only") {
+    return patchRoomConfigDraft(draft, { comfortHeat: targetC });
+  }
+  if (draft.climateMode === "auto") {
+    const distCool = Math.abs(targetC - draft.comfortCool);
+    const distHeat = Math.abs(targetC - draft.comfortHeat);
+    if (distCool < distHeat) {
+      return patchRoomConfigDraft(draft, {
+        comfortCool: targetC,
+        comfortHeat: Math.min(draft.comfortHeat, targetC),
+      });
+    }
+    return patchRoomConfigDraft(draft, {
+      comfortHeat: targetC,
+      comfortCool: Math.max(draft.comfortCool, targetC),
+    });
+  }
+  return draft;
+}
+
 export function buildRoomSavePayload(
   areaId: string,
   draft: RoomConfigDraft,
