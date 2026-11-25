@@ -1155,5 +1155,10 @@
   "monitor.primary_sensor": "主传感",
   "monitor.fused_sensor": "融合",
   "monitor.unlinked_sensor": "未关联",
-  "monitor.no_sensors_yet": "该区域暂未发现温湿度或空气质量传感器。"
+  "monitor.no_sensors_yet": "该区域暂未发现温湿度或空气质量传感器。",
+  "hero.regime.recovery": "强力恢复",
+  "hero.regime.approach": "逼近设定",
+  "hero.regime.cruise": "低频巡航",
+  "hero.regime.coast": "滑行停机",
+  "hero.thermal_load_hint": "估算热负荷：{pct}%"
 }

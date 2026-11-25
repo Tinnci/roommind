@@ -86,6 +86,7 @@ class ACOverdriveManager:
         limit_c: float,
         max_offset_c: float | None = None,
         learned_sensor_bias_c: float | None = None,
+        regime: str | None = None,
     ) -> tuple[float, dict[str, Any]]:
         """Compute a bias-compensated, adaptive AC setpoint in Celsius."""
         if room_temp_c is None or not math.isfinite(room_temp_c):
@@ -137,19 +138,51 @@ class ACOverdriveManager:
 
         if heating:
             intake_comp = max(0.0, intake_bias)
-            room_err = max(0.0, target_c - room_temp_c)
-            drive = max(0.0, state.deadband_c + state.response_gain * eff_demand * room_err + state.integral_trim_c)
-            cap = min(limit_c, target_c + effective_max_offset)
-            raw = target_c + intake_comp + drive
-            planned = max(target_c, min(cap, raw))
+            signed_err = target_c - room_temp_c
+            room_err = max(0.0, signed_err)
+            if regime == "cruise":
+                drive = max(-0.2, min(0.5, 0.5 * signed_err))
+                cap = min(limit_c, target_c + effective_max_offset)
+                raw = target_c + intake_comp + drive
+                planned = max(target_c - 0.5, min(cap, raw))
+            elif regime == "approach":
+                taper = max(0.25, min(1.0, room_err / 1.2))
+                drive = max(
+                    0.0,
+                    taper * state.deadband_c + state.response_gain * eff_demand * room_err + 0.5 * state.integral_trim_c,
+                )
+                cap = min(limit_c, target_c + effective_max_offset)
+                raw = target_c + intake_comp + drive
+                planned = max(target_c, min(cap, raw))
+            else:
+                drive = max(0.0, state.deadband_c + state.response_gain * eff_demand * room_err + state.integral_trim_c)
+                cap = min(limit_c, target_c + effective_max_offset)
+                raw = target_c + intake_comp + drive
+                planned = max(target_c, min(cap, raw))
             drive_offset = planned - target_c
         else:
             intake_comp = max(0.0, -intake_bias)
-            room_err = max(0.0, room_temp_c - target_c)
-            drive = max(0.0, state.deadband_c + state.response_gain * eff_demand * room_err + state.integral_trim_c)
-            cap = max(limit_c, target_c - effective_max_offset)
-            raw = target_c - intake_comp - drive
-            planned = min(target_c, max(cap, raw))
+            signed_err = room_temp_c - target_c
+            room_err = max(0.0, signed_err)
+            if regime == "cruise":
+                drive = max(-0.2, min(0.5, 0.5 * signed_err))
+                cap = max(limit_c, target_c - effective_max_offset)
+                raw = target_c - intake_comp - drive
+                planned = min(target_c + 0.5, max(cap, raw))
+            elif regime == "approach":
+                taper = max(0.25, min(1.0, room_err / 1.2))
+                drive = max(
+                    0.0,
+                    taper * state.deadband_c + state.response_gain * eff_demand * room_err + 0.5 * state.integral_trim_c,
+                )
+                cap = max(limit_c, target_c - effective_max_offset)
+                raw = target_c - intake_comp - drive
+                planned = min(target_c, max(cap, raw))
+            else:
+                drive = max(0.0, state.deadband_c + state.response_gain * eff_demand * room_err + state.integral_trim_c)
+                cap = max(limit_c, target_c - effective_max_offset)
+                raw = target_c - intake_comp - drive
+                planned = min(target_c, max(cap, raw))
             drive_offset = target_c - planned
 
         diag = {
@@ -161,6 +194,7 @@ class ACOverdriveManager:
             "drive_offset_c": round(drive_offset, 2),
             "commanded_setpoint_c": round(planned, 1),
             "samples": state.samples,
+            "regime": regime,
         }
         return planned, diag
 

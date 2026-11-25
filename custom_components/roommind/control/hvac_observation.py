@@ -87,6 +87,120 @@ class HVACOutputObservation:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class SoftThermalLoadEstimate:
+    """Physics-based soft thermal load / plume estimate (never fabricates hvac_action)."""
+
+    stage: str
+    load_fraction: float
+    plume_delta_c: float | None = None
+    net_thermal_rate_c_per_h: float | None = None
+    source: str = "none"
+    confidence: str = "low"
+    supports_training: bool = False
+
+    def as_dict(self) -> dict[str, Any]:
+        """Serialize soft thermal load estimate for room state telemetry."""
+        return {
+            "stage": self.stage,
+            "load_fraction": round(self.load_fraction, 2),
+            "plume_delta_c": round(self.plume_delta_c, 2) if self.plume_delta_c is not None else None,
+            "net_thermal_rate_c_per_h": (
+                round(self.net_thermal_rate_c_per_h, 2) if self.net_thermal_rate_c_per_h is not None else None
+            ),
+            "source": self.source,
+            "confidence": self.confidence,
+            "supports_training": self.supports_training,
+        }
+
+
+def estimate_soft_thermal_load(
+    *,
+    hvac_mode: str | None,
+    hvac_action: str | None,
+    expected_mode: str | None,
+    power_w: float | None,
+    room_temp_c: float | None,
+    ac_internal_temp_c: float | None,
+    outdoor_temp_c: float | None,
+    temp_slope_c_per_h: float | None,
+    alpha: float = 0.0,
+    assumed_state: bool = False,
+) -> SoftThermalLoadEstimate:
+    """Estimate inverter thermal load from power measurements or dual-sensor plume/heat-balance."""
+    mode_norm = str(hvac_mode or "").lower()
+    action_norm = str(hvac_action or "").lower()
+    is_cooling_ctx = expected_mode == "cooling" or action_norm == "cooling" or mode_norm == "cool"
+    sign = -1.0 if is_cooling_ctx else 1.0
+
+    plume_delta: float | None = None
+    if (
+        ac_internal_temp_c is not None
+        and room_temp_c is not None
+        and math.isfinite(ac_internal_temp_c)
+        and math.isfinite(room_temp_c)
+    ):
+        plume_delta = (float(ac_internal_temp_c) - float(room_temp_c)) * sign
+
+    net_rate: float | None = None
+    if temp_slope_c_per_h is not None and math.isfinite(temp_slope_c_per_h):
+        loss_comp = (
+            max(0.0, float(alpha)) * (float(room_temp_c) - float(outdoor_temp_c))
+            if (
+                room_temp_c is not None
+                and outdoor_temp_c is not None
+                and math.isfinite(room_temp_c)
+                and math.isfinite(outdoor_temp_c)
+            )
+            else 0.0
+        )
+        net_rate = (float(temp_slope_c_per_h) + loss_comp) * sign
+
+    if power_w is not None and math.isfinite(power_w):
+        if power_w < 10.0:
+            return SoftThermalLoadEstimate("off", 0.0, plume_delta, net_rate, "power_sensor", "high", False)
+        if power_w < 120.0:
+            return SoftThermalLoadEstimate("fan", 0.0, plume_delta, net_rate, "power_sensor", "high", False)
+        if power_w < 450.0:
+            return SoftThermalLoadEstimate("min_floor", 0.35, plume_delta, net_rate, "power_sensor", "high", True)
+        if power_w < 850.0:
+            return SoftThermalLoadEstimate("active_cruise", 0.65, plume_delta, net_rate, "power_sensor", "high", True)
+        return SoftThermalLoadEstimate("active_high", 1.0, plume_delta, net_rate, "power_sensor", "high", True)
+
+    if assumed_state or mode_norm in ("", "unknown", "unavailable"):
+        return SoftThermalLoadEstimate("unknown", 0.0, plume_delta, net_rate, "none", "low", False)
+
+    if mode_norm == "off" or action_norm in ("idle", "off"):
+        return SoftThermalLoadEstimate("off", 0.0, plume_delta, net_rate, "hvac_action", "high", False)
+
+    if action_norm in ("heating", "preheating", "cooling"):
+        lf = 0.7
+        if net_rate is not None:
+            lf = max(0.3, min(1.0, net_rate / 1.8))
+        stage = "active_high" if lf >= 0.75 else ("active_cruise" if lf >= 0.45 else "min_floor")
+        return SoftThermalLoadEstimate(stage, lf, plume_delta, net_rate, "hvac_action", "high", True)
+
+    mode_matches = (expected_mode == "heating" and mode_norm in ("heat", "heat_cool", "auto")) or (
+        expected_mode == "cooling" and mode_norm in ("cool", "heat_cool", "auto")
+    )
+    if not mode_matches:
+        return SoftThermalLoadEstimate("unknown", 0.0, plume_delta, net_rate, "thermal_plume", "low", False)
+
+    strong_rate = net_rate is not None and net_rate >= 0.15
+    strong_plume = plume_delta is not None and plume_delta >= 0.8
+    sustained_hold = net_rate is not None and abs(net_rate) <= 0.15 and plume_delta is not None and plume_delta >= 0.4
+
+    if strong_rate or strong_plume or sustained_hold:
+        rate_lf = max(0.25, min(1.0, net_rate / 1.8)) if net_rate is not None else 0.0
+        plume_lf = max(0.3, min(0.85, plume_delta / 4.0)) if plume_delta is not None and plume_delta > 0 else 0.0
+        lf = max(0.25, min(1.0, max(rate_lf, plume_lf)))
+        stage = "active_high" if lf >= 0.7 else ("active_cruise" if lf >= 0.4 else "min_floor")
+        return SoftThermalLoadEstimate(stage, lf, plume_delta, net_rate, "thermal_plume", "medium", True)
+
+    stage = "idle_suspected" if net_rate is not None and net_rate < -0.15 else "unknown"
+    return SoftThermalLoadEstimate(stage, 0.0, plume_delta, net_rate, "thermal_plume", "low", False)
+
+
 def power_in_watts(value: Any, unit: str | None) -> float | None:
     """Normalize finite, nonnegative power; unitless legacy sensors use watts."""
     factor = {None: 1.0, "": 1.0, "W": 1.0, "kW": 1000.0, "MW": 1_000_000.0, "mW": 0.001}.get(unit)

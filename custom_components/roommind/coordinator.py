@@ -59,7 +59,8 @@ from .const import (
 from .control.ac_overdrive import ACOverdriveManager
 from .control.actuation import ActuationLedger
 from .control.constraints import ConstraintInput, ConstraintReducer
-from .control.hvac_observation import HVACOutputObservation, observed_room_activity
+from .control.hvac_observation import HVACOutputObservation, SoftThermalLoadEstimate, observed_room_activity
+from .control.inverter_regime import InverterRegimeDecision, InverterRegimeManager
 from .control.mpc_controller import (
     DEFAULT_OUTDOOR_TEMP_FALLBACK,
     AppliedCommandReport,
@@ -326,6 +327,8 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._ekf_training = EkfTrainingManager(self._model_manager)
         self._sensor_fusion = SensorFusionManager()
         self._ac_overdrive = ACOverdriveManager()
+        self._inverter_regime = InverterRegimeManager()
+        self._prev_slope_sample: dict[str, tuple[float, float]] = {}
         self._tracked_entity_areas: dict[str, set[str]] = {}
         self._remove_state_listeners: Callable[[], None] | None = None
         self._pending_obs_areas: set[str] = set()
@@ -1814,8 +1817,61 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             target_temp = targets.cool if mode == MODE_COOLING else targets.heat
 
         climate_active = settings.get("climate_control_active", True) and room.get("climate_control_enabled", True)
+        device_snapshot = observation.climate_devices
+        regime_decision: InverterRegimeDecision | None = None
+        if (
+            device_snapshot.ac_entity_ids
+            and has_external_sensor
+            and climate_active
+            and climate_mode in ("auto", CLIMATE_MODE_HEAT_ONLY, CLIMATE_MODE_COOL_ONLY)
+        ):
+            can_heat_r, can_cool_r = controller._get_can_heat_cool()
+            has_adaptive_ac = any(
+                isinstance(d, dict) and d.get("type") == "ac" and d.get("setpoint_mode") == "adaptive"
+                for d in (room.get("devices") or [])
+            )
+            hold_cruise = bool(device_snapshot.ac_entity_ids and not device_snapshot.trv_entity_ids)
+            regime_decision = self._inverter_regime.evaluate(
+                area_id,
+                mode=mode,
+                power_fraction=power_fraction,
+                can_heat=can_heat_r,
+                can_cool=can_cool_r,
+                current_temp=current_temp,
+                targets=targets,
+                previous_mode=self._previous_modes.get(area_id, MODE_IDLE),
+                has_ac=True,
+                has_external_sensor=has_external_sensor,
+                window_open=window_open,
+                force_off=force_off,
+                rapid_recovery_active=rapid_recovery_active,
+                hold_cruise=hold_cruise,
+            )
+            controller._inverter_regime = regime_decision.regime
+            if hold_cruise and not window_open and not force_off and mode in (MODE_IDLE, MODE_HEATING, MODE_COOLING):
+                if regime_decision.active and (has_adaptive_ac or mode != regime_decision.mode):
+                    mode = regime_decision.mode
+                    power_fraction = regime_decision.power_fraction
+                elif regime_decision.regime == "coast" and regime_decision.in_min_hold:
+                    mode = MODE_IDLE
+                    power_fraction = 0.0
+                if mode == MODE_HEATING and targets.heat is not None:
+                    target_temp = targets.heat
+                elif mode == MODE_COOLING and targets.cool is not None:
+                    target_temp = targets.cool
+
         airflow_mix_plan_level = 0.0 if window_open or force_off else controller.last_airflow_mix_level
         airflow_vent_plan_level = 0.0 if window_open or force_off else controller.last_airflow_vent_level
+        if (
+            regime_decision is not None
+            and room.get("fan_speed_mode", "auto") == "auto"
+            and not window_open
+            and not force_off
+        ):
+            if regime_decision.active:
+                airflow_mix_plan_level = max(airflow_mix_plan_level, regime_decision.recommended_fan_level)
+            elif regime_decision.regime in ("coast", "off") and mode == MODE_IDLE:
+                airflow_mix_plan_level = 0.0
         if (
             rapid_recovery_active
             and controller.last_plan is None
@@ -1834,8 +1890,6 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             presence_away=presence_away,
             rapid_recovery_active=rapid_recovery_active,
         )
-
-        device_snapshot = observation.climate_devices
 
         # Exclude TRVs currently being valve-protection-cycled from normal control
         cycling_eids = {eid for eid in device_snapshot.trv_entity_ids if self._valve_manager.is_entity_cycling(eid)}
@@ -2055,6 +2109,15 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             except Exception:  # noqa: BLE001
                 mpc_active = False
 
+        temp_slope = self._update_temp_slope(area_id, current_temp_raw)
+        soft_load = self._compute_soft_thermal_load(
+            room,
+            area_id,
+            expected_mode=mode if mode in (MODE_HEATING, MODE_COOLING) else device_action[0],
+            room_temp_c=current_temp_raw,
+            temp_slope_c_per_h=temp_slope,
+        )
+
         display_mode, display_pf = await self._observe_and_train(
             area_id=area_id,
             room=room,
@@ -2065,6 +2128,7 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             window_open=window_open,
             q_residual=q_residual,
             pause_learning=bool(sleep_device_status and sleep_device_status.get("mite_removal_active")),
+            soft_load=soft_load,
         )
         self._last_room_pf_mix[area_id] = (display_pf, airflow.q_fan_mix)
 
@@ -2143,7 +2207,81 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         room_state["device_observations"] = self._device_observation_status(observation)
         room_state["sleep_device_status"] = sleep_device_status
         room_state["ac_overdrive_status"] = controller.last_overdrive_status
+        room_state["inverter_regime"] = regime_decision.as_dict() if regime_decision is not None else None
+        room_state["thermal_load_status"] = soft_load.as_dict() if soft_load is not None else None
         return room_state
+
+    def _update_temp_slope(self, area_id: str, temp_c: float | None) -> float | None:
+        """Track filtered room temperature slope in °C/h across cycles."""
+        if temp_c is None:
+            return None
+        now = time.monotonic()
+        prev = self._prev_slope_sample.get(area_id)
+        self._prev_slope_sample[area_id] = (temp_c, now)
+        if prev is None:
+            return None
+        dt_s = now - prev[1]
+        if dt_s < 20.0 or dt_s > 3600.0:
+            return None
+        return max(-15.0, min(15.0, (temp_c - prev[0]) / (dt_s / 3600.0)))
+
+    def _compute_soft_thermal_load(
+        self,
+        room: dict[str, Any],
+        area_id: str,
+        *,
+        expected_mode: str | None,
+        room_temp_c: float | None,
+        temp_slope_c_per_h: float | None,
+    ) -> SoftThermalLoadEstimate | None:
+        """Estimate thermal load from wattage, HVAC feedback, or dual-sensor plume."""
+        devices = [d for d in (room.get("devices") or []) if isinstance(d, dict) and d.get("entity_id")]
+        if not devices:
+            return None
+        primary = next((d for d in devices if d.get("type") == "ac"), devices[0])
+        target_dev = dict(primary)
+        if not target_dev.get("power_sensor_entity"):
+            for af in room.get("airflow_devices", []) or []:
+                if (
+                    isinstance(af, dict)
+                    and af.get("entity_id") == target_dev.get("entity_id")
+                    and af.get("power_sensor_entity")
+                ):
+                    target_dev["power_sensor_entity"] = af["power_sensor_entity"]
+                    break
+        model = self._model_manager.get_model(area_id)
+        alpha = model.U / max(model.C, 0.001)
+        return self._hvac_output_observer.estimate_soft_load(
+            device=target_dev,
+            expected_mode=expected_mode,
+            room_temp_c=room_temp_c,
+            outdoor_temp_c=self.outdoor_temp_effective,
+            temp_slope_c_per_h=temp_slope_c_per_h,
+            alpha=alpha,
+        )
+
+    def _supports_mode_aware_ekf_training(
+        self,
+        room: dict[str, Any],
+        commanded_mode: str,
+        soft_load: SoftThermalLoadEstimate | None,
+    ) -> bool:
+        """Allow safe EKF training when confirmed hvac_mode + plume/power confirm active delivery."""
+        if commanded_mode not in (MODE_HEATING, MODE_COOLING):
+            return False
+        if soft_load is None or not soft_load.supports_training:
+            return False
+        eids = get_all_entity_ids(room.get("devices", []))
+        if not eids:
+            return False
+        expected_hvac = ("heat", "heat_cool", "auto") if commanded_mode == MODE_HEATING else ("cool", "heat_cool", "auto")
+        for eid in eids:
+            obs = self._hvac_output_observer.read_climate(eid)
+            if obs.assumed_state or obs.hvac_mode not in expected_hvac:
+                return False
+            if obs.thermal_mode == "idle":
+                return False
+        return True
 
     async def _observe_and_train(
         self,
@@ -2157,6 +2295,7 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         window_open: bool,
         q_residual: float,
         pause_learning: bool = False,
+        soft_load: SoftThermalLoadEstimate | None = None,
     ) -> tuple[str, float]:
         """Observe device state, train EKF, compute display mode.
 
@@ -2169,7 +2308,12 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Use the pre-dispatch observation for the interval ending now.
         # Missing feedback is unknown; neither a setpoint nor a completed
         # service call measures heat delivered to the room.
-        ekf_mode, ekf_pf = observation.device_action
+        raw_ekf_mode, raw_ekf_pf = observation.device_action
+        ekf_mode, ekf_pf = raw_ekf_mode, raw_ekf_pf
+        if ekf_mode is None and self._supports_mode_aware_ekf_training(room, mode, soft_load):
+            ekf_mode = mode
+            assert soft_load is not None
+            ekf_pf = max(0.25, min(1.0, float(soft_load.load_fraction)))
         q_residual_training = q_residual
 
         # Update thermal model with observation (EKF online learning).
@@ -2222,7 +2366,7 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._previous_modes[area_id] = mode
 
         # Unknown output is surfaced separately from the requested mode.
-        return ekf_mode or MODE_IDLE, ekf_pf
+        return raw_ekf_mode or MODE_IDLE, raw_ekf_pf
 
     def _build_room_state_dict(
         self,
@@ -2557,6 +2701,8 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._previous_modes.pop(area_id, None)
         self._last_valid_temps.pop(area_id, None)
         self._ekf_training.remove_room(area_id)
+        self._inverter_regime.reset_room(area_id)
+        self._prev_slope_sample.pop(area_id, None)
         self._pending_predictions.pop(area_id, None)
         self._residual_tracker.remove_room(area_id)
         self._cover_orchestrator.remove_room(area_id)

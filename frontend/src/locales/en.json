@@ -1155,5 +1155,10 @@
   "monitor.primary_sensor": "Primary",
   "monitor.fused_sensor": "Fused",
   "monitor.unlinked_sensor": "Detected",
-  "monitor.no_sensors_yet": "No temperature, humidity, or air quality sensors found in this area yet."
+  "monitor.no_sensors_yet": "No temperature, humidity, or air quality sensors found in this area yet.",
+  "hero.regime.recovery": "Recovery",
+  "hero.regime.approach": "Approach",
+  "hero.regime.cruise": "Cruise",
+  "hero.regime.coast": "Coast",
+  "hero.thermal_load_hint": "Estimated thermal load: {pct}%"
 }

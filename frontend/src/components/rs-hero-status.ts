@@ -834,6 +834,38 @@ export class RsHeroStatus extends LitElement {
                           : nothing
                       }
                       ${
+                        live?.inverter_regime && live.inverter_regime.regime !== "off"
+                          ? html`<span
+                              class="reason-pill"
+                              data-tone=${
+                                live.inverter_regime.regime === "recovery"
+                                  ? "warning"
+                                  : live.inverter_regime.regime === "cruise"
+                                    ? "info"
+                                    : live.inverter_regime.regime === "approach"
+                                      ? "accent"
+                                      : "neutral"
+                              }
+                              title=${
+                                live.thermal_load_status
+                                  ? `${localize("hero.thermal_load_hint", l, {
+                                      pct: String(Math.round(live.thermal_load_status.load_fraction * 100)),
+                                    })}`
+                                  : ""
+                              }
+                            >
+                              ${localize(
+                                `hero.regime.${live.inverter_regime.regime}` as
+                                  | "hero.regime.recovery"
+                                  | "hero.regime.approach"
+                                  | "hero.regime.cruise"
+                                  | "hero.regime.coast",
+                                l,
+                              )}
+                            </span>`
+                          : nothing
+                      }
+                      ${
                         this.config
                           ? html`
                               <button

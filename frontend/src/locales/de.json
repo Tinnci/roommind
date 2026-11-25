@@ -1155,5 +1155,10 @@
   "monitor.primary_sensor": "Primär",
   "monitor.fused_sensor": "Fusioniert",
   "monitor.unlinked_sensor": "Erkannt",
-  "monitor.no_sensors_yet": "Noch keine Temperatur-, Feuchte- oder Luftqualitätssensoren in diesem Bereich."
+  "monitor.no_sensors_yet": "Noch keine Temperatur-, Feuchte- oder Luftqualitätssensoren in diesem Bereich.",
+  "hero.regime.recovery": "Aufholen",
+  "hero.regime.approach": "Annäherung",
+  "hero.regime.cruise": "Teillast",
+  "hero.regime.coast": "Ausrollen",
+  "hero.thermal_load_hint": "Geschätzte Wärmelast: {pct}%"
 }

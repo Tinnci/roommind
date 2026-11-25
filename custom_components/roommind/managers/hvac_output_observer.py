@@ -14,9 +14,12 @@ from ..const import MAX_SENSOR_STALENESS
 from ..control.hvac_observation import (
     ClimateObservation,
     HVACOutputObservation,
+    SoftThermalLoadEstimate,
     estimate_hvac_output,
+    estimate_soft_thermal_load,
     power_in_watts,
 )
+from ..utils.temp_utils import ha_temp_to_celsius
 
 
 def _is_recent(reported_at: datetime | None, now: datetime) -> bool:
@@ -105,3 +108,37 @@ class HVACOutputObserver:
                         return None
                     break
         return power_in_watts(state.state, state.attributes.get("unit_of_measurement"))
+
+    def estimate_soft_load(
+        self,
+        *,
+        device: dict[str, Any],
+        expected_mode: str | None,
+        room_temp_c: float | None,
+        outdoor_temp_c: float | None,
+        temp_slope_c_per_h: float | None,
+        alpha: float = 0.0,
+    ) -> SoftThermalLoadEstimate:
+        """Compute physics-based soft thermal load estimate for one climate entity."""
+        entity_id = str(device.get("entity_id", ""))
+        obs = self.read_climate(entity_id)
+        power_w = self._read_power(device.get("power_sensor_entity"))
+        state = self.hass.states.get(entity_id)
+        raw_ac_temp = state.attributes.get("current_temperature") if state is not None else None
+        ac_internal_c = (
+            ha_temp_to_celsius(self.hass, float(raw_ac_temp), entity_id=entity_id)
+            if isinstance(raw_ac_temp, int | float) and not isinstance(raw_ac_temp, bool)
+            else None
+        )
+        return estimate_soft_thermal_load(
+            hvac_mode=obs.hvac_mode,
+            hvac_action=None if obs.hvac_action_is_estimated else obs.hvac_action,
+            expected_mode=expected_mode,
+            power_w=power_w,
+            room_temp_c=room_temp_c,
+            ac_internal_temp_c=ac_internal_c,
+            outdoor_temp_c=outdoor_temp_c,
+            temp_slope_c_per_h=temp_slope_c_per_h,
+            alpha=alpha,
+            assumed_state=obs.assumed_state,
+        )

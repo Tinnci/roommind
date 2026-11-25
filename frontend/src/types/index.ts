@@ -55,6 +55,27 @@ export interface AcOverdriveStatus {
   drive_offset_c: number;
   commanded_setpoint_c: number;
   samples: number;
+  regime?: string | null;
+}
+
+export interface InverterRegimeStatus {
+  regime: "off" | "recovery" | "approach" | "cruise" | "coast";
+  active: boolean;
+  mode: RoomMode;
+  power_fraction: number;
+  recommended_fan_level: number;
+  reason: string;
+  in_min_hold: boolean;
+}
+
+export interface ThermalLoadStatus {
+  stage: string;
+  load_fraction: number;
+  plume_delta_c: number | null;
+  net_thermal_rate_c_per_h: number | null;
+  source: string;
+  confidence: string;
+  supports_training: boolean;
 }
 
 export interface RoomLiveData {
@@ -66,6 +87,8 @@ export interface RoomLiveData {
   device_actuation_status?: DeviceActuationStatus[];
   device_observations?: DeviceObservation[];
   ac_overdrive_status?: AcOverdriveStatus[];
+  inverter_regime?: InverterRegimeStatus | null;
+  thermal_load_status?: ThermalLoadStatus | null;
   current_temp: number | null;
   current_temp_raw?: number | null;
   current_humidity: number | null;

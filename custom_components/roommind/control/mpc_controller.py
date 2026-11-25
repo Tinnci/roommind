@@ -318,6 +318,7 @@ class MPCController:
         coupling_terms: list[dict] | None = None,
         ac_overdrive: ACOverdriveManager | None = None,
         sensor_fusion: SensorFusionManager | None = None,
+        inverter_regime: str | None = None,
     ) -> None:
         self.hass = hass
         self.room_config = room_config
@@ -341,6 +342,7 @@ class MPCController:
         self._overdrive_statuses: dict[str, dict[str, Any]] = {}
         self._ac_overdrive = ac_overdrive
         self._sensor_fusion = sensor_fusion
+        self._inverter_regime = inverter_regime
         self._target_resolver = target_resolver
         self.last_plan: MPCPlan | None = None
         self._solar_exposure = solar_exposure or SolarExposure(raw_solar=q_solar, shading_factor=shading_factor)
@@ -1448,6 +1450,7 @@ class MPCController:
                 limit_c=limit,
                 max_offset_c=device.get("max_setpoint_offset_c"),
                 learned_sensor_bias_c=learned_bias_c,
+                regime=self._inverter_regime,
             )
             self._overdrive_statuses[entity_id] = diag
             return celsius_to_ha_temp(self.hass, round(temperature, 1))
