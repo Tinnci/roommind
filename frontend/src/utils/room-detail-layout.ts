@@ -19,6 +19,7 @@ export interface RoomDetailLayoutInput {
   presenceAvailable: boolean;
   hasTemperatureSensor: boolean;
   devices: DeviceConfig[];
+  hasAirflowDevices?: boolean;
 }
 
 export interface RoomDetailLayout {
@@ -31,6 +32,18 @@ export function getRoomDetailLayout(input: RoomDetailLayoutInput): RoomDetailLay
     return {
       primarySections: [],
       configurationSections: ["outdoor"],
+    };
+  }
+
+  if (input.devices.length === 0) {
+    const configurationSections: ConfigurationRoomSection[] = ["sensors"];
+    if (input.hasAirflowDevices) {
+      configurationSections.push("airflow");
+    }
+    configurationSections.push("covers", "devices", "outdoor");
+    return {
+      primarySections: [],
+      configurationSections,
     };
   }
 

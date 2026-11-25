@@ -2,15 +2,16 @@
  * Whole-home HVAC fleet summary and interactive overview filtering helpers.
  */
 import type { AreaInfo, CompressorGroup, HomeAssistant } from "../types";
-import { hasClimateDevice, isRoomControlEffective } from "./room-overview-status";
+import { hasClimateDevice, isMonitorOnlyRoom, isRoomControlEffective } from "./room-overview-status";
 import { getDisplayMode } from "./room-state";
 import { buildThermostatFleet } from "./thermostat-fleet";
 
 export type FleetFilter =
-  "all" | "active" | "multi_unit" | "cooling" | "heating" | "off" | "attention";
+  "all" | "active" | "multi_unit" | "cooling" | "heating" | "off" | "monitored" | "attention";
 
 export interface FleetOverviewStats {
   configuredRooms: number;
+  monitoredRooms: number;
   totalUnits: number;
   activeUnits: number;
   activeRooms: number;
@@ -49,7 +50,15 @@ export function matchesFleetFilter(
 ): boolean {
   if (filter === "all") return true;
   const config = info.config;
-  if (!config || config.is_outdoor || !hasClimateDevice(config)) return false;
+  if (!config || config.is_outdoor) return false;
+
+  if (filter === "monitored") {
+    return isMonitorOnlyRoom(config);
+  }
+  if (filter === "attention") {
+    return isRoomAttention(info, hass, compressorGroups);
+  }
+  if (!hasClimateDevice(config)) return false;
 
   const displayMode = getDisplayMode(config.live, config);
   const controlEffective = isRoomControlEffective(config, climateControlActive);
@@ -73,8 +82,6 @@ export function matchesFleetFilter(
       return displayMode === "heating";
     case "off":
       return displayMode === "off" || displayMode === "idle" || !controlEffective;
-    case "attention":
-      return isRoomAttention(info, hass, compressorGroups);
   }
 }
 
@@ -87,6 +94,7 @@ export function summarizeFleetOverview(
   const seenUnits = new Set<string>();
   const seenActiveUnits = new Set<string>();
   let configuredRooms = 0;
+  let monitoredRooms = 0;
   let activeRooms = 0;
   let coolingDryingRooms = 0;
   let heatingRooms = 0;
@@ -96,7 +104,14 @@ export function summarizeFleetOverview(
 
   for (const info of infos) {
     const config = info.config;
-    if (!config || config.is_outdoor || !hasClimateDevice(config)) continue;
+    if (!config || config.is_outdoor) continue;
+
+    if (isMonitorOnlyRoom(config)) {
+      monitoredRooms += 1;
+      if (isRoomAttention(info, hass, compressorGroups)) attentionRooms += 1;
+      continue;
+    }
+    if (!hasClimateDevice(config)) continue;
 
     configuredRooms += 1;
     const fleet = buildThermostatFleet(config, hass, compressorGroups);
@@ -128,6 +143,7 @@ export function summarizeFleetOverview(
 
   return {
     configuredRooms,
+    monitoredRooms,
     totalUnits: seenUnits.size,
     activeUnits: seenActiveUnits.size,
     activeRooms,

@@ -19,6 +19,10 @@ export function hasClimateDevice(config: RoomConfig): boolean {
   );
 }
 
+export function isMonitorOnlyRoom(config: RoomConfig | null | undefined): boolean {
+  return Boolean(config && !config.is_outdoor && !hasClimateDevice(config));
+}
+
 export function isRoomControlEffective(config: RoomConfig, climateControlActive: boolean): boolean {
   return (
     climateControlActive &&

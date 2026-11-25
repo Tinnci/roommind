@@ -168,4 +168,53 @@ describe("fleet-overview", () => {
     expect(matchesFleetFilter(living, "attention", hass, true)).toBe(true);
     expect(matchesFleetFilter(bedroom, "attention", hass, true)).toBe(false);
   });
+
+  it("counts and filters monitor-only rooms without mixing active climate unit counts", () => {
+    const hallway = makeAreaInfo(
+      "hallway",
+      makeRoom({
+        area_id: "hallway",
+        devices: [],
+        temperature_sensor: "sensor.hall_temp",
+        live: {
+          current_temp: 22,
+          current_humidity: 70,
+          target_temp: null,
+          heat_target: null,
+          cool_target: null,
+          mode: "idle",
+          heating_power: 0,
+          device_setpoint: null,
+          override_active: false,
+          override_type: null,
+          override_temp: null,
+          override_until: null,
+          override_suppressed: false,
+          active_schedule_index: -1,
+          window_open: false,
+          confidence: null,
+          mpc_active: false,
+          presence_away: false,
+          mold_risk_level: "warning",
+          mold_surface_rh: 76,
+          mold_prevention_active: false,
+          mold_prevention_delta: 0,
+          blind_position: null,
+          cover_auto_paused: false,
+          cover_forced_reason: "",
+          active_cover_schedule_index: -1,
+          active_heat_sources: null,
+          learning_paused_reason: null,
+        },
+      }),
+    );
+
+    const stats = summarizeFleetOverview([living, bedroom, hallway], hass, true);
+    expect(stats.configuredRooms).toBe(2);
+    expect(stats.monitoredRooms).toBe(1);
+    expect(stats.attentionRooms).toBe(2);
+    expect(matchesFleetFilter(hallway, "monitored", hass, true)).toBe(true);
+    expect(matchesFleetFilter(hallway, "attention", hass, true)).toBe(true);
+    expect(matchesFleetFilter(living, "monitored", hass, true)).toBe(false);
+  });
 });

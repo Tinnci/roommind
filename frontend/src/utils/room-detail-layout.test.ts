@@ -63,4 +63,31 @@ describe("getRoomDetailLayout", () => {
       "outdoor",
     ]);
   });
+
+  test("streamlines configuration sections for monitor-only rooms without climate devices", () => {
+    const layout = getRoomDetailLayout({
+      isOutdoor: false,
+      presenceAvailable: true,
+      hasTemperatureSensor: true,
+      devices: [],
+      hasAirflowDevices: false,
+    });
+
+    expect(layout.configurationSections).toEqual(["sensors", "covers", "devices", "outdoor"]);
+
+    const withAirflow = getRoomDetailLayout({
+      isOutdoor: false,
+      presenceAvailable: false,
+      hasTemperatureSensor: true,
+      devices: [],
+      hasAirflowDevices: true,
+    });
+    expect(withAirflow.configurationSections).toEqual([
+      "sensors",
+      "airflow",
+      "covers",
+      "devices",
+      "outdoor",
+    ]);
+  });
 });

@@ -16,6 +16,11 @@ import { isOverrideEffective } from "../utils/room-overview-status";
 import { buildThermostatFleet } from "../utils/thermostat-fleet";
 import { buildRoomFanCapabilities, fanSpeedBars, formatFanModeLabel } from "../utils/fan-control";
 import { resolveRoomReason } from "../utils/room-state-reason";
+import {
+  assessRoomComfort,
+  calculateDewPointC,
+  inspectAreaSensors,
+} from "../utils/environment-monitor";
 import "./rs-thermal-band";
 
 @customElement("rs-area-card")
@@ -24,6 +29,7 @@ export class RsAreaCard extends LitElement {
   @property({ attribute: false }) public config: RoomConfig | null = null;
   @property({ type: Number }) public climateEntityCount = 0;
   @property({ type: Number }) public tempSensorCount = 0;
+  @property({ type: Number }) public humiditySensorCount = 0;
   @property({ attribute: false }) public hass!: HomeAssistant;
   @property({ type: String }) public controlMode: "mpc" | "bangbang" = "bangbang";
   @property({ type: Boolean }) public climateControlActive = true;
@@ -90,6 +96,11 @@ export class RsAreaCard extends LitElement {
       ha-card[data-activity="fan_only"] {
         --room-glow: color-mix(in srgb, var(--roommind-success-color) 9%, transparent);
         --room-stripe: var(--roommind-success-color);
+      }
+
+      ha-card[data-activity="monitoring"] {
+        --room-glow: color-mix(in srgb, var(--roommind-info-color) 7%, transparent);
+        --room-stripe: var(--roommind-info-color);
       }
 
       ha-card:hover {
@@ -315,8 +326,47 @@ export class RsAreaCard extends LitElement {
         color: var(--roommind-info-color);
       }
 
-      .delta-chip.on-target {
+      .delta-chip.on-target,
+      .delta-chip.success {
         color: var(--roommind-success-color);
+      }
+
+      .delta-chip.warning {
+        color: var(--roommind-warning-color);
+      }
+
+      .delta-chip.critical {
+        color: var(--roommind-error-color);
+      }
+
+      .delta-chip.info {
+        color: var(--roommind-info-color);
+      }
+
+      .feels-like-sub {
+        margin-top: 4px;
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--secondary-text-color);
+      }
+
+      .monitor-footer-note {
+        font-size: 11.5px;
+        font-weight: 500;
+        color: var(--secondary-text-color);
+      }
+
+      .aq-mini-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--secondary-text-color);
+        padding: 2px 6px;
+        border-radius: 6px;
+        background: var(--roommind-tile-surface, rgba(0, 0, 0, 0.04));
+        --mdc-icon-size: 13px;
       }
 
       /* Footer row: humidity + MPC status */
@@ -770,14 +820,25 @@ export class RsAreaCard extends LitElement {
       (this.config?.acs?.length ?? 0) > 0;
     const isOutdoor = this.config?.is_outdoor ?? false;
     const isConfigured = this.config !== null && hasClimateSelected && !isOutdoor;
+    const isMonitorOnly = this.config !== null && !hasClimateSelected && !isOutdoor;
     const live = this.config?.live;
     const mode = getDisplayMode(live, this.config);
     const reason =
-      isConfigured && live ? resolveRoomReason(this.config, this.climateControlActive) : null;
+      isConfigured && live
+        ? resolveRoomReason(this.config, this.climateControlActive)
+        : isMonitorOnly &&
+            live &&
+            (live.window_open ||
+              live.mold_risk_level === "warning" ||
+              live.mold_risk_level === "critical")
+          ? resolveRoomReason(this.config, this.climateControlActive)
+          : null;
 
     return html`
       <ha-card
-        data-activity=${isConfigured ? (mode ?? "unknown") : "none"}
+        data-activity=${
+          isConfigured ? (mode ?? "unknown") : isMonitorOnly ? "monitoring" : "none"
+        }
         role="link"
         tabindex=${this.reordering ? -1 : 0}
         aria-label=${this.config?.display_name || this.area.name}
@@ -832,27 +893,36 @@ export class RsAreaCard extends LitElement {
                       }
                     </span>
                   `
-                : !this.reordering
-                  ? html`<ha-icon-button
-                      class="header-hide-btn"
-                      .path=${mdiEyeOff}
-                      .label=${localize("panel.hide_room", this.hass.language)}
-                      title=${localize("panel.hide_room", this.hass.language)}
-                      aria-label=${localize("panel.hide_room", this.hass.language)}
-                      @click=${this._onHideClick}
-                    ></ha-icon-button>`
-                  : nothing
+                : isMonitorOnly
+                  ? html`
+                      <span class="mode-pill mode-monitoring">
+                        <span class="mode-dot"></span>
+                        ${localize("card.monitor_only", this.hass.language)}
+                      </span>
+                    `
+                  : !this.reordering
+                    ? html`<ha-icon-button
+                        class="header-hide-btn"
+                        .path=${mdiEyeOff}
+                        .label=${localize("panel.hide_room", this.hass.language)}
+                        title=${localize("panel.hide_room", this.hass.language)}
+                        aria-label=${localize("panel.hide_room", this.hass.language)}
+                        @click=${this._onHideClick}
+                      ></ha-icon-button>`
+                    : nothing
             }
           </div>
 
           ${
             isConfigured
               ? this._renderConfigured(reason?.key ?? null)
-              : this.config?.live &&
-                  (this.config.live.current_temp !== null ||
-                    this.config.live.current_humidity !== null)
-                ? this._renderSensorOnly()
-                : this._renderUnconfigured(hasClimateDevices)
+              : isMonitorOnly
+                ? this._renderMonitorOnly()
+                : this.config?.live &&
+                    (this.config.live.current_temp !== null ||
+                      this.config.live.current_humidity !== null)
+                  ? this._renderSensorOnly()
+                  : this._renderUnconfigured(hasClimateDevices)
           }
         </div>
       </ha-card>
@@ -1193,6 +1263,159 @@ export class RsAreaCard extends LitElement {
     </div>`;
   }
 
+  private _renderMonitorOnly() {
+    const l = this.hass.language;
+    const live = this.config?.live;
+    const inv = inspectAreaSensors(this.area.area_id, this.hass, this.config);
+    const currentTemp = live?.current_temp ?? inv.previewTempC;
+    const currentHumidity = live?.current_humidity ?? inv.previewHumidity;
+    const comfort = assessRoomComfort(currentTemp, currentHumidity, live?.mold_risk_level);
+    const dewPoint = calculateDewPointC(currentTemp, currentHumidity);
+    const aq = inv.airQualitySensors[0];
+    const sensorCount = live?.sensor_fusion_status?.length ?? inv.temperatureSensors.length;
+    const showFeelsLike =
+      live?.perceived_temp != null &&
+      currentTemp !== null &&
+      Math.abs(live.perceived_temp - currentTemp) >= 0.3;
+
+    return html`
+      <div class="sensor-only">
+        <div class="metrics-row">
+          <div class="metric-block">
+            <span class="metric-label"
+              >${localize(
+                live && isTemperatureCached(live)
+                  ? "room.temperature_cached"
+                  : "room.temperature_panel.current",
+                l,
+              )}</span
+            >
+            <div class="temp-value">
+              ${
+                currentTemp !== null
+                  ? html`
+                      <span class="current-temp">${formatTemp(currentTemp, this.hass)}</span>
+                      <span class="temp-unit">${tempUnit(this.hass)}</span>
+                    `
+                  : html`<span class="no-temp">--</span>`
+              }
+            </div>
+            ${
+              showFeelsLike
+                ? html`<div class="feels-like-sub">
+                    ${localize("monitor.feels_like_short", l, {
+                      value: formatTemp(live!.perceived_temp!, this.hass),
+                      unit: tempUnit(this.hass),
+                    })}
+                  </div>`
+                : nothing
+            }
+          </div>
+          <div class="metric-block">
+            <span class="metric-label">${localize("card.humidity_label", l)}</span>
+            <div class="temp-value">
+              ${
+                currentHumidity !== null
+                  ? html`<span class="target-temp">${currentHumidity.toFixed(0)}</span>
+                      <span class="temp-unit">%</span>`
+                  : html`<span class="no-temp">--</span>`
+              }
+            </div>
+            ${
+              comfort
+                ? html`<div class="delta-chip ${comfort.tone}">
+                    <ha-icon .icon=${comfort.icon}></ha-icon>
+                    ${localize(comfort.labelKey, l)}
+                  </div>`
+                : nothing
+            }
+          </div>
+        </div>
+      </div>
+      <div class="card-footer">
+        <span class="footer-left">
+          ${
+            dewPoint !== null
+              ? html`<span class="humidity-info">
+                  <ha-icon icon="mdi:water-thermometer"></ha-icon>
+                  ${localize("card.dew_point_short", l, {
+                    value: formatTemp(dewPoint, this.hass),
+                    unit: tempUnit(this.hass),
+                  })}
+                </span>`
+              : nothing
+          }
+          ${
+            aq && aq.value !== null
+              ? html`<span class="aq-mini-pill">
+                  <ha-icon .icon=${aq.icon}></ha-icon>
+                  <span>${aq.displayValue}${aq.unit ? ` ${aq.unit}` : ""}</span>
+                </span>`
+              : nothing
+          }
+        </span>
+        <span class="badge-row">
+          ${
+            live?.window_open
+              ? html`<span class="status-badge window">
+                  <ha-icon icon="mdi:window-open-variant"></ha-icon>
+                  ${localize("card.window_open", l)}
+                </span>`
+              : nothing
+          }
+          ${
+            live?.mold_risk_level && live.mold_risk_level !== "ok"
+              ? html`<span class="mold-badge ${live.mold_risk_level}">
+                  <ha-icon icon="mdi:water-alert"></ha-icon>
+                  ${
+                    live.mold_risk_level === "critical"
+                      ? localize("card.mold_critical", l)
+                      : localize("card.mold_warning", l)
+                  }
+                </span>`
+              : nothing
+          }
+        </span>
+      </div>
+      ${
+        !this.reordering
+          ? html`
+              <div class="quick-actions" @click=${(e: Event) => e.stopPropagation()}>
+                <div class="quick-actions-left">
+                  <span class="monitor-footer-note">
+                    ${
+                      sensorCount > 1
+                        ? localize("card.sensors_fused", l, { count: sensorCount })
+                        : localize("card.monitor_only", l)
+                    }
+                  </span>
+                </div>
+                <div class="quick-actions-right">
+                  <button
+                    type="button"
+                    class="quick-btn"
+                    aria-label=${localize("overview.action.open_analytics", l)}
+                    title=${localize("overview.action.open_analytics", l)}
+                    @click=${this._onOpenAnalytics}
+                  >
+                    <ha-icon icon="mdi:chart-line"></ha-icon>
+                  </button>
+                  <ha-icon-button
+                    class="quick-hide-btn"
+                    .path=${mdiEyeOff}
+                    .label=${localize("panel.hide_room", l)}
+                    title=${localize("panel.hide_room", l)}
+                    aria-label=${localize("panel.hide_room", l)}
+                    @click=${this._onHideClick}
+                  ></ha-icon-button>
+                </div>
+              </div>
+            `
+          : nothing
+      }
+    `;
+  }
+
   private _renderSensorOnly() {
     const live = this.config!.live!;
     const isOutdoor = this.config?.is_outdoor ?? false;
@@ -1258,8 +1481,65 @@ export class RsAreaCard extends LitElement {
 
   private _renderUnconfigured(hasClimateDevices: boolean) {
     const l = this.hass.language;
+    const inv = !hasClimateDevices
+      ? inspectAreaSensors(this.area.area_id, this.hass, null)
+      : null;
+    const sensorCount =
+      (inv?.temperatureSensors.length ?? this.tempSensorCount) +
+      (inv?.humiditySensors.length ?? this.humiditySensorCount);
+
+    if (!hasClimateDevices && sensorCount > 0 && inv) {
+      const comfort = assessRoomComfort(inv.previewTempC, inv.previewHumidity);
+      return html`
+        <div class="sensor-only">
+          <div class="metrics-row">
+            <div class="metric-block">
+              <span class="metric-label">${localize("room.temperature_panel.current", l)}</span>
+              <div class="temp-value">
+                ${
+                  inv.previewTempC !== null
+                    ? html`
+                        <span class="current-temp">${formatTemp(inv.previewTempC, this.hass)}</span>
+                        <span class="temp-unit">${tempUnit(this.hass)}</span>
+                      `
+                    : html`<span class="no-temp">--</span>`
+                }
+              </div>
+            </div>
+            <div class="metric-block">
+              <span class="metric-label">${localize("card.humidity_label", l)}</span>
+              <div class="temp-value">
+                ${
+                  inv.previewHumidity !== null
+                    ? html`<span class="target-temp">${inv.previewHumidity.toFixed(0)}</span>
+                        <span class="temp-unit">%</span>`
+                    : html`<span class="no-temp">--</span>`
+                }
+              </div>
+              ${
+                comfort
+                  ? html`<div class="delta-chip ${comfort.tone}">
+                      <ha-icon .icon=${comfort.icon}></ha-icon>
+                      ${localize(comfort.labelKey, l)}
+                    </div>`
+                  : nothing
+              }
+            </div>
+          </div>
+        </div>
+        <div class="configure-prompt">
+          <span class="configure-text">
+            ${localize("card.sensors_detected_monitor", l, { count: sensorCount })}
+          </span>
+          <span class="configure-arrow">›</span>
+        </div>
+      `;
+    }
+
     if (!hasClimateDevices) {
-      return html`<div class="device-summary empty">${localize("card.no_climate", l)}</div>`;
+      return html`<div class="device-summary empty">
+        ${localize("card.no_climate_or_sensors", l)}
+      </div>`;
     }
 
     const ce = this.climateEntityCount;

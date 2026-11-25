@@ -5,6 +5,7 @@ export type ConfigurationEditSection = Exclude<ConfigurationRoomSection, "outdoo
 
 export interface ConfigurationHubMetrics {
   deviceCount?: number;
+  monitorOnly?: boolean;
   temperatureSensorCount?: number;
   primaryTemperatureSensorName?: string;
   humiditySensorConfigured?: boolean;
@@ -116,6 +117,13 @@ function configurationStatus(
     }
     case "devices": {
       const count = metrics.deviceCount ?? 0;
+      if (count === 0 && metrics.monitorOnly) {
+        return {
+          metaKey: "room.config.devices_optional_monitor",
+          actionKey: "room.config.action_optional",
+          tone: "inactive",
+        };
+      }
       return {
         metaKey: "room.config.devices_summary",
         metaParams: { count: String(count) },

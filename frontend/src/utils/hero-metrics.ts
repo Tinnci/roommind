@@ -16,13 +16,25 @@ export interface HeroMetricSelectionInput {
   isOutdoor: boolean;
   climateControlActive: boolean;
   roomControlEnabled: boolean;
+  hasClimateDevices?: boolean;
 }
 
 export function selectHeroMetricIds(input: HeroMetricSelectionInput): HeroMetricId[] {
-  const { live, isOutdoor, climateControlActive, roomControlEnabled } = input;
+  const { live, isOutdoor, climateControlActive, roomControlEnabled, hasClimateDevices = true } = input;
 
   if (isOutdoor) {
     return live.current_humidity !== null ? ["humidity"] : [];
+  }
+
+  if (!hasClimateDevices) {
+    const monitorMetrics: HeroMetricId[] = [];
+    if (live.mold_surface_rh != null && live.mold_risk_level !== "ok") {
+      monitorMetrics.push("moldRisk");
+    }
+    if (live.perceived_temp != null && !isTemperatureCached(live)) {
+      monitorMetrics.push("perceivedTemp");
+    }
+    return monitorMetrics.slice(0, 3);
   }
 
   const candidates: HeroMetricId[] = [];

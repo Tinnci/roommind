@@ -542,6 +542,7 @@ export interface AreaInfo {
   config: RoomConfig | null;
   climateEntityCount: number;
   tempSensorCount: number;
+  humiditySensorCount?: number;
 }
 
 export interface AreaSuggestion {

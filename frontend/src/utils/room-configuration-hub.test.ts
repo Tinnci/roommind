@@ -93,4 +93,18 @@ describe("buildConfigurationHubItems", () => {
       metaKey: "room.config.schedule_optional",
     });
   });
+
+  test("marks devices row as optional rather than missing for monitor-only rooms", () => {
+    const [devices] = buildConfigurationHubItems(["devices"], {
+      deviceCount: 0,
+      monitorOnly: true,
+    });
+
+    expect(devices).toMatchObject({
+      section: "devices",
+      tone: "inactive",
+      metaKey: "room.config.devices_optional_monitor",
+      actionKey: "room.config.action_optional",
+    });
+  });
 });

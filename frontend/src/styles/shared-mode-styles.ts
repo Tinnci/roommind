@@ -69,6 +69,14 @@ export const modeStyles = css`
     background: var(--disabled-text-color, #bdbdbd);
   }
 
+  .mode-monitoring {
+    color: var(--roommind-info-color, #0288d1);
+    background: var(--roommind-info-tint, rgba(3, 169, 244, 0.12));
+  }
+  .mode-monitoring .mode-dot {
+    background: var(--roommind-info-color, #0288d1);
+  }
+
   .mode-other {
     color: var(--secondary-text-color);
     background: var(--roommind-surface-muted);

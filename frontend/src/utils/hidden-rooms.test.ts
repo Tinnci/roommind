@@ -4,13 +4,19 @@ import { getEmptyUnconfiguredAreaIds, hideRoomIds, unhideRoomIds } from "./hidde
 
 function makeAreaInfo(
   areaId: string,
-  opts: { config?: RoomConfig | null; climateEntityCount?: number } = {},
+  opts: {
+    config?: RoomConfig | null;
+    climateEntityCount?: number;
+    tempSensorCount?: number;
+    humiditySensorCount?: number;
+  } = {},
 ): AreaInfo {
   return {
     area: { area_id: areaId, name: areaId, picture: null, floor_id: null },
     config: opts.config ?? null,
     climateEntityCount: opts.climateEntityCount ?? 0,
-    tempSensorCount: 0,
+    tempSensorCount: opts.tempSensorCount ?? 0,
+    humiditySensorCount: opts.humiditySensorCount ?? 0,
   };
 }
 
@@ -32,10 +38,12 @@ describe("hidden-rooms", () => {
     expect(unhideRoomIds(["hallway", "garage", "attic"], ["hallway", "attic"])).toEqual(["garage"]);
   });
 
-  it("selects only visible unconfigured areas with zero climate devices", () => {
+  it("selects only visible unconfigured areas with zero climate devices or environment sensors", () => {
     const items = [
       makeAreaInfo("hallway"),
       makeAreaInfo("kitchen", { climateEntityCount: 1 }),
+      makeAreaInfo("study", { tempSensorCount: 1 }),
+      makeAreaInfo("bath", { humiditySensorCount: 1 }),
       makeAreaInfo("bedroom", { config: { area_id: "bedroom" } as RoomConfig }),
       makeAreaInfo("closet"),
     ];

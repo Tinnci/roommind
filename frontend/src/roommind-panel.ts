@@ -14,6 +14,7 @@ import { roommindThemeStyles } from "./styles/theme-styles";
 import { formatTemp, tempStep, tempUnit, toCelsius, toDisplay } from "./utils/temperature";
 import { DEFAULT_CONTROL_MODE, DEFAULT_SETBACK_OFFSET } from "./utils/constants";
 import { isRoomControlEffective, summarizeRoomOverview } from "./utils/room-overview-status";
+import { hasConfiguredSensors } from "./utils/environment-monitor";
 import {
   applyBaselineTargetChange,
   buildRoomSavePayload,
@@ -959,6 +960,7 @@ export class RoomMindPanel extends LitElement {
             .compressorGroups=${this._compressorGroups}
             @back-clicked=${this._onBackFromDetail}
             @room-updated=${this._onRoomUpdated}
+            @room-open-analytics=${this._onRoomOpenAnalytics}
           ></rs-room-detail>
         `;
       }
@@ -1357,6 +1359,7 @@ export class RoomMindPanel extends LitElement {
         .config=${info.config}
         .climateEntityCount=${info.climateEntityCount}
         .tempSensorCount=${info.tempSensorCount}
+        .humiditySensorCount=${info.humiditySensorCount ?? 0}
         .hass=${this.hass}
         .controlMode=${this._controlMode}
         .climateControlActive=${this._climateControlActive}
@@ -1422,7 +1425,10 @@ export class RoomMindPanel extends LitElement {
       (info.config?.devices?.length ?? 0) > 0 ||
       (info.config?.thermostats?.length ?? 0) > 0 ||
       (info.config?.acs?.length ?? 0) > 0;
-    if (!info.config || (!hasClimateSelected && !info.config.is_outdoor)) return "setup";
+    const hasSensors = hasConfiguredSensors(info.config);
+    if (!info.config || (!hasClimateSelected && !hasSensors && !info.config.is_outdoor)) {
+      return "setup";
+    }
     const fleet = buildThermostatFleet(info.config, this.hass, this._compressorGroups);
     if (
       live?.window_open ||
@@ -1434,6 +1440,7 @@ export class RoomMindPanel extends LitElement {
       return "attention";
     }
     if (
+      hasClimateSelected &&
       isRoomControlEffective(info.config, this._climateControlActive) &&
       (mode === "heating" || mode === "cooling" || mode === "dry" || mode === "fan_only")
     ) {
@@ -1472,11 +1479,18 @@ export class RoomMindPanel extends LitElement {
           this.hass.states[e.entity_id]?.attributes?.device_class === "temperature",
       ).length;
 
+      const humiditySensorCount = areaEntities.filter(
+        (e) =>
+          e.entity_id.startsWith("sensor.") &&
+          this.hass.states[e.entity_id]?.attributes?.device_class === "humidity",
+      ).length;
+
       return {
         area,
         config: this._rooms[area.area_id] ?? null,
         climateEntityCount,
         tempSensorCount,
+        humiditySensorCount,
       };
     });
 
@@ -1490,9 +1504,17 @@ export class RoomMindPanel extends LitElement {
       // Only one in custom order: it comes first
       if (aIdx !== undefined) return -1;
       if (bIdx !== undefined) return 1;
-      // Neither in custom order: configured first, then alphabetical
-      const aScore = a.config ? 2 : a.climateEntityCount > 0 ? 1 : 0;
-      const bScore = b.config ? 2 : b.climateEntityCount > 0 ? 1 : 0;
+      // Neither in custom order: configured first, then device/sensor-equipped, then alphabetical
+      const aScore = a.config
+        ? 2
+        : a.climateEntityCount > 0 || a.tempSensorCount > 0 || (a.humiditySensorCount ?? 0) > 0
+          ? 1
+          : 0;
+      const bScore = b.config
+        ? 2
+        : b.climateEntityCount > 0 || b.tempSensorCount > 0 || (b.humiditySensorCount ?? 0) > 0
+          ? 1
+          : 0;
       if (aScore !== bScore) return bScore - aScore;
       return a.area.name.localeCompare(b.area.name);
     });
@@ -1683,6 +1705,21 @@ export class RoomMindPanel extends LitElement {
 
   private _renderHiddenRoomMeta(info: AreaInfo, lang: string): string {
     const live = info.config?.live;
+    const hasDevices =
+      (info.config?.devices?.length ?? 0) > 0 ||
+      (info.config?.thermostats?.length ?? 0) > 0 ||
+      (info.config?.acs?.length ?? 0) > 0;
+    if (live && !hasDevices) {
+      const parts: string[] = [];
+      if (live.current_temp !== null) {
+        parts.push(`${formatTemp(live.current_temp, this.hass)}${tempUnit(this.hass)}`);
+      }
+      if (live.current_humidity !== null) {
+        parts.push(`${live.current_humidity.toFixed(0)}%`);
+      }
+      if (parts.length > 0) return parts.join(" · ");
+      return localize("card.monitor_only", lang);
+    }
     if (live && live.current_temp !== null) {
       const mode = getDisplayMode(live, info.config) ?? "idle";
       return `${formatTemp(live.current_temp, this.hass)}${tempUnit(this.hass)} · ${formatMode(mode, lang)}`;
@@ -1693,6 +1730,12 @@ export class RoomMindPanel extends LitElement {
     if (info.climateEntityCount > 0) {
       return `${info.climateEntityCount} ${localize(
         info.climateEntityCount !== 1 ? "card.climate_devices" : "card.climate_device",
+        lang,
+      )}`;
+    }
+    if (info.tempSensorCount > 0) {
+      return `${info.tempSensorCount} ${localize(
+        info.tempSensorCount !== 1 ? "card.temp_sensors" : "card.temp_sensor",
         lang,
       )}`;
     }

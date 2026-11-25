@@ -6,6 +6,7 @@ import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { HomeAssistant, RoomConfig, AnalyticsData } from "../types";
 import { localize } from "../utils/localize";
+import { hasClimateDevice } from "../utils/room-overview-status";
 import { roommindThemeStyles } from "../styles/theme-styles";
 import "./analytics/rs-analytics-toolbar";
 import "./analytics/rs-analytics-chart";
@@ -108,7 +109,9 @@ export class RsAnalytics extends LitElement {
                   .isOutdoor=${this.rooms[this._selectedRoom]?.is_outdoor ?? false}
                 ></rs-analytics-chart>
                 ${
-                  !this.rooms[this._selectedRoom]?.is_outdoor
+                  this.rooms[this._selectedRoom] &&
+                  !this.rooms[this._selectedRoom]?.is_outdoor &&
+                  hasClimateDevice(this.rooms[this._selectedRoom]!)
                     ? html`<rs-analytics-model
                         .hass=${this.hass}
                         .data=${this._data}

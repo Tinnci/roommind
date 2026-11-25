@@ -19,10 +19,12 @@ import "./rs-temperature-control-panel";
 import "./rs-sleep-bar";
 import "./rs-schedule-timeline";
 import "./rs-control-details";
+import "./rs-environment-monitor";
 import "./rs-room-configuration-hub";
 import "./rs-room-edit-dialog-router";
 import { localize } from "../utils/localize";
 import { fireSaveStatus } from "../utils/events";
+import { getEntitiesForArea, isRoomMindEntity } from "../utils/room-state";
 import { formatTemp, tempUnit } from "../utils/temperature";
 import { DEFAULT_SETBACK_OFFSET } from "../utils/constants";
 import { roommindThemeStyles } from "../styles/theme-styles";
@@ -226,8 +228,21 @@ export class RsRoomDetail extends LitElement {
     this._applyDraft(createRoomConfigDraft(this.config));
     this._dirty = false;
 
-    // Unconfigured rooms open the device-edit dialog automatically.
-    if (this._devices.length === 0 && this._editing === null) {
+    // Unconfigured rooms open the device-edit dialog automatically only when climate devices exist.
+    const hasAreaClimateDevice =
+      this.hass && this.area
+        ? getEntitiesForArea(this.area.area_id, this.hass.entities, this.hass.devices).some(
+            (e) =>
+              !isRoomMindEntity(e.entity_id, this.hass.entities) &&
+              e.entity_id.startsWith("climate."),
+          )
+        : false;
+    if (
+      this.config === null &&
+      this._devices.length === 0 &&
+      hasAreaClimateDevice &&
+      this._editing === null
+    ) {
       this._editing = "devices";
     }
   }
@@ -581,6 +596,7 @@ export class RsRoomDetail extends LitElement {
           : `${formatTemp(this._ecoHeat, this.hass)}–${formatTemp(this._ecoCool, this.hass)}${unit}`;
     return {
       deviceCount: this._devices.length,
+      monitorOnly: !this._isOutdoor && this._devices.length === 0,
       temperatureSensorCount: this._temperatureSensorIdsForSave().length,
       humiditySensorConfigured: !!this._selectedHumiditySensor,
       occupancySensorCount: this._selectedOccupancySensors.size,
@@ -606,11 +622,13 @@ export class RsRoomDetail extends LitElement {
 
   override render() {
     if (!this.area) return nothing;
+    const isMonitorOnly = !this._isOutdoor && this._devices.length === 0;
     const layout = getRoomDetailLayout({
       isOutdoor: this._isOutdoor,
       presenceAvailable: this.presenceEnabled && this.presencePersons.length > 0,
       hasTemperatureSensor: !!this._selectedTempSensor,
       devices: this._devices,
+      hasAirflowDevices: this._airflowDevices.length > 0,
     });
 
     return html`
@@ -624,7 +642,7 @@ export class RsRoomDetail extends LitElement {
           @display-name-changed=${this._onDisplayNameChanged}
         ></rs-hero-status>
         ${
-          !this._isOutdoor && this.config
+          !this._isOutdoor && !isMonitorOnly && this.config
             ? html`<rs-thermostat-fleet
                 .hass=${this.hass}
                 .config=${this.config}
@@ -632,9 +650,9 @@ export class RsRoomDetail extends LitElement {
               ></rs-thermostat-fleet>`
             : nothing
         }
-        ${!this._isOutdoor ? this._renderTemperatureControlPanel() : nothing}
+        ${!this._isOutdoor && !isMonitorOnly ? this._renderTemperatureControlPanel() : nothing}
         ${
-          !this._isOutdoor
+          !this._isOutdoor && !isMonitorOnly
             ? html`<rs-sleep-bar
                 .hass=${this.hass}
                 .area=${this.area}
@@ -645,7 +663,7 @@ export class RsRoomDetail extends LitElement {
             : nothing
         }
         ${
-          !this._isOutdoor
+          !this._isOutdoor && !isMonitorOnly
             ? html`<rs-schedule-timeline
                 .hass=${this.hass}
                 .config=${this.config}
@@ -655,12 +673,24 @@ export class RsRoomDetail extends LitElement {
             : nothing
         }
         ${
-          !this._isOutdoor
+          !this._isOutdoor && !isMonitorOnly
             ? html`<rs-control-details
                 .hass=${this.hass}
                 .config=${this.config}
                 .controlEnabled=${this.climateControlActive && this._climateControlEnabled}
               ></rs-control-details>`
+            : nothing
+        }
+        ${
+          isMonitorOnly
+            ? html`<rs-environment-monitor
+                .hass=${this.hass}
+                .area=${this.area}
+                .config=${this.config}
+                .language=${this.hass.language}
+                @configuration-edit=${this._onConfigurationEdit}
+                @auto-detect-area=${this._onAutoDetectArea}
+              ></rs-environment-monitor>`
             : nothing
         }
 

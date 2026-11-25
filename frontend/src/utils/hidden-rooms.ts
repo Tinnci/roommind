@@ -33,7 +33,7 @@ export function unhideRoomIds(
 }
 
 /**
- * Return visible area IDs that are both unconfigured and have zero climate devices.
+ * Return visible area IDs that are both unconfigured and have zero climate or environment sensors.
  */
 export function getEmptyUnconfiguredAreaIds(
   areaInfos: readonly AreaInfo[],
@@ -43,7 +43,11 @@ export function getEmptyUnconfiguredAreaIds(
   return areaInfos
     .filter(
       (info) =>
-        !hiddenSet.has(info.area.area_id) && info.config === null && info.climateEntityCount === 0,
+        !hiddenSet.has(info.area.area_id) &&
+        info.config === null &&
+        info.climateEntityCount === 0 &&
+        info.tempSensorCount === 0 &&
+        (info.humiditySensorCount ?? 0) === 0,
     )
     .map((info) => info.area.area_id);
 }

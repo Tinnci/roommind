@@ -117,4 +117,25 @@ describe("selectHeroMetricIds", () => {
 
     expect(ids).toEqual(["notControlled", "perceivedTemp", "humidity"]);
   });
+
+  test("omits control-only hero metrics for monitor-only rooms without climate devices", () => {
+    const ids = selectHeroMetricIds({
+      isOutdoor: false,
+      climateControlActive: true,
+      roomControlEnabled: true,
+      hasClimateDevices: false,
+      live: {
+        ...baseLive,
+        current_humidity: 52,
+        perceived_temp: 22.3,
+        rapid_recovery_active: true,
+        night_mode: { active: true },
+        learning_paused_reason: "outdoor_unavailable",
+        mold_surface_rh: 79,
+        mold_risk_level: "warning",
+      },
+    });
+
+    expect(ids).toEqual(["moldRisk", "perceivedTemp"]);
+  });
 });

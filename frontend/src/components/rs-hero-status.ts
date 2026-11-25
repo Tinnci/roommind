@@ -7,6 +7,8 @@ import { localize } from "../utils/localize";
 import { formatTemp, tempUnit, toDisplayDelta } from "../utils/temperature";
 import { selectHeroMetricIds, type HeroMetricId } from "../utils/hero-metrics";
 import { resolveRoomReason } from "../utils/room-state-reason";
+import { hasClimateDevice } from "../utils/room-overview-status";
+import { assessRoomComfort, inspectAreaSensors } from "../utils/environment-monitor";
 import "./shared/rs-info-icon";
 import "./rs-thermal-band";
 
@@ -72,6 +74,34 @@ export class RsHeroStatus extends LitElement {
       ha-card[data-activity="fan_only"] {
         --hero-glow: color-mix(in srgb, var(--roommind-success-color) 10%, transparent);
         --hero-stripe: var(--roommind-success-color);
+      }
+
+      ha-card[data-activity="monitoring"] {
+        --hero-glow: color-mix(in srgb, var(--roommind-info-color) 8%, transparent);
+        --hero-stripe: var(--roommind-info-color);
+      }
+
+      .hero-comfort-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        margin-top: 2px;
+        font-size: 11px;
+        font-weight: 600;
+        --mdc-icon-size: 13px;
+      }
+
+      .hero-comfort-chip[data-tone="success"] {
+        color: var(--roommind-success-color, #4caf50);
+      }
+      .hero-comfort-chip[data-tone="info"] {
+        color: var(--roommind-info-color, #0288d1);
+      }
+      .hero-comfort-chip[data-tone="warning"] {
+        color: var(--roommind-warning-color, #ff9800);
+      }
+      .hero-comfort-chip[data-tone="critical"] {
+        color: var(--roommind-error-color, #d32f2f);
       }
 
       .hero-main-row {
@@ -665,18 +695,65 @@ export class RsHeroStatus extends LitElement {
     this._nameInput = "";
   }
 
+  private _renderMonitorHumidityTarget(
+    humidity: number | null | undefined,
+    tempC: number | null | undefined,
+    moldRisk?: string | null,
+  ) {
+    const l = this.hass?.language ?? "en";
+    const comfort = assessRoomComfort(tempC, humidity, moldRisk);
+    if (humidity == null && !comfort) return nothing;
+    return html`
+      <div class="hero-target">
+        <div class="hero-target-label">${localize("card.humidity_label", l)}</div>
+        <div class="hero-target-value">
+          ${humidity != null ? `${humidity.toFixed(0)}%` : "--"}
+        </div>
+        ${
+          comfort
+            ? html`<div class="hero-comfort-chip" data-tone=${comfort.tone}>
+                <ha-icon .icon=${comfort.icon}></ha-icon>
+                <span>${localize(comfort.labelKey, l)}</span>
+              </div>`
+            : nothing
+        }
+      </div>
+    `;
+  }
+
   override render() {
+    const l = this.hass?.language ?? "en";
     const live = this.config?.live;
     const mode = getDisplayMode(live, this.config);
-    const reason = resolveRoomReason(this.config, this.climateControlActive);
+    const hasClimate = this.config ? hasClimateDevice(this.config) : false;
+    const isMonitorOnly = !this.isOutdoor && this.config !== null && !hasClimate;
+    const inv =
+      !this.config && !this.isOutdoor && this.area
+        ? inspectAreaSensors(this.area.area_id, this.hass, null)
+        : null;
+    const hasUnconfiguredPreview = Boolean(
+      inv && (inv.previewTempC !== null || inv.previewHumidity !== null),
+    );
+    const reason = isMonitorOnly
+      ? live &&
+        (live.window_open ||
+          live.mold_risk_level === "warning" ||
+          live.mold_risk_level === "critical")
+        ? resolveRoomReason(this.config, this.climateControlActive)
+        : null
+      : resolveRoomReason(this.config, this.climateControlActive);
 
     return html`
-      <ha-card data-activity=${mode ?? "unknown"}>
+      <ha-card
+        data-activity=${
+          isMonitorOnly || hasUnconfiguredPreview ? "monitoring" : (mode ?? "unknown")
+        }
+      >
         ${
           live?.window_open && !this.isOutdoor
             ? html`<div class="hero-window-open">
                 <ha-icon icon="mdi:window-open-variant"></ha-icon>
-                ${localize("hero.window_open", this.hass?.language ?? "en")}
+                ${localize("hero.window_open", l)}
               </div>`
             : nothing
         }
@@ -690,10 +767,7 @@ export class RsHeroStatus extends LitElement {
                         class="name-input"
                         type="text"
                         .value=${this._nameInput}
-                        placeholder=${localize(
-                          "room.alias.placeholder",
-                          this.hass?.language ?? "en",
-                        )}
+                        placeholder=${localize("room.alias.placeholder", l)}
                         @input=${this._onNameInput}
                         @keydown=${this._onNameKeydown}
                       />
@@ -706,7 +780,7 @@ export class RsHeroStatus extends LitElement {
                     ${
                       this.config?.display_name
                         ? html`<button class="name-clear-btn" @click=${this._onNameClear}>
-                            ${localize("room.alias.clear", this.hass?.language ?? "en")}
+                            ${localize("room.alias.clear", l)}
                           </button>`
                         : nothing
                     }
@@ -727,23 +801,30 @@ export class RsHeroStatus extends LitElement {
                 ? html`
                     <div class="hero-status-pills">
                       ${
-                        live
+                        isMonitorOnly || hasUnconfiguredPreview
                           ? html`
-                              <span class="mode-pill ${getModeClass(mode)}">
+                              <span class="mode-pill mode-monitoring">
                                 <span class="mode-dot"></span>
-                                ${
-                                  mode === null
-                                    ? localize("hero.output_unknown", this.hass?.language ?? "en")
-                                    : formatMode(mode, this.hass?.language ?? "en")
-                                }
+                                ${localize("room.control_mode.monitor_only", l)}
                               </span>
                             `
-                          : nothing
+                          : live
+                            ? html`
+                                <span class="mode-pill ${getModeClass(mode)}">
+                                  <span class="mode-dot"></span>
+                                  ${
+                                    mode === null
+                                      ? localize("hero.output_unknown", l)
+                                      : formatMode(mode, l)
+                                  }
+                                </span>
+                              `
+                            : nothing
                       }
                       ${
                         reason
                           ? html`<span class="reason-pill" data-tone=${reason.tone}>
-                              ${localize(reason.key, this.hass?.language ?? "en")}
+                              ${localize(reason.key, l)}
                             </span>`
                           : nothing
                       }
@@ -756,15 +837,11 @@ export class RsHeroStatus extends LitElement {
                                 @click=${this._toggleControlModeInfo}
                               >
                                 ${
-                                  this.config.temperature_sensor
-                                    ? localize(
-                                        "room.control_mode.full_control",
-                                        this.hass?.language ?? "en",
-                                      )
-                                    : localize(
-                                        "room.control_mode.managed",
-                                        this.hass?.language ?? "en",
-                                      )
+                                  isMonitorOnly
+                                    ? localize("room.control_mode.monitor_only", l)
+                                    : this.config.temperature_sensor
+                                      ? localize("room.control_mode.full_control", l)
+                                      : localize("room.control_mode.managed", l)
                                 }
                                 <ha-icon
                                   class="control-mode-info-icon ${
@@ -791,7 +868,7 @@ export class RsHeroStatus extends LitElement {
                           isTemperatureCached(live)
                             ? "room.temperature_cached"
                             : "room.temperature_panel.current",
-                          this.hass.language,
+                          l,
                         )}
                       </div>
                       <div class="hero-current-value">
@@ -807,16 +884,45 @@ export class RsHeroStatus extends LitElement {
                         }
                       </div>
                     </div>
-                    ${!this.isOutdoor ? this._renderTargetSection(live) : nothing}
+                    ${
+                      isMonitorOnly
+                        ? this._renderMonitorHumidityTarget(
+                            live.current_humidity,
+                            live.current_temp,
+                            live.mold_risk_level,
+                          )
+                        : !this.isOutdoor
+                          ? this._renderTargetSection(live)
+                          : nothing
+                    }
                   </div>
                 `
-              : this.config
-                ? html`<div class="hero-no-data">
-                    ${localize("hero.waiting", this.hass?.language ?? "en")}
-                  </div>`
-                : html`<div class="hero-no-data">
-                    ${localize("hero.not_configured", this.hass?.language ?? "en")}
-                  </div>`
+              : hasUnconfiguredPreview && inv
+                ? html`
+                    <div class="hero-temps">
+                      <div class="hero-current-wrap">
+                        <div class="hero-target-label">
+                          ${localize("room.temperature_panel.current", l)}
+                        </div>
+                        <div class="hero-current-value">
+                          ${
+                            inv.previewTempC !== null
+                              ? html`
+                                  <span class="hero-current"
+                                    >${formatTemp(inv.previewTempC, this.hass)}</span
+                                  >
+                                  <span class="hero-unit">${tempUnit(this.hass)}</span>
+                                `
+                              : html`<span class="hero-current" style="opacity: 0.3">--</span>`
+                          }
+                        </div>
+                      </div>
+                      ${this._renderMonitorHumidityTarget(inv.previewHumidity, inv.previewTempC)}
+                    </div>
+                  `
+                : this.config
+                  ? html`<div class="hero-no-data">${localize("hero.waiting", l)}</div>`
+                  : html`<div class="hero-no-data">${localize("hero.not_configured", l)}</div>`
           }
         </div>
         ${
@@ -824,9 +930,11 @@ export class RsHeroStatus extends LitElement {
             ? html`
                 <div class="control-mode-info-panel" style="margin-top: 10px; margin-bottom: 0;">
                   ${
-                    this.config.temperature_sensor
-                      ? localize("room.control_mode.full_control_info", this.hass?.language ?? "en")
-                      : localize("room.control_mode.managed_info", this.hass?.language ?? "en")
+                    isMonitorOnly
+                      ? localize("room.control_mode.monitor_only_info", l)
+                      : this.config.temperature_sensor
+                        ? localize("room.control_mode.full_control_info", l)
+                        : localize("room.control_mode.managed_info", l)
                   }
                 </div>
               `
@@ -836,7 +944,7 @@ export class RsHeroStatus extends LitElement {
           live
             ? html`
                 ${
-                  !this.isOutdoor
+                  !this.isOutdoor && !isMonitorOnly
                     ? html`<rs-thermal-band
                         compact
                         .hass=${this.hass}
@@ -850,6 +958,7 @@ export class RsHeroStatus extends LitElement {
                     isOutdoor: this.isOutdoor,
                     climateControlActive: this.climateControlActive,
                     roomControlEnabled: this.config?.climate_control_enabled ?? true,
+                    hasClimateDevices: hasClimate,
                   }).map((metric) => this._renderHeroMetric(metric, live))}
                 </div>
               `

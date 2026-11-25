@@ -152,7 +152,9 @@ export class RsFleetOverview extends LitElement {
   }
 
   override render() {
-    if (!this.stats || this.stats.configuredRooms === 0) return nothing;
+    if (!this.stats || (this.stats.configuredRooms === 0 && this.stats.monitoredRooms === 0)) {
+      return nothing;
+    }
     const l = this.language;
     const s = this.stats;
 
@@ -165,7 +167,7 @@ export class RsFleetOverview extends LitElement {
       {
         id: "all",
         label: localize("overview.filter.all", l),
-        count: s.configuredRooms,
+        count: s.configuredRooms + s.monitoredRooms,
         show: true,
       },
       {
@@ -184,19 +186,25 @@ export class RsFleetOverview extends LitElement {
         id: "cooling",
         label: localize("overview.filter.cooling", l),
         count: s.coolingDryingRooms,
-        show: true,
+        show: s.configuredRooms > 0,
       },
       {
         id: "heating",
         label: localize("overview.filter.heating", l),
         count: s.heatingRooms,
-        show: true,
+        show: s.configuredRooms > 0,
       },
       {
         id: "off",
         label: localize("overview.filter.off", l),
         count: s.offIdleRooms,
-        show: true,
+        show: s.configuredRooms > 0,
+      },
+      {
+        id: "monitored",
+        label: localize("overview.filter.monitored", l),
+        count: s.monitoredRooms,
+        show: s.monitoredRooms > 0,
       },
       {
         id: "attention",
@@ -230,6 +238,14 @@ export class RsFleetOverview extends LitElement {
               ${localize("overview.stats.heating", l)}
               <strong>${s.heatingRooms}</strong>
             </span>
+            ${
+              s.monitoredRooms > 0
+                ? html`<span class="kpi">
+                    ${localize("overview.stats.monitored", l)}
+                    <strong>${s.monitoredRooms}</strong>
+                  </span>`
+                : nothing
+            }
             ${
               s.attentionRooms > 0
                 ? html`<span class="kpi attention">
