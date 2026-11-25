@@ -493,6 +493,94 @@ class MPCController:
             q_vent=self.q_vent,
         )
 
+    def _build_target_series(
+        self,
+        current_temp: float,
+        targets: TargetTemps,
+        horizon_blocks: int,
+    ) -> tuple[list[float], list[float]]:
+        """Build heat and cool target temperature horizons for the optimizer."""
+        if self._target_resolver is not None and self.room_config.get("preheat_enabled", True):
+            now = time.time()
+            dt_seconds = PLAN_DT_MINUTES * 60
+            raw_targets = [self._target_resolver(now + i * dt_seconds) for i in range(horizon_blocks)]
+            if raw_targets and isinstance(raw_targets[0], TargetTemps):
+                tt_targets = cast(list[TargetTemps], raw_targets)
+                return (
+                    [t.heat if t.heat is not None else current_temp for t in tt_targets],
+                    [t.cool if t.cool is not None else current_temp for t in tt_targets],
+                )
+            float_targets = cast(list[float | None], raw_targets)
+            heat_series = [t if t is not None else current_temp for t in float_targets]
+            return heat_series, list(heat_series)
+        fallback_h = targets.heat if targets.heat is not None else current_temp
+        fallback_c = targets.cool if targets.cool is not None else current_temp
+        return [fallback_h] * horizon_blocks, [fallback_c] * horizon_blocks
+
+    def _apply_mpc_safety_guard(
+        self,
+        *,
+        action: str,
+        power_fraction: float,
+        current_temp: float,
+        near_heat: list[float],
+        near_cool: list[float],
+        guard_blocks: int,
+    ) -> tuple[str, float]:
+        """Suppress active conditioning past upcoming target bounds unless drift warrants pre-actuation."""
+        guard_horizon_minutes = guard_blocks * PLAN_DT_MINUTES
+        if near_heat and action == MODE_HEATING and current_temp > max(near_heat) + HARD_OVERSHOOT_CEILING:
+            _LOGGER.info(
+                "Hard ceiling: suppressing HEATING for %s at %.1f°C (target max %.1f°C + %.1f°C ceiling)",
+                self._area_id,
+                current_temp,
+                max(near_heat),
+                HARD_OVERSHOOT_CEILING,
+            )
+            return MODE_IDLE, 0.0
+        if near_cool and action == MODE_COOLING and current_temp < min(near_cool) - HARD_OVERSHOOT_CEILING:
+            _LOGGER.info(
+                "Hard ceiling: suppressing COOLING for %s at %.1f°C (target min %.1f°C - %.1f°C ceiling)",
+                self._area_id,
+                current_temp,
+                min(near_cool),
+                HARD_OVERSHOOT_CEILING,
+            )
+            return MODE_IDLE, 0.0
+        if near_heat and action == MODE_HEATING and current_temp >= max(near_heat):
+            predicted = self._predict_idle_drift(current_temp, guard_horizon_minutes)
+            if predicted >= min(near_heat) - GUARD_PREDICTION_MARGIN and not self._within_min_run(MODE_HEATING):
+                return MODE_IDLE, 0.0
+        elif near_cool and action == MODE_COOLING and current_temp <= min(near_cool):
+            predicted = self._predict_idle_drift(current_temp, guard_horizon_minutes)
+            if predicted <= max(near_cool) + GUARD_PREDICTION_MARGIN and not self._within_min_run(MODE_COOLING):
+                return MODE_IDLE, 0.0
+        return action, power_fraction
+
+    @staticmethod
+    def _detect_preheat_state(
+        *,
+        action: str,
+        current_temp: float,
+        targets: TargetTemps,
+        near_heat: list[float],
+        near_cool: list[float],
+    ) -> dict[str, Any] | None:
+        """Return active preheat/precool metadata when preparing for a scheduled step change."""
+        if action == MODE_HEATING and near_heat:
+            max_upcoming = max(near_heat)
+            if (targets.heat is None and current_temp < max_upcoming) or (
+                targets.heat is not None and max_upcoming > targets.heat and current_temp >= targets.heat
+            ):
+                return {"mode": MODE_HEATING, "target": round(max_upcoming, 1)}
+        elif action == MODE_COOLING and near_cool:
+            min_upcoming = min(near_cool)
+            if (targets.cool is None and current_temp > min_upcoming) or (
+                targets.cool is not None and min_upcoming < targets.cool and current_temp <= targets.cool
+            ):
+                return {"mode": MODE_COOLING, "target": round(min_upcoming, 1)}
+        return None
+
     def _evaluate_mpc(
         self,
         current_temp: float | None,
@@ -504,50 +592,13 @@ class MPCController:
 
         model = self._model_manager.get_model(self._area_id)
         can_heat, can_cool = self._get_can_heat_cool()
-
-        # Use heat target for horizon computation (heating is most common)
         horizon_target = targets.heat if targets.heat is not None else targets.cool
         horizon_blocks = self._compute_horizon_blocks(model, current_temp, horizon_target)
-
-        # Build outdoor series from forecast or current temp
-        outdoor_series = self._build_outdoor_series(horizon_blocks)
-
-        # Build solar series from forecast cloud coverage
-        solar_series = self._build_solar_series(horizon_blocks)
-
-        # Build residual heat series (decaying from current q_residual)
-        residual_series = self._build_residual_series(horizon_blocks)
-
-        # Build occupancy heat series (constant over horizon)
-        occupancy_series = [self.q_occupancy] * horizon_blocks
-
-        # Build dual target series with schedule lookahead for pre-heating/pre-cooling.
-        # None values (from "off" action) are replaced with current_temp so the
-        # optimizer sees "no deviation needed = idle optimal".
-        if self._target_resolver is not None and self.room_config.get("preheat_enabled", True):
-            now = time.time()
-            dt_seconds = PLAN_DT_MINUTES * 60
-            raw_targets = [self._target_resolver(now + i * dt_seconds) for i in range(horizon_blocks)]
-            # Extract separate heat and cool series from TargetTemps
-            if raw_targets and isinstance(raw_targets[0], TargetTemps):
-                tt_targets = cast(list[TargetTemps], raw_targets)
-                heat_target_series = [t.heat if t.heat is not None else current_temp for t in tt_targets]
-                cool_target_series = [t.cool if t.cool is not None else current_temp for t in tt_targets]
-            else:
-                # Legacy resolver returning float|None
-                float_targets = cast(list[float | None], raw_targets)
-                heat_target_series = [t if t is not None else current_temp for t in float_targets]
-                cool_target_series = list(heat_target_series)
-        else:
-            fallback_h = targets.heat if targets.heat is not None else current_temp
-            fallback_c = targets.cool if targets.cool is not None else current_temp
-            heat_target_series = [fallback_h] * horizon_blocks
-            cool_target_series = [fallback_c] * horizon_blocks
+        heat_target_series, cool_target_series = self._build_target_series(current_temp, targets, horizon_blocks)
 
         from .residual_heat import get_min_run_blocks
 
         min_run = get_min_run_blocks(self._heating_system_type, PLAN_DT_MINUTES)
-
         recovery = resolve_rapid_recovery_mode(
             self.room_config,
             self._settings,
@@ -556,13 +607,12 @@ class MPCController:
             night_active=self.night_active,
             outdoor_temp=self.outdoor_temp,
         )
-        # Recovery stays inside planning so thermal inertia and predictive
-        # braking continue to determine the requested output.
         recovery_allowed = (recovery == MODE_HEATING and can_heat) or (recovery == MODE_COOLING and can_cool)
         mix_levels = self.mix_levels
         night_limit = self.room_config.get("max_fan_level_night")
         if self.night_active and night_limit is not None:
             mix_levels = [level for level in mix_levels if level <= float(night_limit)] or [0.0]
+
         optimizer = MPCOptimizer(
             model=model,
             can_heat=can_heat,
@@ -588,16 +638,15 @@ class MPCController:
             coupling_terms=self.coupling_terms,
             optimizer_strategy=self._optimizer_strategy,
         )
-
         plan = optimizer.optimize(
             T_room=current_temp,
-            T_outdoor_series=outdoor_series,
+            T_outdoor_series=self._build_outdoor_series(horizon_blocks),
             heat_target_series=heat_target_series,
             cool_target_series=cool_target_series,
             dt_minutes=PLAN_DT_MINUTES,
-            solar_series=solar_series,
-            residual_series=residual_series,
-            occupancy_series=occupancy_series,
+            solar_series=self._build_solar_series(horizon_blocks),
+            residual_series=self._build_residual_series(horizon_blocks),
+            occupancy_series=[self.q_occupancy] * horizon_blocks,
         )
         self.last_plan = plan
 
@@ -610,73 +659,24 @@ class MPCController:
             action = MODE_IDLE
             power_fraction = 0.0
 
-        # Safety guard: don't heat above the maximum upcoming target,
-        # don't cool below the minimum upcoming target, while preserving
-        # pre-heating/pre-cooling when the model predicts a drift past target.
-        # The guard horizon scales with heating system response time and
-        # matches the optimizer's per-system lookahead (read from the plan) so
-        # mild-weather UFH pre-heat decisions don't get suppressed by a short
-        # drift check.
         guard_blocks = max(SAFETY_GUARD_MIN_BLOCKS, min_run, plan.lookahead_blocks)
-        guard_horizon_minutes = guard_blocks * PLAN_DT_MINUTES
         near_heat = heat_target_series[:guard_blocks]
         near_cool = cool_target_series[:guard_blocks]
-
-        # Hard ceiling: force idle when significantly past target, regardless
-        # of model predictions or min-run window.  Prevents runaway
-        # heating/cooling from a miscalibrated thermal model (#152).
-        if near_heat and action == MODE_HEATING and current_temp > max(near_heat) + HARD_OVERSHOOT_CEILING:
-            _LOGGER.info(
-                "Hard ceiling: suppressing HEATING for %s at %.1f°C (target max %.1f°C + %.1f°C ceiling)",
-                self._area_id,
-                current_temp,
-                max(near_heat),
-                HARD_OVERSHOOT_CEILING,
-            )
-            action = MODE_IDLE
-            power_fraction = 0.0
-        elif near_cool and action == MODE_COOLING and current_temp < min(near_cool) - HARD_OVERSHOOT_CEILING:
-            _LOGGER.info(
-                "Hard ceiling: suppressing COOLING for %s at %.1f°C (target min %.1f°C - %.1f°C ceiling)",
-                self._area_id,
-                current_temp,
-                min(near_cool),
-                HARD_OVERSHOOT_CEILING,
-            )
-            action = MODE_IDLE
-            power_fraction = 0.0
-
-        # Model-based guard: suppress when model predicts temp stays past
-        # target, but allow pre-heating/pre-cooling when a drift is predicted.
-        elif near_heat and action == MODE_HEATING and current_temp >= max(near_heat):
-            predicted = self._predict_idle_drift(current_temp, guard_horizon_minutes)
-            if predicted < min(near_heat) - GUARD_PREDICTION_MARGIN:
-                pass  # model predicts dip — allow optimizer's HEAT decision
-            elif not self._within_min_run(MODE_HEATING):
-                action = MODE_IDLE
-                power_fraction = 0.0
-        elif near_cool and action == MODE_COOLING and current_temp <= min(near_cool):
-            predicted = self._predict_idle_drift(current_temp, guard_horizon_minutes)
-            if predicted > max(near_cool) + GUARD_PREDICTION_MARGIN:
-                pass  # model predicts rise — allow optimizer's COOL decision
-            elif not self._within_min_run(MODE_COOLING):
-                action = MODE_IDLE
-                power_fraction = 0.0
-
-        self.preheat = None
-        if action == MODE_HEATING and near_heat:
-            max_upcoming = max(near_heat)
-            if (targets.heat is None and current_temp < max_upcoming) or (
-                targets.heat is not None and max_upcoming > targets.heat and current_temp >= targets.heat
-            ):
-                self.preheat = {"mode": MODE_HEATING, "target": round(max_upcoming, 1)}
-        elif action == MODE_COOLING and near_cool:
-            min_upcoming = min(near_cool)
-            if (targets.cool is None and current_temp > min_upcoming) or (
-                targets.cool is not None and min_upcoming < targets.cool and current_temp <= targets.cool
-            ):
-                self.preheat = {"mode": MODE_COOLING, "target": round(min_upcoming, 1)}
-
+        action, power_fraction = self._apply_mpc_safety_guard(
+            action=action,
+            power_fraction=power_fraction,
+            current_temp=current_temp,
+            near_heat=near_heat,
+            near_cool=near_cool,
+            guard_blocks=guard_blocks,
+        )
+        self.preheat = self._detect_preheat_state(
+            action=action,
+            current_temp=current_temp,
+            targets=targets,
+            near_heat=near_heat,
+            near_cool=near_cool,
+        )
         return action, power_fraction
 
     def _evaluate_bangbang(
@@ -1523,108 +1523,100 @@ class MPCController:
             report.record(entity_id, active=False, operations=operations)
         return DeviceActuationResult.combine(entity_id, operations)
 
-    async def _call(self, service: str, data: dict, *, temp_intent: str = "") -> DeviceActuationResult:
-        eid = data.get("entity_id")
-        state = self._device_state(eid) if eid else None
-
-        # Delegate "turn off" to fallback-aware helper (handles heat-only TRVs)
-        if service == "set_hvac_mode" and data.get("hvac_mode") == "off" and eid:
-            return await self._async_idle_device(eid, targets=self._idle_targets)
-
-        # Resolve hvac_mode to a supported mode (handles auto-only devices)
-        if service == "set_hvac_mode" and state:
-            hvac_modes = state.attributes.get("hvac_modes") or []
-            resolved = resolve_hvac_mode(data["hvac_mode"], hvac_modes)
-            if resolved is None:
-                if not has_reliable_hvac_modes(state):
-                    if (
-                        state.state == "off"
-                        and data["hvac_mode"] not in ("off", "fan_only")
-                        and "fan_only" in hvac_modes
-                    ):
-                        resolved = "fan_only"
-                        _LOGGER.debug(
-                            "Area '%s': device '%s' is off with incomplete modes, pre-activating via fan_only (#135)",
-                            self._area_id,
-                            eid,
-                        )
-                    else:
-                        resolved = data["hvac_mode"]
-                        _LOGGER.debug(
-                            "Area '%s': device '%s' has incomplete modes, sending '%s' directly",
-                            self._area_id,
-                            eid,
-                            resolved,
-                        )
-                else:
+    def _resolve_hvac_mode_payload(
+        self,
+        eid: str | None,
+        state: Any,
+        data: dict,
+    ) -> tuple[dict | None, DeviceActuationResult | None]:
+        """Resolve requested hvac_mode against device capabilities."""
+        if not state:
+            return data, None
+        hvac_modes = state.attributes.get("hvac_modes") or []
+        resolved = resolve_hvac_mode(data["hvac_mode"], hvac_modes)
+        if resolved is None:
+            if not has_reliable_hvac_modes(state):
+                if state.state == "off" and data["hvac_mode"] not in ("off", "fan_only") and "fan_only" in hvac_modes:
+                    resolved = "fan_only"
                     _LOGGER.debug(
-                        "Area '%s': device '%s' does not support '%s' or any fallback, skipping",
+                        "Area '%s': device '%s' is off with incomplete modes, pre-activating via fan_only (#135)",
                         self._area_id,
                         eid,
-                        data["hvac_mode"],
                     )
-                    return self._record_dispatch_result(
-                        DeviceActuationResult(
-                            entity_id=eid or "",
-                            dispatch=DispatchStatus.UNSUPPORTED,
-                            service=service,
-                            desired=dict(data),
-                            diagnostic=f"unsupported HVAC mode: {data['hvac_mode']}",
-                        )
+                else:
+                    resolved = data["hvac_mode"]
+                    _LOGGER.debug(
+                        "Area '%s': device '%s' has incomplete modes, sending '%s' directly",
+                        self._area_id,
+                        eid,
+                        resolved,
                     )
-            if resolved != data["hvac_mode"]:
+            else:
                 _LOGGER.debug(
-                    "Area '%s': device '%s' resolved '%s' -> '%s'",
+                    "Area '%s': device '%s' does not support '%s' or any fallback, skipping",
                     self._area_id,
                     eid,
                     data["hvac_mode"],
-                    resolved,
                 )
-                data = {**data, "hvac_mode": resolved}
+                return None, self._record_dispatch_result(
+                    DeviceActuationResult(
+                        entity_id=eid or "",
+                        dispatch=DispatchStatus.UNSUPPORTED,
+                        service="set_hvac_mode",
+                        desired=dict(data),
+                        diagnostic=f"unsupported HVAC mode: {data['hvac_mode']}",
+                    )
+                )
+        if resolved != data["hvac_mode"]:
+            _LOGGER.debug("Area '%s': device '%s' resolved '%s' -> '%s'", self._area_id, eid, data["hvac_mode"], resolved)
+            data = {**data, "hvac_mode": resolved}
+        return data, None
 
-        if service == "set_temperature" and "temperature" in data and self._idle_targets is not None:
-            device = next((d for d in self._devices if d.get("entity_id") == eid), {})
-            offset = device.get("max_setpoint_offset_c")
-            target = (
-                self._idle_targets.heat
-                if temp_intent == "heat"
-                else self._idle_targets.cool
-                if temp_intent == "cool"
-                else None
+    def _apply_setpoint_offset_bound(
+        self,
+        eid: str | None,
+        state: Any,
+        data: dict,
+        temp_intent: str,
+    ) -> tuple[dict | None, DeviceActuationResult | None]:
+        """Clamp target temperature by device max_setpoint_offset_c and device min/max bounds."""
+        if "temperature" not in data or self._idle_targets is None:
+            return data, None
+        device = next((d for d in self._devices if d.get("entity_id") == eid), {})
+        offset = device.get("max_setpoint_offset_c")
+        target = (
+            self._idle_targets.heat
+            if temp_intent == "heat"
+            else self._idle_targets.cool
+            if temp_intent == "cool"
+            else None
+        )
+        if offset is None or target is None:
+            return data, None
+        limit_c = target + float(offset) * (1 if temp_intent == "heat" else -1)
+        native_step = state.attributes.get("target_temp_step_c") if state else None
+        limit = limit_c if native_step is not None else celsius_to_ha_temp(self.hass, limit_c)
+        step = float(native_step or state.attributes.get("target_temp_step") or 0) if state else 0.0
+        if step > 0:
+            limit = round((math.floor(limit / step) if temp_intent == "heat" else math.ceil(limit / step)) * step, 2)
+        if native_step is not None:
+            limit = celsius_to_ha_temp(self.hass, limit)
+        device_bound = state.attributes.get("min_temp" if temp_intent == "heat" else "max_temp") if state else None
+        if device_bound is not None and (limit < device_bound if temp_intent == "heat" else limit > device_bound):
+            return None, self._record_dispatch_result(
+                DeviceActuationResult(
+                    entity_id=eid or "",
+                    dispatch=DispatchStatus.UNSUPPORTED,
+                    service="set_temperature",
+                    desired=dict(data),
+                    diagnostic="no device setpoint within configured offset",
+                )
             )
-            if offset is not None and target is not None:
-                limit_c = target + float(offset) * (1 if temp_intent == "heat" else -1)
-                native_step = state.attributes.get("target_temp_step_c") if state else None
-                limit = limit_c if native_step is not None else celsius_to_ha_temp(self.hass, limit_c)
-                step = float(native_step or state.attributes.get("target_temp_step") or 0) if state else 0.0
-                if step > 0:
-                    limit = round(
-                        (math.floor(limit / step) if temp_intent == "heat" else math.ceil(limit / step)) * step, 2
-                    )
-                if native_step is not None:
-                    limit = celsius_to_ha_temp(self.hass, limit)
-                device_bound = (
-                    state.attributes.get("min_temp" if temp_intent == "heat" else "max_temp") if state else None
-                )
-                if device_bound is not None and (
-                    limit < device_bound if temp_intent == "heat" else limit > device_bound
-                ):
-                    return self._record_dispatch_result(
-                        DeviceActuationResult(
-                            entity_id=eid or "",
-                            dispatch=DispatchStatus.UNSUPPORTED,
-                            service=service,
-                            desired=dict(data),
-                            diagnostic="no device setpoint within configured offset",
-                        )
-                    )
-                bounded = min(data["temperature"], limit) if temp_intent == "heat" else max(data["temperature"], limit)
-                data = {**data, "temperature": bounded}
+        bounded = min(data["temperature"], limit) if temp_intent == "heat" else max(data["temperature"], limit)
+        return {**data, "temperature": bounded}, None
 
-        if service == "set_temperature" and state:
-            data = _normalize_temperature_payload(state, data, temp_intent, hass=self.hass)
-
-        # --- Redundancy: primary (device state) then fallback (sent cache) ---
+    def _is_redundant_command(self, eid: str | None, state: Any, service: str, data: dict) -> bool:
+        """Return True if live device state or optimistic IR cache already matches the command."""
         skip = bool(
             state
             and _command_payload_matches(
@@ -1634,13 +1626,67 @@ class MPCController:
                 temperature_tolerance=temperature_feedback_tolerance(self.hass, state),
             )
         )
-
-        # Fallback: check sent-command cache (for IR devices without state feedback)
         if not skip and eid and _should_use_cache(state):
             cached = _last_commands.get(eid)
             skip = bool(cached and cached.get("service") == service and _command_payload_matches(cached, service, data))
+        return skip
 
-        if skip:
+    def _check_temperature_pacing(
+        self,
+        eid: str | None,
+        state: Any,
+        service: str,
+        data: dict,
+        temp_intent: str,
+    ) -> tuple[tuple[Any, ...], DeviceActuationResult | None]:
+        """Return active pacing policy key and optional deferred result for paced temperature writes."""
+        if service != "set_temperature" or eid not in self._paced_entities or self._idle_targets is None:
+            return (), None
+        device = get_device_by_eid(self._devices, eid) or {}
+        policy: tuple[Any, ...] = (
+            self._idle_targets.heat,
+            self._idle_targets.cool,
+            device.get("max_setpoint_offset_c"),
+            temp_intent,
+        )
+        reason = setpoint_delay_reason(
+            eid,
+            data,
+            state,
+            policy=policy,
+            interval=300.0 if self.night_active else 120.0,
+            large_delta=celsius_delta_to_ha(self.hass, 2.0),
+            heating=temp_intent == "heat",
+            temperature_tolerance=temperature_feedback_tolerance(self.hass, state),
+        )
+        if reason is not None:
+            return policy, self._record_dispatch_result(
+                DeviceActuationResult(eid, DispatchStatus.DEFERRED, service, dict(data), reason)
+            )
+        return policy, None
+
+    async def _call(self, service: str, data: dict, *, temp_intent: str = "") -> DeviceActuationResult:
+        eid = data.get("entity_id")
+        state = self._device_state(eid) if eid else None
+
+        if service == "set_hvac_mode" and data.get("hvac_mode") == "off" and eid:
+            return await self._async_idle_device(eid, targets=self._idle_targets)
+
+        if service == "set_hvac_mode":
+            resolved_data, early = self._resolve_hvac_mode_payload(eid, state, data)
+            if early is not None:
+                return early
+            assert resolved_data is not None
+            data = resolved_data
+
+        if service == "set_temperature":
+            bounded_data, early = self._apply_setpoint_offset_bound(eid, state, data, temp_intent)
+            if early is not None:
+                return early
+            assert bounded_data is not None
+            data = _normalize_temperature_payload(state, bounded_data, temp_intent, hass=self.hass) if state else bounded_data
+
+        if self._is_redundant_command(eid, state, service, data):
             return self._record_dispatch_result(
                 DeviceActuationResult(
                     entity_id=eid or "",
@@ -1650,29 +1696,9 @@ class MPCController:
                 )
             )
 
-        policy: tuple[Any, ...] = ()
-        if service == "set_temperature" and eid in self._paced_entities and self._idle_targets is not None:
-            device = get_device_by_eid(self._devices, eid) or {}
-            policy = (
-                self._idle_targets.heat,
-                self._idle_targets.cool,
-                device.get("max_setpoint_offset_c"),
-                temp_intent,
-            )
-            reason = setpoint_delay_reason(
-                eid,
-                data,
-                state,
-                policy=policy,
-                interval=300.0 if self.night_active else 120.0,
-                large_delta=celsius_delta_to_ha(self.hass, 2.0),
-                heating=temp_intent == "heat",
-                temperature_tolerance=temperature_feedback_tolerance(self.hass, state),
-            )
-            if reason is not None:
-                return self._record_dispatch_result(
-                    DeviceActuationResult(eid, DispatchStatus.DEFERRED, service, dict(data), reason)
-                )
+        policy, deferred = self._check_temperature_pacing(eid, state, service, data, temp_intent)
+        if deferred is not None:
+            return deferred
 
         result = await async_dispatch_climate(self.hass, service, data, area_id=self._area_id)
         if policy and eid:
