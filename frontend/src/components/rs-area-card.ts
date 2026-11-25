@@ -14,6 +14,8 @@ import { mdiEyeOff } from "../utils/icons";
 import { formatTemp, tempUnit, toDisplayDelta } from "../utils/temperature";
 import { isOverrideEffective } from "../utils/room-overview-status";
 import { buildThermostatFleet } from "../utils/thermostat-fleet";
+import { buildRoomFanCapabilities, fanSpeedBars, formatFanModeLabel } from "../utils/fan-control";
+import { resolveRoomReason } from "../utils/room-state-reason";
 import "./rs-thermal-band";
 
 @customElement("rs-area-card")
@@ -111,34 +113,75 @@ export class RsAreaCard extends LitElement {
       }
 
       .card-inner {
-        padding: 22px 22px 18px;
+        padding: 14px 16px 12px;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        box-sizing: border-box;
       }
 
-      /* Header row: name + badge */
+      /* Header row: name + badges */
       .card-header {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: space-between;
-        gap: 10px;
+        gap: 8px;
         min-width: 0;
       }
 
       .area-name {
-        font-size: 17px;
+        font-size: 16px;
         font-weight: 600;
         color: var(--primary-text-color);
         margin: 0;
         min-width: 0;
-        line-height: 1.3;
+        line-height: 1.25;
         overflow-wrap: anywhere;
         white-space: normal;
+      }
+
+      .header-pills {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        gap: 5px;
+        flex: 0 1 auto;
+      }
+
+      .reason-pill {
+        display: inline-flex;
+        align-items: center;
+        font-size: 10.5px;
+        font-weight: 600;
+        line-height: 1.25;
+        padding: 2px 7px;
+        border-radius: 7px;
+        background: var(--roommind-tile-surface, rgba(0, 0, 0, 0.05));
+        color: var(--secondary-text-color);
+        white-space: nowrap;
+      }
+
+      .reason-pill[data-tone="warning"] {
+        background: var(--roommind-warning-tint);
+        color: var(--roommind-warning-color);
+      }
+
+      .reason-pill[data-tone="accent"] {
+        background: var(--roommind-primary-muted, rgba(3, 169, 244, 0.14));
+        color: var(--primary-color);
+      }
+
+      .reason-pill[data-tone="info"] {
+        background: var(--roommind-info-tint);
+        color: var(--roommind-info-color);
       }
 
       /* Card-specific mode-pill overrides (smaller than default) */
       .mode-pill {
         gap: 5px;
-        font-size: 12px;
-        padding: 3px 10px;
+        font-size: 11.5px;
+        padding: 2px 9px;
         border-radius: 8px;
         max-width: 100%;
         white-space: normal;
@@ -151,14 +194,14 @@ export class RsAreaCard extends LitElement {
 
       .metrics-row {
         display: grid;
-        grid-template-columns: minmax(0, 1.15fr) minmax(112px, 0.85fr);
-        gap: 10px;
-        margin-top: 24px;
+        grid-template-columns: minmax(0, 1.15fr) minmax(104px, 0.85fr);
+        gap: 8px;
+        margin-top: 12px;
       }
 
       .metric-block {
         min-width: 0;
-        min-height: 76px;
+        min-height: 54px;
         padding: 0;
         box-sizing: border-box;
       }
@@ -166,9 +209,9 @@ export class RsAreaCard extends LitElement {
       .metric-label {
         display: block;
         color: var(--secondary-text-color);
-        font-size: 12px;
+        font-size: 11.5px;
         line-height: 1.25;
-        margin-bottom: 7px;
+        margin-bottom: 4px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -177,13 +220,13 @@ export class RsAreaCard extends LitElement {
       .temp-value {
         display: flex;
         align-items: baseline;
-        gap: 5px;
+        gap: 4px;
         min-width: 0;
       }
 
       .current-temp,
       .target-temp {
-        font-size: 36px;
+        font-size: 30px;
         font-weight: 400;
         font-variant-numeric: tabular-nums;
         letter-spacing: -0.03em;
@@ -192,7 +235,7 @@ export class RsAreaCard extends LitElement {
       }
 
       .target-temp {
-        font-size: 24px;
+        font-size: 21px;
         font-weight: 600;
       }
 
@@ -425,7 +468,111 @@ export class RsAreaCard extends LitElement {
       .uncontrolled-hint {
         font-size: 11px;
         color: var(--disabled-text-color, #9e9e9e);
-        margin-top: 6px;
+        margin-top: 4px;
+      }
+
+      .footer-left {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        min-width: 0;
+      }
+
+      .fan-mini-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--secondary-text-color);
+        padding: 2px 6px;
+        border-radius: 6px;
+        background: var(--roommind-tile-surface, rgba(0, 0, 0, 0.04));
+        --mdc-icon-size: 13px;
+      }
+
+      .fan-mini-bars {
+        display: inline-flex;
+        align-items: flex-end;
+        gap: 1.5px;
+        height: 10px;
+      }
+
+      .fan-mini-bar {
+        width: 2px;
+        border-radius: 1px;
+        background: rgba(var(--rgb-primary-text-color, 0, 0, 0), 0.16);
+      }
+
+      .fan-mini-bar:nth-child(1) {
+        height: 3px;
+      }
+      .fan-mini-bar:nth-child(2) {
+        height: 5px;
+      }
+      .fan-mini-bar:nth-child(3) {
+        height: 7px;
+      }
+      .fan-mini-bar:nth-child(4) {
+        height: 8.5px;
+      }
+      .fan-mini-bar:nth-child(5) {
+        height: 10px;
+      }
+
+      .fan-mini-bar.on {
+        background: var(--primary-color, #03a9f4);
+      }
+
+      .quick-actions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: auto;
+        padding-top: 8px;
+        border-top: var(--roommind-border-faint, 1px solid rgba(0, 0, 0, 0.06));
+      }
+
+      .quick-actions-left {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .quick-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        min-width: 28px;
+        height: 26px;
+        padding: 0 7px;
+        border-radius: 7px;
+        border: var(--roommind-border-subtle);
+        background: var(--roommind-tile-surface, var(--secondary-background-color));
+        color: var(--primary-text-color);
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        --mdc-icon-size: 14px;
+        transition:
+          border-color 0.12s ease,
+          background 0.12s ease,
+          color 0.12s ease;
+      }
+
+      .quick-btn:hover {
+        border-color: var(--primary-color);
+        color: var(--primary-color);
+      }
+
+      .quick-btn.is-paused {
+        border-color: color-mix(in srgb, var(--roommind-warning-color) 45%, transparent);
+        background: var(--roommind-warning-tint);
+        color: var(--roommind-warning-color);
       }
 
       .reorder-overlay {
@@ -606,16 +753,28 @@ export class RsAreaCard extends LitElement {
             <h3 class="area-name">${this.config?.display_name || this.area.name}</h3>
             ${
               isConfigured && live
-                ? html`
-                    <span class="mode-pill ${getModeClass(mode)}">
-                      <span class="mode-dot"></span>
-                      ${
-                        mode === null
-                          ? localize("hero.output_unknown", this.hass.language)
-                          : formatMode(mode, this.hass.language)
-                      }
-                    </span>
-                  `
+                ? (() => {
+                    const reason = resolveRoomReason(this.config, this.climateControlActive);
+                    return html`
+                      <div class="header-pills">
+                        ${
+                          reason
+                            ? html`<span class="reason-pill" data-tone=${reason.tone}>
+                                ${localize(reason.key, this.hass.language)}
+                              </span>`
+                            : nothing
+                        }
+                        <span class="mode-pill ${getModeClass(mode)}">
+                          <span class="mode-dot"></span>
+                          ${
+                            mode === null
+                              ? localize("hero.output_unknown", this.hass.language)
+                              : formatMode(mode, this.hass.language)
+                          }
+                        </span>
+                      </div>
+                    `;
+                  })()
                 : nothing
             }
           </div>
@@ -674,18 +833,21 @@ export class RsAreaCard extends LitElement {
       <rs-thermal-band .hass=${this.hass} .config=${this.config} compact></rs-thermal-band>
       ${this._renderUnitStrip()}
       <div class="card-footer">
-        <span class="humidity-info">
+        <span class="footer-left">
           ${
             live.current_humidity !== null
-              ? html`<ha-icon icon="mdi:water-percent"></ha-icon> ${localize(
+              ? html`<span class="humidity-info">
+                  <ha-icon icon="mdi:water-percent"></ha-icon> ${localize(
                     "card.humidity",
                     this.hass.language,
                     {
                       value: live.current_humidity.toFixed(0),
                     },
-                  )}`
+                  )}
+                </span>`
               : nothing
           }
+          ${this._renderFanMini()}
         </span>
         <span class="badge-row">
           ${
@@ -766,6 +928,105 @@ export class RsAreaCard extends LitElement {
             </div>`
           : nothing
       }
+      ${!this.reordering ? this._renderQuickActions(live) : nothing}
+    `;
+  }
+
+  private _renderFanMini() {
+    if (!this.config || !this.hass) return nothing;
+    const caps = buildRoomFanCapabilities(this.config, this.hass);
+    if (!caps.hasFanControl) return nothing;
+    const l = this.hass.language;
+    const activeUnit =
+      caps.units.find((u) => u.isOn && u.fanMode) ??
+      caps.units.find((u) => u.fanMode) ??
+      caps.standaloneFans.find((u) => u.isOn && u.percentage != null) ??
+      caps.standaloneFans[0];
+    const policy = this.config.fan_speed_mode;
+    let bars: 0 | 1 | 2 | 3 | 4 | 5 = 0;
+    let label = "";
+    if (activeUnit?.fanMode) {
+      bars = fanSpeedBars(activeUnit.fanMode, activeUnit.fanModes);
+      label = formatFanModeLabel(activeUnit.fanMode, l);
+    } else if (activeUnit?.percentage != null && activeUnit.isOn) {
+      bars = fanSpeedBars(activeUnit.percentage);
+      label = `${Math.round(activeUnit.percentage)}%`;
+    } else if (policy) {
+      bars = fanSpeedBars(policy);
+      label = formatFanModeLabel(policy, l);
+    }
+    if (bars === 0 && !label) return nothing;
+    return html`
+      <span class="fan-mini-pill">
+        <ha-icon icon="mdi:fan"></ha-icon>
+        <span class="fan-mini-bars" aria-hidden="true">
+          ${[1, 2, 3, 4, 5].map(
+            (idx) => html`<span class="fan-mini-bar ${idx <= bars ? "on" : ""}"></span>`,
+          )}
+        </span>
+        ${label ? html`<span>${label}</span>` : nothing}
+      </span>
+    `;
+  }
+
+  private _renderQuickActions(live: NonNullable<RoomConfig["live"]>) {
+    const l = this.hass.language;
+    const isPaused = this.config?.climate_control_enabled === false;
+    const canNudge = live.target_temp !== null || live.heat_target !== null;
+
+    return html`
+      <div class="quick-actions" @click=${(e: Event) => e.stopPropagation()}>
+        <div class="quick-actions-left">
+          ${
+            canNudge
+              ? html`
+                  <button
+                    type="button"
+                    class="quick-btn"
+                    aria-label=${localize("overview.action.decrease_target", l)}
+                    title=${localize("overview.action.decrease_target", l)}
+                    @click=${(e: Event) => this._onNudgeTarget(e, -1)}
+                  >
+                    −
+                  </button>
+                  <button
+                    type="button"
+                    class="quick-btn"
+                    aria-label=${localize("overview.action.increase_target", l)}
+                    title=${localize("overview.action.increase_target", l)}
+                    @click=${(e: Event) => this._onNudgeTarget(e, 1)}
+                  >
+                    +
+                  </button>
+                `
+              : nothing
+          }
+          <button
+            type="button"
+            class="quick-btn ${isPaused ? "is-paused" : ""}"
+            aria-label=${localize(
+              isPaused ? "overview.action.resume_room" : "overview.action.pause_room",
+              l,
+            )}
+            title=${localize(
+              isPaused ? "overview.action.resume_room" : "overview.action.pause_room",
+              l,
+            )}
+            @click=${this._onToggleRoomControl}
+          >
+            <ha-icon icon=${isPaused ? "mdi:play" : "mdi:pause"}></ha-icon>
+          </button>
+        </div>
+        <button
+          type="button"
+          class="quick-btn"
+          aria-label=${localize("overview.action.open_analytics", l)}
+          title=${localize("overview.action.open_analytics", l)}
+          @click=${this._onOpenAnalytics}
+        >
+          <ha-icon icon="mdi:chart-line"></ha-icon>
+        </button>
+      </div>
     `;
   }
 
@@ -980,6 +1241,39 @@ export class RsAreaCard extends LitElement {
     e.stopPropagation();
     this.dispatchEvent(
       new CustomEvent("hide-room", {
+        detail: { areaId: this.area.area_id },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  private _onNudgeTarget(e: Event, direction: -1 | 1) {
+    e.stopPropagation();
+    this.dispatchEvent(
+      new CustomEvent("room-nudge-target", {
+        detail: { areaId: this.area.area_id, direction },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  private _onToggleRoomControl(e: Event) {
+    e.stopPropagation();
+    this.dispatchEvent(
+      new CustomEvent("room-toggle-control", {
+        detail: { areaId: this.area.area_id },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  private _onOpenAnalytics(e: Event) {
+    e.stopPropagation();
+    this.dispatchEvent(
+      new CustomEvent("room-open-analytics", {
         detail: { areaId: this.area.area_id },
         bubbles: true,
         composed: true,

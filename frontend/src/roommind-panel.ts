@@ -6,9 +6,15 @@ import { loadHaElements } from "./load-ha-elements";
 import { localize } from "./utils/localize";
 import { mdiEyeOff } from "./utils/icons";
 import { roommindThemeStyles } from "./styles/theme-styles";
-import { formatTemp, tempUnit } from "./utils/temperature";
+import { formatTemp, tempStep, tempUnit, toCelsius, toDisplay } from "./utils/temperature";
 import { DEFAULT_CONTROL_MODE, DEFAULT_SETBACK_OFFSET } from "./utils/constants";
 import { isRoomControlEffective, summarizeRoomOverview } from "./utils/room-overview-status";
+import {
+  applyBaselineTargetChange,
+  buildRoomSavePayload,
+  createRoomConfigDraft,
+} from "./utils/room-config-draft";
+import { fireSaveStatus } from "./utils/events";
 import {
   type FleetFilter,
   matchesFleetFilter,
@@ -23,12 +29,6 @@ const BACK_PATH = "M20,11V13H8L13.5,18.5L12.08,19.92L4.16,12L12.08,4.08L13.5,5.5
 
 const DELETE_PATH =
   "M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z";
-
-const CHART_PATH =
-  "M16,11.78L20.24,4.45L21.97,5.45L16.74,14.5L10.23,10.75L5.46,19H22V21H2V3H4V17.54L9.5,8L16,11.78Z";
-
-const THERMOMETER_PATH =
-  "M15 13V5A3 3 0 0 0 9 5V13A5 5 0 1 0 15 13M12 4A1 1 0 0 1 13 5V8H11V5A1 1 0 0 1 12 4Z";
 
 type TabId = "areas" | "analytics" | "settings";
 
@@ -123,6 +123,43 @@ export class RoomMindPanel extends LitElement {
 
       .toolbar ha-icon-button {
         color: var(--app-header-text-color, var(--primary-text-color));
+      }
+
+      .toolbar-view-switch {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        padding: 3px;
+        margin-right: 6px;
+        border-radius: 10px;
+        background: rgba(var(--rgb-primary-text-color, 0, 0, 0), 0.08);
+      }
+
+      .toolbar-view-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 5px 10px;
+        border: none;
+        border-radius: 7px;
+        background: transparent;
+        color: var(--app-header-text-color, var(--primary-text-color));
+        opacity: 0.78;
+        font-family: inherit;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        --mdc-icon-size: 15px;
+        transition:
+          background 0.15s ease,
+          opacity 0.15s ease;
+      }
+
+      .toolbar-view-btn.active {
+        background: var(--roommind-surface, #ffffff);
+        color: var(--primary-text-color);
+        opacity: 1;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
       }
 
       .save-indicator {
@@ -667,22 +704,39 @@ export class RoomMindPanel extends LitElement {
         </div>
         ${this._renderSaveIndicator()}
         ${
-          inDetail && this._rooms[this._selectedAreaId!]
-            ? html`<ha-icon-button
-                  .path=${CHART_PATH}
-                  @click=${this._onGoToAnalytics}
-                ></ha-icon-button
-                ><ha-icon-button
-                  .path=${DELETE_PATH}
-                  @click=${this._onDeleteRoom}
-                ></ha-icon-button>`
+          (inDetail && this._rooms[this._selectedAreaId!]) ||
+          (!inDetail && this._activeTab === "analytics" && this._analyticsRoom)
+            ? html`
+                <div class="toolbar-view-switch" role="tablist">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected=${inDetail}
+                    class="toolbar-view-btn ${inDetail ? "active" : ""}"
+                    @click=${this._onGoToRoomFromAnalytics}
+                  >
+                    <ha-icon icon="mdi:tune-variant"></ha-icon>
+                    <span>${localize("nav.control", l)}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected=${!inDetail && this._activeTab === "analytics"}
+                    class="toolbar-view-btn ${!inDetail && this._activeTab === "analytics" ? "active" : ""}"
+                    @click=${this._onGoToAnalytics}
+                  >
+                    <ha-icon icon="mdi:chart-line"></ha-icon>
+                    <span>${localize("nav.analysis", l)}</span>
+                  </button>
+                </div>
+              `
             : nothing
         }
         ${
-          !inDetail && this._activeTab === "analytics" && this._analyticsRoom
+          inDetail && this._rooms[this._selectedAreaId!]
             ? html`<ha-icon-button
-                .path=${THERMOMETER_PATH}
-                @click=${this._onGoToRoomFromAnalytics}
+                .path=${DELETE_PATH}
+                @click=${this._onDeleteRoom}
               ></ha-icon-button>`
             : nothing
         }
@@ -1081,6 +1135,9 @@ export class RoomMindPanel extends LitElement {
         @hide-room=${this._onHideRoom}
         @move-room-up=${this._onMoveRoomUp}
         @move-room-down=${this._onMoveRoomDown}
+        @room-nudge-target=${this._onRoomNudgeTarget}
+        @room-toggle-control=${this._onRoomToggleControl}
+        @room-open-analytics=${this._onRoomOpenAnalytics}
       ></rs-area-card>
     `;
   }
@@ -1153,7 +1210,11 @@ export class RoomMindPanel extends LitElement {
   }
 
   private _renderSettings() {
-    return html`<rs-settings .hass=${this.hass} .rooms=${this._rooms}></rs-settings>`;
+    return html`<rs-settings
+      .hass=${this.hass}
+      .rooms=${this._rooms}
+      @settings-updated=${this._onRoomUpdated}
+    ></rs-settings>`;
   }
 
   private _computeAreaInfos(): AreaInfo[] {
@@ -1368,10 +1429,70 @@ export class RoomMindPanel extends LitElement {
   }
 
   private _onGoToRoomFromAnalytics() {
-    if (!this._analyticsRoom) return;
+    if (this._selectedAreaId || !this._analyticsRoom) return;
     this._selectedAreaId = this._analyticsRoom;
     this._activeTab = "areas";
     this._navigate(`/room/${this._analyticsRoom}`);
+  }
+
+  private _onRoomOpenAnalytics(e: CustomEvent<{ areaId: string }>) {
+    this._analyticsRoom = e.detail.areaId;
+    this._selectedAreaId = null;
+    this._activeTab = "analytics";
+    this._navigate(`/analytics/${e.detail.areaId}`);
+  }
+
+  private async _onRoomNudgeTarget(e: CustomEvent<{ areaId: string; direction: -1 | 1 }>) {
+    const { areaId, direction } = e.detail;
+    const config = this._rooms[areaId];
+    if (!config) return;
+    const live = config.live;
+    const stepDisplay = Number(tempStep(this.hass));
+    const currentC =
+      live?.override_active && !live.override_suppressed && live.override_temp != null
+        ? live.override_temp
+        : (live?.target_temp ?? live?.heat_target ?? config.comfort_heat);
+    const nextDisplay =
+      Math.round((toDisplay(currentC, this.hass) + direction * stepDisplay) / stepDisplay) *
+      stepDisplay;
+    const nextC = Math.round(toCelsius(nextDisplay, this.hass) * 10) / 10;
+
+    fireSaveStatus(this, "saving");
+    try {
+      if ((config.schedules?.length ?? 0) > 0) {
+        await this.hass.callWS({
+          type: "roommind/override/set",
+          area_id: areaId,
+          override_type: "custom",
+          temp: nextC,
+          duration_hours: 2,
+        });
+      } else {
+        const draft = applyBaselineTargetChange(createRoomConfigDraft(config), nextC);
+        await this.hass.callWS(buildRoomSavePayload(areaId, draft));
+      }
+      await this._loadRooms();
+      fireSaveStatus(this, "saved");
+    } catch {
+      fireSaveStatus(this, "error");
+    }
+  }
+
+  private async _onRoomToggleControl(e: CustomEvent<{ areaId: string }>) {
+    const { areaId } = e.detail;
+    const config = this._rooms[areaId];
+    if (!config) return;
+    const draft = createRoomConfigDraft(config);
+    draft.climateControlEnabled = !(config.climate_control_enabled !== false);
+
+    fireSaveStatus(this, "saving");
+    try {
+      await this.hass.callWS(buildRoomSavePayload(areaId, draft));
+      await this._loadRooms();
+      fireSaveStatus(this, "saved");
+    } catch {
+      fireSaveStatus(this, "error");
+    }
   }
 
   private _onAnalyticsRoomSelected(e: CustomEvent<{ areaId: string }>) {

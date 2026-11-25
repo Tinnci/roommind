@@ -6,6 +6,7 @@ import { modeStyles } from "../styles/shared-mode-styles";
 import { localize } from "../utils/localize";
 import { formatTemp, tempUnit, toDisplayDelta } from "../utils/temperature";
 import { selectHeroMetricIds, type HeroMetricId } from "../utils/hero-metrics";
+import { resolveRoomReason } from "../utils/room-state-reason";
 import "./shared/rs-info-icon";
 import "./rs-thermal-band";
 
@@ -304,6 +305,33 @@ export class RsHeroStatus extends LitElement {
         align-items: center;
         gap: 8px;
         flex-wrap: wrap;
+      }
+
+      .reason-pill {
+        display: inline-flex;
+        align-items: center;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1.25;
+        padding: 2px 8px;
+        border-radius: 7px;
+        background: var(--roommind-tile-surface, var(--secondary-background-color));
+        color: var(--secondary-text-color);
+      }
+
+      .reason-pill[data-tone="warning"] {
+        background: var(--roommind-warning-tint);
+        color: var(--roommind-warning-color);
+      }
+
+      .reason-pill[data-tone="accent"] {
+        background: var(--roommind-primary-muted, rgba(3, 169, 244, 0.14));
+        color: var(--primary-color);
+      }
+
+      .reason-pill[data-tone="info"] {
+        background: var(--roommind-info-tint);
+        color: var(--roommind-info-color);
       }
 
       @media (max-width: 620px) {
@@ -626,6 +654,7 @@ export class RsHeroStatus extends LitElement {
   override render() {
     const live = this.config?.live;
     const mode = getDisplayMode(live, this.config);
+    const reason = resolveRoomReason(this.config, this.climateControlActive);
 
     return html`
       <ha-card data-activity=${mode ?? "unknown"}>
@@ -695,6 +724,13 @@ export class RsHeroStatus extends LitElement {
                                 }
                               </span>
                             `
+                          : nothing
+                      }
+                      ${
+                        reason
+                          ? html`<span class="reason-pill" data-tone=${reason.tone}>
+                              ${localize(reason.key, this.hass?.language ?? "en")}
+                            </span>`
                           : nothing
                       }
                       ${

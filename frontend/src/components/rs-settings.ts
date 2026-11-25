@@ -1,9 +1,9 @@
 /**
- * rs-settings – Global RoomMind settings page (orchestrator).
- * Owns all state, loads/saves settings, delegates rendering to sub-components
- * wrapped in ha-expansion-panel accordion sections.
+ * rs-settings – Global RoomMind settings hub & focused editors.
+ * Owns all global settings state, surfaces whole-home quick toggles at a glance,
+ * filters settings into clear category cards, and renders focused sub-editors.
  */
-import { LitElement, html, css } from "lit";
+import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type {
   HomeAssistant,
@@ -21,7 +21,15 @@ import {
 } from "../utils/constants";
 import { roommindThemeStyles } from "../styles/theme-styles";
 import { tempUnit, toDisplay } from "../utils/temperature";
-import "./settings/rs-settings-panel";
+import {
+  SETTINGS_CATEGORIES,
+  filterSettingsSections,
+  findSettingsSection,
+  getSettingsSectionTone,
+  type SettingsCategoryId,
+  type SettingsSectionId,
+  type SettingsSectionMeta,
+} from "../utils/settings-hub";
 import "./settings/rs-settings-general";
 import "./settings/rs-settings-sensors";
 import "./settings/rs-settings-control";
@@ -75,6 +83,8 @@ export class RsSettings extends LitElement {
   @state() private _compressorGroups: CompressorGroup[] = [];
   @state() private _boostAppliedAt: Record<string, number> = {};
   @state() private _loaded = false;
+  @state() private _selectedCategory: SettingsCategoryId = "all";
+  @state() private _activeSection: SettingsSectionId | null = null;
 
   private _saveDebounce?: ReturnType<typeof setTimeout>;
 
@@ -148,47 +158,220 @@ export class RsSettings extends LitElement {
     }
 
     const l = this.hass.language;
+    const activeMeta = this._activeSection ? findSettingsSection(this._activeSection) : undefined;
+
+    if (activeMeta) {
+      return this._renderFocusedEditor(activeMeta, l);
+    }
+
+    const sections = filterSettingsSections(this._selectedCategory);
 
     return html`
-      <h2 class="settings-group-heading">${localize("settings.group.basics", l)}</h2>
-      <rs-settings-panel
-        icon="mdi:power"
-        .heading=${localize("settings.general_title", l)}
-        .summary=${this._generalSummary(l)}
-        .intro=${localize("settings.intro.general", l)}
+      ${this._renderQuickControlsStrip(l)}
+
+      <div class="hub-header">
+        <div>
+          <h2 class="hub-title">${localize("settings_hub.title", l)}</h2>
+          <p class="hub-subtitle">${localize("settings_hub.subtitle", l)}</p>
+        </div>
+        <div class="category-pills" role="tablist">
+          ${SETTINGS_CATEGORIES.map(
+            (cat) => html`
+              <button
+                type="button"
+                role="tab"
+                aria-selected=${this._selectedCategory === cat.id}
+                class="category-pill ${this._selectedCategory === cat.id ? "active" : ""}"
+                @click=${() => {
+                  this._selectedCategory = cat.id;
+                }}
+              >
+                ${localize(cat.labelKey, l)}
+              </button>
+            `,
+          )}
+        </div>
+      </div>
+
+      <div class="hub-grid">${sections.map((section) => this._renderHubCard(section, l))}</div>
+    `;
+  }
+
+  private _renderQuickControlsStrip(lang: string) {
+    const vacationLabel = this._vacationActive
+      ? `${toDisplay(this._vacationTemp, this.hass)}${tempUnit(this.hass)}`
+      : localize("settings_hub.quick.vacation_hint", lang);
+
+    const presenceLabel = this._presenceEnabled
+      ? localize("settings.summary.people", lang, { count: this._presencePersons.length })
+      : localize("settings.summary.off", lang);
+
+    return html`
+      <div class="quick-strip">
+        <button
+          type="button"
+          class="quick-tile ${this._climateControlActive ? "is-on" : "is-warn"}"
+          @click=${this._toggleClimateControl}
+        >
+          <span class="quick-tile-icon">
+            <ha-icon icon="mdi:power"></ha-icon>
+          </span>
+          <span class="quick-tile-body">
+            <span class="quick-tile-label">${localize("settings_hub.quick.climate", lang)}</span>
+            <span class="quick-tile-value">
+              ${
+                this._climateControlActive
+                  ? localize("settings.summary.control_on", lang)
+                  : localize("settings.summary.control_off", lang)
+              }
+            </span>
+          </span>
+        </button>
+
+        <button
+          type="button"
+          class="quick-tile ${this._vacationActive ? "is-accent" : ""}"
+          @click=${this._toggleVacation}
+        >
+          <span class="quick-tile-icon">
+            <ha-icon icon="mdi:airplane"></ha-icon>
+          </span>
+          <span class="quick-tile-body">
+            <span class="quick-tile-label">${localize("settings_hub.quick.vacation", lang)}</span>
+            <span class="quick-tile-value">${vacationLabel}</span>
+          </span>
+        </button>
+
+        <button
+          type="button"
+          class="quick-tile ${this._groupByFloor ? "is-accent" : ""}"
+          @click=${this._toggleGroupByFloor}
+        >
+          <span class="quick-tile-icon">
+            <ha-icon icon="mdi:layers-outline"></ha-icon>
+          </span>
+          <span class="quick-tile-body">
+            <span class="quick-tile-label">${localize("settings_hub.quick.floors", lang)}</span>
+            <span class="quick-tile-value">
+              ${
+                this._groupByFloor
+                  ? localize("settings.summary.grouped", lang)
+                  : localize("settings.summary.custom_order", lang)
+              }
+            </span>
+          </span>
+        </button>
+
+        <button
+          type="button"
+          class="quick-tile ${this._presenceEnabled ? "is-on" : ""}"
+          @click=${() => {
+            this._activeSection = "presence";
+          }}
+        >
+          <span class="quick-tile-icon">
+            <ha-icon icon="mdi:home-account"></ha-icon>
+          </span>
+          <span class="quick-tile-body">
+            <span class="quick-tile-label">${localize("settings_hub.quick.presence", lang)}</span>
+            <span class="quick-tile-value">${presenceLabel}</span>
+          </span>
+        </button>
+      </div>
+    `;
+  }
+
+  private _renderHubCard(section: SettingsSectionMeta, lang: string) {
+    const tone = getSettingsSectionTone(section.id, this._statusInput());
+    const summary = this._sectionSummary(section.id, lang);
+
+    return html`
+      <button
+        type="button"
+        class="hub-card"
+        @click=${() => {
+          this._activeSection = section.id;
+        }}
       >
-        <rs-settings-general
+        <div class="hub-card-top">
+          <span class="hub-card-icon" data-tone=${tone}>
+            <ha-icon .icon=${section.icon}></ha-icon>
+          </span>
+          <span class="hub-card-badges">
+            ${
+              section.isBeta
+                ? html`<span class="beta-pill" title=${localize("badge.beta_hint", lang)}>
+                    ${localize("badge.beta", lang)}
+                  </span>`
+                : nothing
+            }
+            <span class="status-pill" data-tone=${tone}>${summary}</span>
+          </span>
+        </div>
+        <h3 class="hub-card-title">${localize(section.titleKey, lang)}</h3>
+        <p class="hub-card-desc">${localize(section.descKey, lang)}</p>
+        <span class="hub-card-action">
+          <span>${localize("settings_hub.configure", lang)}</span>
+          <ha-icon icon="mdi:chevron-right"></ha-icon>
+        </span>
+      </button>
+    `;
+  }
+
+  private _renderFocusedEditor(section: SettingsSectionMeta, lang: string) {
+    const tone = getSettingsSectionTone(section.id, this._statusInput());
+    const summary = this._sectionSummary(section.id, lang);
+
+    return html`
+      <div class="editor-header">
+        <button
+          type="button"
+          class="back-btn"
+          @click=${() => {
+            this._activeSection = null;
+          }}
+        >
+          <ha-icon icon="mdi:arrow-left"></ha-icon>
+          <span>${localize("settings_hub.back", lang)}</span>
+        </button>
+        <span class="status-pill" data-tone=${tone}>${summary}</span>
+      </div>
+
+      <ha-card class="editor-card">
+        <div class="editor-card-head">
+          <span class="hub-card-icon" data-tone=${tone}>
+            <ha-icon .icon=${section.icon}></ha-icon>
+          </span>
+          <div class="editor-card-titles">
+            <h2 class="editor-card-title">${localize(section.titleKey, lang)}</h2>
+            <p class="editor-card-desc">${localize(section.descKey, lang)}</p>
+          </div>
+        </div>
+        <div class="editor-card-body">${this._renderSectionBody(section.id)}</div>
+      </ha-card>
+    `;
+  }
+
+  private _renderSectionBody(sectionId: SettingsSectionId) {
+    switch (sectionId) {
+      case "general":
+        return html`<rs-settings-general
           .hass=${this.hass}
           .groupByFloor=${this._groupByFloor}
           .climateControlActive=${this._climateControlActive}
           @setting-changed=${this._onSettingChanged}
-        ></rs-settings-general>
-      </rs-settings-panel>
-
-      <rs-settings-panel
-        icon="mdi:thermometer"
-        .heading=${localize("settings.sensors_title", l)}
-        .summary=${this._sensorsSummary(l)}
-        .intro=${localize("settings.intro.sensors", l)}
-      >
-        <rs-settings-sensors
+        ></rs-settings-general>`;
+      case "sensors":
+        return html`<rs-settings-sensors
           .hass=${this.hass}
           .outdoorTempSensor=${this._outdoorTempSensor}
           .outdoorHumiditySensor=${this._outdoorHumiditySensor}
           .weatherEntity=${this._weatherEntity}
           .outdoorUnavailableNotify=${this._outdoorUnavailableNotify}
           @setting-changed=${this._onSettingChanged}
-        ></rs-settings-sensors>
-      </rs-settings-panel>
-
-      <h2 class="settings-group-heading">${localize("settings.group.automation", l)}</h2>
-      <rs-settings-panel
-        icon="mdi:tune-variant"
-        .heading=${localize("settings.control_title", l)}
-        .summary=${this._controlSummary(l)}
-        .intro=${localize("settings.intro.control", l)}
-      >
-        <rs-settings-control
+        ></rs-settings-sensors>`;
+      case "control":
+        return html`<rs-settings-control
           .hass=${this.hass}
           .controlMode=${this._controlMode}
           .optimizerStrategy=${this._optimizerStrategy}
@@ -199,74 +382,39 @@ export class RsSettings extends LitElement {
           .predictionEnabled=${this._predictionEnabled}
           .scheduleOffAction=${this._scheduleOffAction}
           @setting-changed=${this._onSettingChanged}
-        ></rs-settings-control>
-      </rs-settings-panel>
-
-      <rs-settings-panel
-        icon="mdi:home-account"
-        .heading=${localize("presence.title", l)}
-        .summary=${this._presenceSummary(l)}
-        .intro=${localize("settings.intro.presence", l)}
-      >
-        <rs-settings-presence
+        ></rs-settings-control>`;
+      case "presence":
+        return html`<rs-settings-presence
           .hass=${this.hass}
           .presenceEnabled=${this._presenceEnabled}
           .presencePersons=${this._presencePersons}
           .presenceAwayAction=${this._presenceAwayAction}
           .presenceClearsOverride=${this._presenceClearsOverride}
           @setting-changed=${this._onSettingChanged}
-        ></rs-settings-presence>
-      </rs-settings-panel>
-
-      <rs-settings-panel
-        icon="mdi:airplane"
-        .heading=${localize("vacation.title", l)}
-        .summary=${this._vacationSummary(l)}
-        .intro=${localize("settings.intro.vacation", l)}
-      >
-        <rs-settings-vacation
+        ></rs-settings-presence>`;
+      case "vacation":
+        return html`<rs-settings-vacation
           .hass=${this.hass}
           .vacationActive=${this._vacationActive}
           .vacationTemp=${this._vacationTemp}
           .vacationUntil=${this._vacationUntil}
           @setting-changed=${this._onSettingChanged}
-        ></rs-settings-vacation>
-      </rs-settings-panel>
-
-      <rs-settings-panel
-        icon="mdi:shield-refresh"
-        .heading=${localize("valve_protection.title", l)}
-        .summary=${this._valveSummary(l)}
-        .intro=${localize("settings.intro.valve", l)}
-      >
-        <rs-settings-valve
+        ></rs-settings-vacation>`;
+      case "valve":
+        return html`<rs-settings-valve
           .hass=${this.hass}
           .valveProtectionEnabled=${this._valveProtectionEnabled}
           .valveProtectionInterval=${this._valveProtectionInterval}
           @setting-changed=${this._onSettingChanged}
-        ></rs-settings-valve>
-      </rs-settings-panel>
-
-      <rs-settings-panel
-        icon="mdi:heat-pump-outline"
-        .heading=${localize("compressor.title", l)}
-        .summary=${this._compressorSummary(l)}
-        .intro=${localize("settings.intro.compressor", l)}
-      >
-        <rs-settings-compressor
+        ></rs-settings-valve>`;
+      case "compressor":
+        return html`<rs-settings-compressor
           .hass=${this.hass}
           .compressorGroups=${this._compressorGroups}
           @setting-changed=${this._onSettingChanged}
-        ></rs-settings-compressor>
-      </rs-settings-panel>
-
-      <rs-settings-panel
-        icon="mdi:water-alert"
-        .heading=${localize("mold.title", l)}
-        .summary=${this._moldSummary(l)}
-        .intro=${localize("settings.intro.mold", l)}
-      >
-        <rs-settings-mold
+        ></rs-settings-compressor>`;
+      case "mold":
+        return html`<rs-settings-mold
           .hass=${this.hass}
           .moldDetectionEnabled=${this._moldDetectionEnabled}
           .moldHumidityThreshold=${this._moldHumidityThreshold}
@@ -274,19 +422,9 @@ export class RsSettings extends LitElement {
           .moldPreventionEnabled=${this._moldPreventionEnabled}
           .moldPreventionIntensity=${this._moldPreventionIntensity}
           @setting-changed=${this._onSettingChanged}
-        ></rs-settings-mold>
-      </rs-settings-panel>
-
-      <h2 class="settings-group-heading">${localize("settings.group.maintenance", l)}</h2>
-      <rs-settings-panel
-        icon="mdi:bell-outline"
-        .heading=${localize("notifications.title", l)}
-        .summary=${this._notificationsSummary(l)}
-        .intro=${localize("settings.intro.notifications", l)}
-        .badge=${localize("badge.beta", l)}
-        .badgeHint=${localize("badge.beta_hint", l)}
-      >
-        <rs-settings-notifications
+        ></rs-settings-mold>`;
+      case "notifications":
+        return html`<rs-settings-notifications
           .hass=${this.hass}
           .notificationsEnabled=${this._moldNotificationsEnabled}
           .notificationTargets=${this._moldNotificationTargets}
@@ -294,16 +432,9 @@ export class RsSettings extends LitElement {
           .moldPreventionEnabled=${this._moldPreventionEnabled}
           .moldPreventionNotify=${this._moldPreventionNotify}
           @setting-changed=${this._onSettingChanged}
-        ></rs-settings-notifications>
-      </rs-settings-panel>
-
-      <rs-settings-panel
-        icon="mdi:brain"
-        .heading=${localize("settings.learning_title", l)}
-        .summary=${this._learningSummary(l)}
-        .intro=${localize("settings.intro.learning", l)}
-      >
-        <rs-settings-learning
+        ></rs-settings-notifications>`;
+      case "learning":
+        return html`<rs-settings-learning
           .hass=${this.hass}
           .rooms=${this.rooms}
           .learningDisabledRooms=${this._learningDisabledRooms}
@@ -314,18 +445,73 @@ export class RsSettings extends LitElement {
           )}
           @setting-changed=${this._onSettingChanged}
           @boost-applied=${this._onBoostApplied}
-        ></rs-settings-learning>
-      </rs-settings-panel>
+        ></rs-settings-learning>`;
+      case "reset":
+        return html`<rs-settings-reset
+          .hass=${this.hass}
+          .rooms=${this.rooms}
+        ></rs-settings-reset>`;
+    }
+  }
 
-      <rs-settings-panel
-        icon="mdi:restart"
-        .heading=${localize("settings.reset_title", l)}
-        .summary=${localize("settings.summary.data_tools", l)}
-        .intro=${localize("settings.intro.reset", l)}
-      >
-        <rs-settings-reset .hass=${this.hass} .rooms=${this.rooms}></rs-settings-reset>
-      </rs-settings-panel>
-    `;
+  private _statusInput() {
+    return {
+      climateControlActive: this._climateControlActive,
+      controlMode: this._controlMode,
+      presenceEnabled: this._presenceEnabled,
+      presencePersonsCount: this._presencePersons.filter(Boolean).length,
+      vacationActive: this._vacationActive,
+      valveProtectionEnabled: this._valveProtectionEnabled,
+      outdoorSensorConfigured: Boolean(this._outdoorTempSensor),
+      weatherEntityConfigured: Boolean(this._weatherEntity),
+      compressorGroupsCount: this._compressorGroups.filter((g) => g.members.length > 0).length,
+      moldDetectionEnabled: this._moldDetectionEnabled,
+      moldPreventionEnabled: this._moldPreventionEnabled,
+      notificationsEnabled: this._moldNotificationsEnabled,
+      learningDisabledCount: this._learningDisabledRooms.length,
+    };
+  }
+
+  private _sectionSummary(sectionId: SettingsSectionId, lang: string): string {
+    switch (sectionId) {
+      case "general":
+        return this._generalSummary(lang);
+      case "sensors":
+        return this._sensorsSummary(lang);
+      case "control":
+        return this._controlSummary(lang);
+      case "presence":
+        return this._presenceSummary(lang);
+      case "vacation":
+        return this._vacationSummary(lang);
+      case "valve":
+        return this._valveSummary(lang);
+      case "compressor":
+        return this._compressorSummary(lang);
+      case "mold":
+        return this._moldSummary(lang);
+      case "notifications":
+        return this._notificationsSummary(lang);
+      case "learning":
+        return this._learningSummary(lang);
+      case "reset":
+        return localize("settings.summary.data_tools", lang);
+    }
+  }
+
+  private _toggleClimateControl() {
+    this._climateControlActive = !this._climateControlActive;
+    this._autoSave();
+  }
+
+  private _toggleVacation() {
+    this._vacationActive = !this._vacationActive;
+    this._autoSave();
+  }
+
+  private _toggleGroupByFloor() {
+    this._groupByFloor = !this._groupByFloor;
+    this._autoSave();
   }
 
   private _onBoostApplied(e: CustomEvent<{ area_id: string; n_observations: number }>) {
@@ -539,6 +725,7 @@ export class RsSettings extends LitElement {
           : [],
       });
       fireSaveStatus(this, "saved");
+      this.dispatchEvent(new CustomEvent("settings-updated", { bubbles: true, composed: true }));
     } catch {
       fireSaveStatus(this, "error");
     }
@@ -550,8 +737,8 @@ export class RsSettings extends LitElement {
       :host {
         display: flex;
         flex-direction: column;
-        gap: 12px;
-        padding: 0 16px;
+        gap: 14px;
+        padding: 0 16px 24px;
       }
 
       .loading {
@@ -560,18 +747,367 @@ export class RsSettings extends LitElement {
         color: var(--secondary-text-color);
       }
 
-      .settings-group-heading {
-        margin: 14px 4px -2px;
+      .quick-strip {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .quick-tile {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: var(--roommind-border-subtle);
+        background: var(--roommind-surface);
+        color: var(--primary-text-color);
+        font-family: inherit;
+        text-align: left;
+        cursor: pointer;
+        transition:
+          border-color 0.15s ease,
+          background 0.15s ease;
+      }
+
+      .quick-tile:hover {
+        border-color: rgba(var(--rgb-primary-color, 3, 169, 244), 0.45);
+      }
+
+      .quick-tile.is-on {
+        border-color: color-mix(in srgb, var(--roommind-success-color) 42%, transparent);
+        background: color-mix(in srgb, var(--roommind-success-tint) 60%, var(--roommind-surface));
+      }
+
+      .quick-tile.is-warn {
+        border-color: color-mix(in srgb, var(--roommind-warning-color) 45%, transparent);
+        background: color-mix(in srgb, var(--roommind-warning-tint) 65%, var(--roommind-surface));
+      }
+
+      .quick-tile.is-accent {
+        border-color: rgba(var(--rgb-primary-color, 3, 169, 244), 0.45);
+        background: color-mix(
+          in srgb,
+          var(--roommind-primary-muted, rgba(3, 169, 244, 0.1)) 65%,
+          var(--roommind-surface)
+        );
+      }
+
+      .quick-tile-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        background: var(--roommind-tile-surface, rgba(0, 0, 0, 0.05));
         color: var(--secondary-text-color);
+        --mdc-icon-size: 18px;
+      }
+
+      .quick-tile.is-on .quick-tile-icon {
+        color: var(--roommind-success-color);
+        background: var(--roommind-success-tint);
+      }
+
+      .quick-tile.is-warn .quick-tile-icon {
+        color: var(--roommind-warning-color);
+        background: var(--roommind-warning-tint);
+      }
+
+      .quick-tile.is-accent .quick-tile-icon {
+        color: var(--primary-color);
+        background: var(--roommind-primary-muted, rgba(3, 169, 244, 0.14));
+      }
+
+      .quick-tile-body {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        gap: 2px;
+      }
+
+      .quick-tile-label {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--secondary-text-color);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .quick-tile-value {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--primary-text-color);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .hub-header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-top: 2px;
+      }
+
+      .hub-title {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 700;
+        color: var(--primary-text-color);
+      }
+
+      .hub-subtitle {
+        margin: 2px 0 0;
         font-size: 12px;
-        font-weight: 650;
-        letter-spacing: 0.04em;
-        line-height: 1.3;
+        color: var(--secondary-text-color);
+      }
+
+      .category-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .category-pill {
+        appearance: none;
+        border: var(--roommind-border-subtle);
+        background: var(--roommind-surface);
+        color: var(--secondary-text-color);
+        border-radius: 999px;
+        padding: 5px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        font-family: inherit;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+
+      .category-pill.active {
+        background: var(--primary-color);
+        color: var(--text-primary-color, #fff);
+        border-color: var(--primary-color);
+      }
+
+      .hub-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 12px;
+      }
+
+      .hub-card {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        text-align: left;
+        padding: 14px 16px;
+        border-radius: var(--roommind-radius-card, 12px);
+        border: var(--roommind-border-subtle);
+        background: var(--roommind-surface);
+        color: var(--primary-text-color);
+        font-family: inherit;
+        cursor: pointer;
+        transition:
+          border-color 0.15s ease,
+          box-shadow 0.15s ease,
+          transform 0.15s ease;
+      }
+
+      .hub-card:hover {
+        border-color: rgba(var(--rgb-primary-color, 3, 169, 244), 0.45);
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+        transform: translateY(-1px);
+      }
+
+      .hub-card-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+
+      .hub-card-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--roommind-tile-surface, rgba(0, 0, 0, 0.05));
+        color: var(--secondary-text-color);
+        --mdc-icon-size: 19px;
+        flex: 0 0 auto;
+      }
+
+      .hub-card-icon[data-tone="ok"] {
+        background: var(--roommind-success-tint);
+        color: var(--roommind-success-color);
+      }
+
+      .hub-card-icon[data-tone="accent"] {
+        background: var(--roommind-primary-muted, rgba(3, 169, 244, 0.14));
+        color: var(--primary-color);
+      }
+
+      .hub-card-icon[data-tone="warning"] {
+        background: var(--roommind-warning-tint);
+        color: var(--roommind-warning-color);
+      }
+
+      .hub-card-badges {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .beta-pill {
+        font-size: 10px;
+        font-weight: 700;
+        padding: 2px 6px;
+        border-radius: 6px;
+        background: var(--roommind-info-tint);
+        color: var(--roommind-info-color);
         text-transform: uppercase;
       }
 
-      .settings-group-heading:first-child {
-        margin-top: 2px;
+      .status-pill {
+        font-size: 11px;
+        font-weight: 600;
+        padding: 3px 8px;
+        border-radius: 8px;
+        background: var(--roommind-tile-surface, rgba(0, 0, 0, 0.05));
+        color: var(--secondary-text-color);
+        max-width: 170px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .status-pill[data-tone="ok"] {
+        background: var(--roommind-success-tint);
+        color: var(--roommind-success-color);
+      }
+
+      .status-pill[data-tone="accent"] {
+        background: var(--roommind-primary-muted, rgba(3, 169, 244, 0.14));
+        color: var(--primary-color);
+      }
+
+      .status-pill[data-tone="warning"] {
+        background: var(--roommind-warning-tint);
+        color: var(--roommind-warning-color);
+      }
+
+      .hub-card-title {
+        margin: 0 0 4px;
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--primary-text-color);
+      }
+
+      .hub-card-desc {
+        margin: 0 0 12px;
+        font-size: 12px;
+        line-height: 1.4;
+        color: var(--secondary-text-color);
+        flex: 1;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      .hub-card-action {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 12px;
+        font-weight: 650;
+        color: var(--primary-color);
+        --mdc-icon-size: 16px;
+      }
+
+      .editor-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .back-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        border-radius: 9px;
+        border: var(--roommind-border-subtle);
+        background: var(--roommind-surface);
+        color: var(--primary-text-color);
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        --mdc-icon-size: 17px;
+      }
+
+      .back-btn:hover {
+        border-color: var(--primary-color);
+        color: var(--primary-color);
+      }
+
+      .editor-card {
+        padding: 18px 20px;
+        border-radius: var(--roommind-radius-card, 12px);
+        border: var(--roommind-border-subtle);
+        box-shadow: none;
+        background: var(--roommind-surface);
+      }
+
+      .editor-card-head {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding-bottom: 14px;
+        margin-bottom: 16px;
+        border-bottom: var(--roommind-border-faint, 1px solid var(--divider-color));
+      }
+
+      .editor-card-titles {
+        min-width: 0;
+      }
+
+      .editor-card-title {
+        margin: 0;
+        font-size: 17px;
+        font-weight: 700;
+        color: var(--primary-text-color);
+      }
+
+      .editor-card-desc {
+        margin: 3px 0 0;
+        font-size: 12.5px;
+        line-height: 1.4;
+        color: var(--secondary-text-color);
+      }
+
+      @media (max-width: 820px) {
+        .quick-strip {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 480px) {
+        .quick-strip {
+          grid-template-columns: 1fr;
+        }
       }
     `,
   ];
