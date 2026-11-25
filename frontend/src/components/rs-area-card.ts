@@ -133,6 +133,13 @@ export class RsAreaCard extends LitElement {
         opacity: 0.65;
       }
 
+      @media (hover: none) {
+        .header-hide-btn,
+        .quick-hide-btn {
+          opacity: 0.6;
+        }
+      }
+
       .header-hide-btn:hover,
       .quick-hide-btn:hover {
         opacity: 1 !important;
@@ -829,6 +836,9 @@ export class RsAreaCard extends LitElement {
                   ? html`<ha-icon-button
                       class="header-hide-btn"
                       .path=${mdiEyeOff}
+                      .label=${localize("panel.hide_room", this.hass.language)}
+                      title=${localize("panel.hide_room", this.hass.language)}
+                      aria-label=${localize("panel.hide_room", this.hass.language)}
                       @click=${this._onHideClick}
                     ></ha-icon-button>`
                   : nothing
@@ -1087,6 +1097,9 @@ export class RsAreaCard extends LitElement {
           <ha-icon-button
             class="quick-hide-btn"
             .path=${mdiEyeOff}
+            .label=${localize("panel.hide_room", l)}
+            title=${localize("panel.hide_room", l)}
+            aria-label=${localize("panel.hide_room", l)}
             @click=${this._onHideClick}
           ></ha-icon-button>
         </div>

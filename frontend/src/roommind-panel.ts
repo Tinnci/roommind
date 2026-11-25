@@ -1,10 +1,15 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { AreaInfo, CompressorGroup, HomeAssistant, RoomConfig } from "./types";
-import { getDisplayMode, getEntitiesForArea, isRoomMindEntity } from "./utils/room-state";
+import {
+  formatMode,
+  getDisplayMode,
+  getEntitiesForArea,
+  isRoomMindEntity,
+} from "./utils/room-state";
 import { loadHaElements } from "./load-ha-elements";
 import { localize } from "./utils/localize";
-import { mdiEyeOff } from "./utils/icons";
+import { getEmptyUnconfiguredAreaIds, hideRoomIds, unhideRoomIds } from "./utils/hidden-rooms";
 import { roommindThemeStyles } from "./styles/theme-styles";
 import { formatTemp, tempStep, tempUnit, toCelsius, toDisplay } from "./utils/temperature";
 import { DEFAULT_CONTROL_MODE, DEFAULT_SETBACK_OFFSET } from "./utils/constants";
@@ -58,6 +63,7 @@ export class RoomMindPanel extends LitElement {
   @state() private _vacationUntil: number | null = null;
   @state() private _hiddenRooms: string[] = [];
   @state() private _showHiddenRooms = false;
+  @state() private _hiddenUndo: { ids: string[]; label: string } | null = null;
   @state() private _controlMode: "mpc" | "bangbang" = DEFAULT_CONTROL_MODE;
   @state() private _climateControlActive = true;
   @state() private _presenceEnabled = false;
@@ -77,6 +83,7 @@ export class RoomMindPanel extends LitElement {
   private _refreshInterval: ReturnType<typeof setInterval> | undefined;
   private _routeApplied = false;
   private _saveStatusTimeout: ReturnType<typeof setTimeout> | undefined;
+  private _hiddenUndoTimeout: ReturnType<typeof setTimeout> | undefined;
   private _areaInfosCache: AreaInfo[] = [];
   private _boundVisibilityHandler: (() => void) | undefined;
   private _boundConnectionReady: (() => void) | undefined;
@@ -404,7 +411,7 @@ export class RoomMindPanel extends LitElement {
         display: flex;
         align-items: center;
         margin-left: auto;
-        gap: 0;
+        gap: 6px;
         flex: 0 0 auto;
       }
 
@@ -493,38 +500,240 @@ export class RoomMindPanel extends LitElement {
         color: var(--roommind-warning-color);
       }
 
-      .hidden-rooms-toggle {
-        --mdc-icon-button-size: 36px;
-        --mdc-icon-size: 20px;
+      .hidden-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        height: 30px;
+        padding: 0 10px;
+        border-radius: 999px;
+        border: var(--roommind-border-subtle);
+        background: var(--roommind-tile-surface);
         color: var(--secondary-text-color);
+        font-family: inherit;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        --mdc-icon-size: 15px;
+        transition:
+          border-color var(--roommind-motion-duration) ease,
+          background var(--roommind-motion-duration) ease,
+          color var(--roommind-motion-duration) ease;
+      }
+
+      .hidden-pill:hover,
+      .hidden-pill.active {
+        border-color: var(--primary-color);
+        background: var(--roommind-primary-muted);
+        color: var(--primary-color);
+      }
+
+      .hidden-pill-count {
+        font-variant-numeric: tabular-nums;
+        opacity: 0.85;
       }
 
       .hidden-rooms-panel {
         margin-bottom: 16px;
-        padding: 12px 16px;
+        padding: 14px 16px;
         border-radius: var(--roommind-radius-card, 14px);
         border: var(--roommind-border-subtle);
-        background: var(--roommind-surface-subtle);
+        background: var(--roommind-surface);
         box-shadow: var(--roommind-shadow-card, none);
       }
 
       .hidden-rooms-header {
-        font-size: 13px;
-        font-weight: 500;
-        color: var(--secondary-text-color);
-        margin-bottom: 8px;
-      }
-
-      .hidden-room-row {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 6px 0;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
+
+      .hidden-rooms-title {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 13.5px;
+        font-weight: 650;
+        color: var(--primary-text-color);
+        --mdc-icon-size: 17px;
+      }
+
+      .hidden-rooms-title ha-icon {
+        color: var(--secondary-text-color);
+      }
+
+      .hidden-rooms-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .hidden-show-all-btn,
+      .hidden-restore-btn,
+      .section-tidy-btn,
+      .undo-action-btn,
+      .empty-restore-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        border-radius: 999px;
+        border: var(--roommind-border-subtle);
+        background: var(--roommind-surface-subtle);
+        color: var(--primary-color);
+        font-family: inherit;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 4px 10px;
+        cursor: pointer;
+        --mdc-icon-size: 14px;
+        transition:
+          background var(--roommind-motion-duration) ease,
+          border-color var(--roommind-motion-duration) ease;
+      }
+
+      .hidden-show-all-btn:hover,
+      .hidden-restore-btn:hover,
+      .section-tidy-btn:hover,
+      .undo-action-btn:hover,
+      .empty-restore-btn:hover {
+        background: var(--roommind-primary-muted);
+        border-color: var(--primary-color);
+      }
+
+      .hidden-close-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        border: none;
+        border-radius: 50%;
+        background: transparent;
+        color: var(--secondary-text-color);
+        cursor: pointer;
+        --mdc-icon-size: 16px;
+      }
+
+      .hidden-close-btn:hover {
+        background: var(--roommind-surface-hover);
+        color: var(--primary-text-color);
+      }
+
+      .hidden-rooms-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(230px, 100%), 1fr));
+        gap: 8px;
+      }
+
+      .hidden-room-tile {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        border: var(--roommind-border-faint);
+        background: var(--roommind-surface-subtle);
+        min-width: 0;
+      }
+
+      .hidden-room-info {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
+        flex: 1 1 auto;
+        min-width: 0;
+        padding: 0;
+        border: none;
+        background: transparent;
+        text-align: left;
+        font-family: inherit;
+        cursor: pointer;
       }
 
       .hidden-room-name {
-        font-size: 14px;
+        font-size: 13px;
+        font-weight: 600;
         color: var(--primary-text-color);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+      }
+
+      .hidden-room-info:hover .hidden-room-name {
+        color: var(--primary-color);
+      }
+
+      .hidden-room-meta {
+        font-size: 11px;
+        color: var(--secondary-text-color);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+      }
+
+      .section-heading-right {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .section-tidy-btn {
+        font-size: 11px;
+        padding: 2px 9px;
+        color: var(--secondary-text-color);
+      }
+
+      .section-tidy-btn:hover {
+        color: var(--primary-color);
+      }
+
+      .undo-toast {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 14px;
+        padding: 9px 14px;
+        border-radius: 12px;
+        border: var(--roommind-primary-border);
+        background: var(--roommind-surface);
+        box-shadow: var(--roommind-shadow-card, none);
+      }
+
+      .undo-toast-copy {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--primary-text-color);
+        min-width: 0;
+        --mdc-icon-size: 17px;
+      }
+
+      .undo-toast-copy ha-icon {
+        color: var(--primary-color);
+        flex-shrink: 0;
+      }
+
+      .undo-toast-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+      }
+
+      .empty-restore-btn {
+        margin-top: 10px;
+        padding: 7px 16px;
+        font-size: 13px;
       }
 
       .floor-heading {
@@ -605,6 +814,7 @@ export class RoomMindPanel extends LitElement {
       this._refreshInterval = undefined;
     }
     if (this._saveStatusTimeout) clearTimeout(this._saveStatusTimeout);
+    if (this._hiddenUndoTimeout) clearTimeout(this._hiddenUndoTimeout);
     this.removeEventListener("save-status", this._onSaveStatus as EventListener);
     // NOTE: _boundVisibilityHandler intentionally NOT removed here.
     // It must survive disconnect to detect when tab becomes visible again
@@ -932,13 +1142,18 @@ export class RoomMindPanel extends LitElement {
                   <span class="stats-actions">
                     ${
                       hiddenAreaInfos.length > 0
-                        ? html`<ha-icon-button
-                            class="hidden-rooms-toggle"
-                            .path=${mdiEyeOff}
+                        ? html`<button
+                            type="button"
+                            class="hidden-pill ${this._showHiddenRooms ? "active" : ""}"
+                            aria-expanded=${this._showHiddenRooms}
                             @click=${() => {
                               this._showHiddenRooms = !this._showHiddenRooms;
                             }}
-                          ></ha-icon-button>`
+                          >
+                            <ha-icon icon="mdi:eye-off-outline"></ha-icon>
+                            <span>${localize("panel.hidden_rooms", l)}</span>
+                            <span class="hidden-pill-count">${hiddenAreaInfos.length}</span>
+                          </button>`
                         : nothing
                     }
                     ${
@@ -973,30 +1188,111 @@ export class RoomMindPanel extends LitElement {
           : nothing
       }
       ${
+        this._hiddenUndo
+          ? html`
+              <div class="undo-toast" role="status">
+                <span class="undo-toast-copy">
+                  <ha-icon icon="mdi:eye-off-outline"></ha-icon>
+                  <span>${this._hiddenUndo.label}</span>
+                </span>
+                <span class="undo-toast-actions">
+                  <button type="button" class="undo-action-btn" @click=${this._onUndoHide}>
+                    ${localize("panel.undo", l)}
+                  </button>
+                  <button
+                    type="button"
+                    class="hidden-close-btn"
+                    aria-label=${localize("panel.hidden_close", l)}
+                    @click=${this._dismissHiddenUndo}
+                  >
+                    <ha-icon icon="mdi:close"></ha-icon>
+                  </button>
+                </span>
+              </div>
+            `
+          : nothing
+      }
+      ${
         this._showHiddenRooms && hiddenAreaInfos.length > 0
           ? html`
               <ha-card class="hidden-rooms-panel">
                 <div class="hidden-rooms-header">
-                  <span>${localize("panel.hidden_rooms", l)} (${hiddenAreaInfos.length})</span>
+                  <span class="hidden-rooms-title">
+                    <ha-icon icon="mdi:eye-off-outline"></ha-icon>
+                    <span>${localize("panel.hidden_rooms", l)} (${hiddenAreaInfos.length})</span>
+                  </span>
+                  <span class="hidden-rooms-actions">
+                    <button
+                      type="button"
+                      class="hidden-show-all-btn"
+                      @click=${this._unhideAllRooms}
+                    >
+                      <ha-icon icon="mdi:eye-outline"></ha-icon>
+                      <span>${localize("panel.hidden_show_all", l)}</span>
+                    </button>
+                    <button
+                      type="button"
+                      class="hidden-close-btn"
+                      aria-label=${localize("panel.hidden_close", l)}
+                      title=${localize("panel.hidden_close", l)}
+                      @click=${() => {
+                        this._showHiddenRooms = false;
+                      }}
+                    >
+                      <ha-icon icon="mdi:close"></ha-icon>
+                    </button>
+                  </span>
                 </div>
-                ${hiddenAreaInfos.map(
-                  (info) => html`
-                    <div class="hidden-room-row">
-                      <span class="hidden-room-name">${info.area.name}</span>
-                      <ha-button @click=${() => this._unhideRoom(info.area.area_id)}>
-                        ${localize("panel.unhide", l)}
-                      </ha-button>
-                    </div>
-                  `,
-                )}
+                <div class="hidden-rooms-grid">
+                  ${hiddenAreaInfos.map(
+                    (info) => html`
+                      <div class="hidden-room-tile">
+                        <button
+                          type="button"
+                          class="hidden-room-info"
+                          @click=${() => this._openHiddenRoomDetail(info.area.area_id)}
+                        >
+                          <span class="hidden-room-name"
+                            >${info.config?.display_name || info.area.name}</span
+                          >
+                          <span class="hidden-room-meta"
+                            >${this._renderHiddenRoomMeta(info, l)}</span
+                          >
+                        </button>
+                        <button
+                          type="button"
+                          class="hidden-restore-btn"
+                          @click=${() => this._unhideRoom(info.area.area_id)}
+                        >
+                          <ha-icon icon="mdi:eye-outline"></ha-icon>
+                          <span>${localize("panel.unhide", l)}</span>
+                        </button>
+                      </div>
+                    `,
+                  )}
+                </div>
               </ha-card>
             `
           : nothing
       }
       ${
-        filteredAreaInfos.length === 0 && this._fleetFilter !== "all"
-          ? html`<div class="placeholder"><p>${localize("overview.filter.empty", l)}</p></div>`
-          : this._renderAreaGroups(filteredAreaInfos)
+        areaInfos.length === 0 && hiddenAreaInfos.length > 0
+          ? html`
+              <div class="placeholder">
+                <ha-icon
+                  icon="mdi:eye-off-outline"
+                  style="--mdc-icon-size: 48px; opacity: 0.45"
+                ></ha-icon>
+                <p>${localize("panel.all_hidden", l)}</p>
+                <button type="button" class="empty-restore-btn" @click=${this._unhideAllRooms}>
+                  <ha-icon icon="mdi:eye-outline"></ha-icon>
+                  <span>${localize("panel.hidden_show_all", l)}</span>
+                </button>
+              </div>
+            `
+          : filteredAreaInfos.length === 0 && this._fleetFilter !== "all"
+            ? html`<div class="placeholder"><p>${localize("overview.filter.empty", l)}</p></div>`
+            : this._renderAreaGroups(filteredAreaInfos)
       }
     `;
   }
@@ -1012,15 +1308,33 @@ export class RoomMindPanel extends LitElement {
           }))
         : this._getPriorityGroups(areaInfos);
 
-    return groups.map(
-      (group) => html`
+    const l = this.hass.language;
+    return groups.map((group) => {
+      const emptyIds =
+        group.id === "setup" && !this._reorderMode
+          ? getEmptyUnconfiguredAreaIds(group.items, this._hiddenRooms)
+          : [];
+      return html`
         <section class="room-section ${group.tone}">
           ${
             group.name
               ? html`
                   <div class="room-section-heading">
                     <h4 class="floor-heading room-section-title">${group.name}</h4>
-                    <span class="room-section-count">${group.items.length}</span>
+                    <span class="section-heading-right">
+                      ${
+                        emptyIds.length > 0
+                          ? html`<button
+                              type="button"
+                              class="section-tidy-btn"
+                              @click=${() => this._onHideEmptyRooms(emptyIds)}
+                            >
+                              ${localize("panel.hide_empty", l, { count: emptyIds.length })}
+                            </button>`
+                          : nothing
+                      }
+                      <span class="room-section-count">${group.items.length}</span>
+                    </span>
                   </div>
                 `
               : nothing
@@ -1029,8 +1343,8 @@ export class RoomMindPanel extends LitElement {
             ${group.items.map((info, idx) => this._renderAreaCard(info, idx, group.items.length))}
           </div>
         </section>
-      `,
-    );
+      `;
+    });
   }
 
   private _renderAreaCard(info: AreaInfo, idx: number, groupLength: number) {
@@ -1313,27 +1627,107 @@ export class RoomMindPanel extends LitElement {
     this._navigate(`/room/${e.detail.areaId}`);
   }
 
-  private async _onHideRoom(e: CustomEvent<{ areaId: string }>) {
-    const newHidden = [...new Set([...this._hiddenRooms, e.detail.areaId])];
-    this._hiddenRooms = newHidden;
+  private _renderHiddenRoomMeta(info: AreaInfo, lang: string): string {
+    const live = info.config?.live;
+    if (live && live.current_temp !== null) {
+      const mode = getDisplayMode(live, info.config) ?? "idle";
+      return `${formatTemp(live.current_temp, this.hass)}${tempUnit(this.hass)} · ${formatMode(mode, lang)}`;
+    }
+    if (info.config) {
+      return localize("card.waiting", lang);
+    }
+    if (info.climateEntityCount > 0) {
+      return `${info.climateEntityCount} ${localize(
+        info.climateEntityCount !== 1 ? "card.climate_devices" : "card.climate_device",
+        lang,
+      )}`;
+    }
+    return localize("panel.hidden_unconfigured", lang);
+  }
+
+  private _openHiddenRoomDetail(areaId: string) {
+    this._selectedAreaId = areaId;
+    this._navigate(`/room/${areaId}`);
+  }
+
+  private _setHiddenUndo(ids: string[], label: string) {
+    if (this._hiddenUndoTimeout) clearTimeout(this._hiddenUndoTimeout);
+    this._hiddenUndo = { ids, label };
+    this._hiddenUndoTimeout = setTimeout(() => {
+      this._hiddenUndo = null;
+      this._hiddenUndoTimeout = undefined;
+    }, 6000);
+  }
+
+  private _dismissHiddenUndo() {
+    if (this._hiddenUndoTimeout) clearTimeout(this._hiddenUndoTimeout);
+    this._hiddenUndoTimeout = undefined;
+    this._hiddenUndo = null;
+  }
+
+  private async _persistHiddenRooms(nextHidden: string[], prevHidden: string[]): Promise<boolean> {
+    this._hiddenRooms = nextHidden;
+    if (nextHidden.length === 0) this._showHiddenRooms = false;
+    fireSaveStatus(this, "saving");
     try {
-      await this.hass.callWS({ type: "roommind/settings/save", hidden_rooms: newHidden });
+      await this.hass.callWS({ type: "roommind/settings/save", hidden_rooms: nextHidden });
+      fireSaveStatus(this, "saved");
+      return true;
     } catch (err) {
       // eslint-disable-next-line no-console
-      console.debug("[RoomMind] hideRoom:", err);
+      console.debug("[RoomMind] saveHiddenRooms:", err);
+      this._hiddenRooms = prevHidden;
+      fireSaveStatus(this, "error");
+      return false;
     }
   }
 
-  private async _unhideRoom(areaId: string) {
-    const newHidden = this._hiddenRooms.filter((id) => id !== areaId);
-    this._hiddenRooms = newHidden;
-    if (newHidden.length === 0) this._showHiddenRooms = false;
-    try {
-      await this.hass.callWS({ type: "roommind/settings/save", hidden_rooms: newHidden });
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.debug("[RoomMind] unhideRoom:", err);
+  private async _onHideRoom(e: CustomEvent<{ areaId: string }>) {
+    const prev = this._hiddenRooms;
+    const { nextHidden, addedIds } = hideRoomIds(prev, [e.detail.areaId]);
+    if (addedIds.length === 0) return;
+    const info = this._areaInfosCache.find((i) => i.area.area_id === e.detail.areaId);
+    const name = info?.config?.display_name || info?.area.name || e.detail.areaId;
+    if (await this._persistHiddenRooms(nextHidden, prev)) {
+      this._setHiddenUndo(
+        addedIds,
+        localize("panel.hidden_toast_single", this.hass.language, { name }),
+      );
     }
+  }
+
+  private async _onHideEmptyRooms(areaIds: string[]) {
+    const prev = this._hiddenRooms;
+    const { nextHidden, addedIds } = hideRoomIds(prev, areaIds);
+    if (addedIds.length === 0) return;
+    if (await this._persistHiddenRooms(nextHidden, prev)) {
+      this._setHiddenUndo(
+        addedIds,
+        localize("panel.hidden_toast_multi", this.hass.language, { count: addedIds.length }),
+      );
+    }
+  }
+
+  private async _onUndoHide() {
+    if (!this._hiddenUndo) return;
+    const idsToRestore = this._hiddenUndo.ids;
+    this._dismissHiddenUndo();
+    const prev = this._hiddenRooms;
+    const nextHidden = unhideRoomIds(prev, idsToRestore);
+    await this._persistHiddenRooms(nextHidden, prev);
+  }
+
+  private async _unhideRoom(areaId: string) {
+    const prev = this._hiddenRooms;
+    const nextHidden = unhideRoomIds(prev, [areaId]);
+    await this._persistHiddenRooms(nextHidden, prev);
+  }
+
+  private async _unhideAllRooms() {
+    const prev = this._hiddenRooms;
+    if (prev.length === 0) return;
+    this._dismissHiddenUndo();
+    await this._persistHiddenRooms([], prev);
   }
 
   private _onGoToAnalytics() {
