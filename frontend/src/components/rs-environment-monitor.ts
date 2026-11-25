@@ -13,6 +13,7 @@ import {
   assessRoomComfort,
   buildTrendSummary,
   calculateDewPointC,
+  findThermalNeighbors,
   inspectAreaSensors,
   type TrendSummary,
 } from "../utils/environment-monitor";
@@ -25,6 +26,7 @@ export class RsEnvironmentMonitor extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
   @property({ attribute: false }) public area!: HassArea;
   @property({ attribute: false }) public config: RoomConfig | null = null;
+  @property({ attribute: false }) public rooms: Record<string, RoomConfig> = {};
   @property({ type: String }) public language = "en";
 
   @state() private _trendPoints: AnalyticsDataPoint[] = [];
@@ -489,6 +491,13 @@ export class RsEnvironmentMonitor extends LitElement {
     const humTrend = this.config ? buildTrendSummary(this._trendPoints, "humidity") : null;
     const detectedCount =
       inv.temperatureSensors.length + inv.humiditySensors.length + inv.binarySensors.length;
+    const neighbors = findThermalNeighbors(
+      this.area.area_id,
+      this.config,
+      this.rooms,
+      this.hass,
+      effectiveTemp,
+    );
 
     return html`
       <div class="monitor-stack">
@@ -535,7 +544,28 @@ export class RsEnvironmentMonitor extends LitElement {
                     </button>
                   </div>
                 `
-              : nothing
+              : !this.config
+                ? html`
+                    <div class="quickstart-banner">
+                      <div class="quickstart-copy">
+                        <span class="quickstart-title"
+                          >${localize("monitor.empty_unconfigured_title", l)}</span
+                        >
+                        <span class="quickstart-desc">
+                          ${localize("monitor.empty_unconfigured_desc", l)}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        class="primary-action-btn"
+                        @click=${this._emitEditSensors}
+                      >
+                        <ha-icon icon="mdi:thermometer-plus"></ha-icon>
+                        <span>${localize("monitor.select_sensors_cta", l)}</span>
+                      </button>
+                    </div>
+                  `
+                : nothing
           }
 
           <div class="summary-grid">
@@ -874,6 +904,66 @@ export class RsEnvironmentMonitor extends LitElement {
               `
             : nothing
         }
+        ${
+          neighbors.length > 0
+            ? html`
+                <rs-section-card
+                  icon="mdi:door-open"
+                  .heading=${localize("monitor.neighbors_heading", l)}
+                >
+                  <button
+                    slot="header-extras"
+                    type="button"
+                    class="header-btn"
+                    @click=${this._emitEditCoupling}
+                  >
+                    <ha-icon icon="mdi:tune"></ha-icon>
+                    <span>${localize("monitor.edit_coupling", l)}</span>
+                  </button>
+                  <div class="sensor-list">
+                    ${neighbors.map(
+                      (n) => html`
+                        <div class="sensor-row" style="cursor: default;">
+                          <span class="sensor-row-left">
+                            <ha-icon icon="mdi:home-thermometer-outline"></ha-icon>
+                            <span class="sensor-row-meta">
+                              <span class="sensor-name">${n.name}</span>
+                              <span class="sensor-tags">
+                                ${
+                                  n.borrowedConditioning
+                                    ? html`<span class="sensor-tag primary">
+                                        ${localize("monitor.borrowed_conditioning", l)}
+                                      </span>`
+                                    : nothing
+                                }
+                                ${
+                                  n.deltaC !== null
+                                    ? html`<span class="sensor-tag">
+                                        ${n.deltaC >= 0 ? "+" : ""}${toDisplayDelta(
+                                          n.deltaC,
+                                          this.hass,
+                                        ).toFixed(1)}${tempUnit(this.hass)}
+                                      </span>`
+                                    : nothing
+                                }
+                              </span>
+                            </span>
+                          </span>
+                          <span class="sensor-value">
+                            ${
+                              n.currentTemp !== null
+                                ? `${formatTemp(n.currentTemp, this.hass)}${tempUnit(this.hass)}`
+                                : "--"
+                            }
+                          </span>
+                        </div>
+                      `,
+                    )}
+                  </div>
+                </rs-section-card>
+              `
+            : nothing
+        }
       </div>
     `;
   }
@@ -882,6 +972,16 @@ export class RsEnvironmentMonitor extends LitElement {
     this.dispatchEvent(
       new CustomEvent("configuration-edit", {
         detail: { section: "sensors" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  private _emitEditCoupling() {
+    this.dispatchEvent(
+      new CustomEvent("configuration-edit", {
+        detail: { section: "comfort" },
         bubbles: true,
         composed: true,
       }),

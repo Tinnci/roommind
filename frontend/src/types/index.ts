@@ -613,6 +613,9 @@ export interface AreaSuggestion {
   devices: DeviceConfig[];
   temperature_sensors: string[];
   humidity_sensors: string[];
+  co2_sensor?: string;
+  voc_sensor?: string;
+  pm25_sensors?: string[];
   window_sensors: string[];
   occupancy_sensors: string[];
   covers: string[];

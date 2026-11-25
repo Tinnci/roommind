@@ -217,6 +217,76 @@ export class RsDeviceSection extends LitElement {
         padding: 8px 14px 4px;
       }
 
+      .empty-monitor-card {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 16px;
+        border-radius: 12px;
+        border: var(--roommind-border-subtle);
+        background: var(--roommind-surface-subtle);
+      }
+
+      .empty-monitor-head {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+      }
+
+      .empty-monitor-head ha-icon {
+        --mdc-icon-size: 22px;
+        color: var(--primary-color);
+        flex-shrink: 0;
+        margin-top: 2px;
+      }
+
+      .empty-monitor-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--primary-text-color);
+      }
+
+      .empty-monitor-desc {
+        font-size: 12.5px;
+        line-height: 1.5;
+        color: var(--secondary-text-color);
+        margin-top: 3px;
+      }
+
+      .empty-monitor-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .monitor-cta-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 14px;
+        border-radius: 8px;
+        border: var(--roommind-border-subtle);
+        background: var(--roommind-surface);
+        color: var(--primary-text-color);
+        font: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        --mdc-icon-size: 16px;
+      }
+
+      .monitor-cta-btn.primary {
+        border: none;
+        background: var(--primary-color);
+        color: var(--text-primary-color, #fff);
+      }
+
+      .empty-picker-section {
+        margin-top: 4px;
+        padding-top: 12px;
+        border-top: var(--roommind-border-faint);
+      }
+
       .boost-hint {
         display: flex;
         align-items: flex-start;
@@ -485,6 +555,52 @@ export class RsDeviceSection extends LitElement {
 
     const inRoom = (id: string) => allSelectedClimate.has(id);
     const detailId = this._selectedForEdit;
+
+    if (areaClimateEntities.length === 0 && this.devices.length === 0) {
+      const lang = this.hass.language;
+      return html`
+        <div class="empty-monitor-card">
+          <div class="empty-monitor-head">
+            <ha-icon icon="mdi:eye-check-outline"></ha-icon>
+            <div>
+              <div class="empty-monitor-title">
+                ${localize("devices.empty_monitor_title", lang)}
+              </div>
+              <div class="empty-monitor-desc">${localize("devices.empty_monitor_desc", lang)}</div>
+            </div>
+          </div>
+          <div class="empty-monitor-actions">
+            <button
+              type="button"
+              class="monitor-cta-btn primary"
+              @click=${this._emitContinueMonitorOnly}
+            >
+              <ha-icon icon="mdi:check-circle-outline"></ha-icon>
+              <span>${localize("devices.continue_monitor_only", lang)}</span>
+            </button>
+            <button
+              type="button"
+              class="monitor-cta-btn"
+              @click=${() => this._emitOpenSection("comfort")}
+            >
+              <ha-icon icon="mdi:link-variant"></ha-icon>
+              <span>${localize("devices.configure_adjacent_rooms", lang)}</span>
+            </button>
+          </div>
+          <div class="empty-picker-section">
+            <div class="section-subtitle">${localize("devices.link_other_area_title", lang)}</div>
+            <ha-entity-picker
+              .hass=${this.hass}
+              .includeDomains=${["climate"]}
+              .entityFilter=${this._entityFilter}
+              .value=${""}
+              label=${localize("devices.add_entity", lang)}
+              @value-changed=${this._onEntityPicked}
+            ></ha-entity-picker>
+          </div>
+        </div>
+      `;
+    }
 
     return html`
       <rs-master-detail>
@@ -1290,6 +1406,24 @@ export class RsDeviceSection extends LitElement {
     const type: DeviceType = detected === "thermostat" ? "trv" : "ac";
     const newDevices = [...this.devices, { entity_id: entityId, type, role: "auto" as const }];
     this._fireDeviceChanged(newDevices);
+  }
+  private _emitContinueMonitorOnly() {
+    this.dispatchEvent(
+      new CustomEvent("continue-monitor-only", {
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  private _emitOpenSection(section: string) {
+    this.dispatchEvent(
+      new CustomEvent("open-section", {
+        detail: { section },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 }
 

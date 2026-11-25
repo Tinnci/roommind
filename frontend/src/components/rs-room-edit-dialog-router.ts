@@ -253,6 +253,11 @@ export class RsRoomEditDialogRouter extends LitElement {
           @setback-offset-changed=${this._forward("setback-offset-changed")}
           @valve-protection-exclude-toggle=${this._forward("valve-protection-exclude-toggle")}
           @follow-thermostat-dial-changed=${this._forward("follow-thermostat-dial-changed")}
+          @continue-monitor-only=${() =>
+            this.dispatchEvent(
+              new CustomEvent("continue-monitor-only", { bubbles: true, composed: true }),
+            )}
+          @open-section=${this._forward("open-section")}
         ></rs-device-section>`;
       case "sensors":
         return html`<rs-sensor-section
@@ -306,6 +311,7 @@ export class RsRoomEditDialogRouter extends LitElement {
           .hass=${this.hass}
           .area=${this.area}
           .editing=${true}
+          .monitorOnly=${draft.devices.length === 0}
           .currentTemp=${live?.current_temp ?? null}
           .perceivedTemp=${live?.perceived_temp ?? null}
           .currentHumidity=${live?.current_humidity ?? null}

@@ -27,6 +27,7 @@ export class RsComfortSection extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
   @property({ attribute: false }) public area!: HassArea;
   @property({ type: Boolean }) public editing = false;
+  @property({ type: Boolean }) public monitorOnly = false;
   @property({ type: Number }) public currentTemp: number | null = null;
   @property({ type: Number }) public perceivedTemp: number | null = null;
   @property({ type: Number }) public currentHumidity: number | null = null;
@@ -401,6 +402,94 @@ export class RsComfortSection extends LitElement {
 
   private _renderEdit() {
     const lang = this.language;
+    if (this.monitorOnly) {
+      return html`
+        <details
+          class="settings-group"
+          open
+          style="margin-top: 0; border-top: none; padding-top: 0;"
+        >
+          <summary>${localize("comfort.adjacent_rooms", lang)}</summary>
+          <div class="settings-group-body">
+            <div class="list">
+              ${
+                this.adjacentRooms.length
+                  ? this.adjacentRooms.map((item, index) => this._renderAdjacentEdit(item, index))
+                  : html`<div class="empty">${localize("comfort.no_adjacent_rooms", lang)}</div>`
+              }
+            </div>
+            <button class="add-btn" @click=${this._addAdjacent}>
+              + ${localize("comfort.add_adjacent_room", lang)}
+            </button>
+          </div>
+        </details>
+
+        <div class="settings-group">
+          <div class="config-card">
+            <div class="toggle-row">
+              <div>
+                <div class="toggle-title">${localize("comfort.night_mode", lang)}</div>
+                <div class="toggle-hint">${localize("comfort.night_mode_hint", lang)}</div>
+              </div>
+              <ha-switch
+                .checked=${this.nightModeEnabled}
+                @change=${(e: Event) => this._toggleNightMode((e.target as HTMLInputElement).checked)}
+              ></ha-switch>
+            </div>
+            <div class="field-row">
+              <ha-textfield
+                .label=${localize("comfort.quiet_start", lang)}
+                .value=${this.quietHours?.start ?? DEFAULT_QUIET_HOURS.start}
+                @input=${(e: Event) =>
+                  this._updateQuiet("start", (e.target as HTMLInputElement).value)}
+              ></ha-textfield>
+              <ha-textfield
+                .label=${localize("comfort.quiet_end", lang)}
+                .value=${this.quietHours?.end ?? DEFAULT_QUIET_HOURS.end}
+                @input=${(e: Event) =>
+                  this._updateQuiet("end", (e.target as HTMLInputElement).value)}
+              ></ha-textfield>
+            </div>
+            <div class="field-row">
+              ${this._numberField(
+                "comfort.room_volume",
+                "room_volume_m3",
+                this.roomVolumeM3 ?? 0,
+                0,
+                600,
+                1,
+              )}
+              ${this._numberField(
+                "comfort.max_fan_level_night",
+                "max_fan_level_night",
+                this.maxFanLevelNight,
+                0,
+                1,
+                0.05,
+              )}
+            </div>
+          </div>
+        </div>
+
+        <details class="settings-group">
+          <summary>${localize("comfort.night_controls", lang)}</summary>
+          <div class="settings-group-body">
+            <div class="list">
+              ${
+                this.nightControls.length
+                  ? this.nightControls.map((item, index) =>
+                      this._renderNightControlEdit(item, index),
+                    )
+                  : html`<div class="empty">${localize("comfort.no_night_controls", lang)}</div>`
+              }
+            </div>
+            <button class="add-btn" @click=${this._addNightControl}>
+              + ${localize("comfort.add_night_control", lang)}
+            </button>
+          </div>
+        </details>
+      `;
+    }
     return html`
       <div class="config-grid">
         <div class="config-card">

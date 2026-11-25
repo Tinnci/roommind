@@ -95,9 +95,10 @@ describe("buildConfigurationHubItems", () => {
   });
 
   test("marks devices row as optional rather than missing for monitor-only rooms", () => {
-    const [devices] = buildConfigurationHubItems(["devices"], {
+    const [devices, comfort] = buildConfigurationHubItems(["devices", "comfort"], {
       deviceCount: 0,
       monitorOnly: true,
+      adjacentRoomCount: 2,
     });
 
     expect(devices).toMatchObject({
@@ -105,6 +106,13 @@ describe("buildConfigurationHubItems", () => {
       tone: "inactive",
       metaKey: "room.config.devices_optional_monitor",
       actionKey: "room.config.action_optional",
+    });
+    expect(comfort).toMatchObject({
+      section: "comfort",
+      titleKey: "room.section.coupling_and_night",
+      tone: "complete",
+      metaKey: "room.config.comfort_monitor_summary",
+      metaParams: { count: "2" },
     });
   });
 });

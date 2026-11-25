@@ -28,7 +28,6 @@ describe("getRoomDetailLayout", () => {
       "schedule",
       "covers",
       "heatSource",
-      "outdoor",
     ]);
   });
 
@@ -41,7 +40,7 @@ describe("getRoomDetailLayout", () => {
     });
 
     expect(layout.primarySections).toEqual([]);
-    expect(layout.configurationSections).toEqual(["outdoor"]);
+    expect(layout.configurationSections).toEqual(["sensors"]);
   });
 
   test("hides conditional configuration sections when prerequisites are missing", () => {
@@ -60,11 +59,10 @@ describe("getRoomDetailLayout", () => {
       "airflow",
       "schedule",
       "covers",
-      "outdoor",
     ]);
   });
 
-  test("streamlines configuration sections for monitor-only rooms without climate devices", () => {
+  test("unlocks airflow and coupling while omitting climate controls for monitor-only rooms", () => {
     const layout = getRoomDetailLayout({
       isOutdoor: false,
       presenceAvailable: true,
@@ -73,21 +71,6 @@ describe("getRoomDetailLayout", () => {
       hasAirflowDevices: false,
     });
 
-    expect(layout.configurationSections).toEqual(["sensors", "covers", "devices", "outdoor"]);
-
-    const withAirflow = getRoomDetailLayout({
-      isOutdoor: false,
-      presenceAvailable: false,
-      hasTemperatureSensor: true,
-      devices: [],
-      hasAirflowDevices: true,
-    });
-    expect(withAirflow.configurationSections).toEqual([
-      "sensors",
-      "airflow",
-      "covers",
-      "devices",
-      "outdoor",
-    ]);
+    expect(layout.configurationSections).toEqual(["sensors", "airflow", "comfort", "covers"]);
   });
 });

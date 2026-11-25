@@ -6,6 +6,7 @@ export type ConfigurationEditSection = Exclude<ConfigurationRoomSection, "outdoo
 export interface ConfigurationHubMetrics {
   deviceCount?: number;
   monitorOnly?: boolean;
+  adjacentRoomCount?: number;
   temperatureSensorCount?: number;
   primaryTemperatureSensorName?: string;
   humiditySensorConfigured?: boolean;
@@ -37,22 +38,6 @@ export interface ConfigurationHubItem {
   editSection?: ConfigurationEditSection;
 }
 
-export function buildConfigurationHubItems(
-  sections: ConfigurationRoomSection[],
-  metrics: ConfigurationHubMetrics,
-): ConfigurationHubItem[] {
-  return sections.map((section) => {
-    const item = {
-      section,
-      icon: configurationIcon(section),
-      titleKey: configurationTitleKey(section),
-      ...configurationStatus(section, metrics),
-      editable: section !== "outdoor",
-    };
-    return section === "outdoor" ? item : { ...item, editSection: section };
-  });
-}
-
 function configurationIcon(section: ConfigurationRoomSection) {
   const icons: Record<ConfigurationRoomSection, string> = {
     targets: "mdi:thermometer-lines",
@@ -69,7 +54,13 @@ function configurationIcon(section: ConfigurationRoomSection) {
   return icons[section];
 }
 
-function configurationTitleKey(section: ConfigurationRoomSection): TranslationKey {
+function configurationTitleKey(
+  section: ConfigurationRoomSection,
+  metrics?: ConfigurationHubMetrics,
+): TranslationKey {
+  if (section === "comfort" && metrics?.monitorOnly) {
+    return "room.section.coupling_and_night";
+  }
   const keys: Record<ConfigurationRoomSection, TranslationKey> = {
     targets: "room.section.targets",
     schedule: "room.section.schedule",
@@ -83,6 +74,22 @@ function configurationTitleKey(section: ConfigurationRoomSection): TranslationKe
     outdoor: "room.outdoor_toggle",
   };
   return keys[section];
+}
+
+export function buildConfigurationHubItems(
+  sections: ConfigurationRoomSection[],
+  metrics: ConfigurationHubMetrics,
+): ConfigurationHubItem[] {
+  return sections.map((section) => {
+    const item = {
+      section,
+      icon: configurationIcon(section),
+      titleKey: configurationTitleKey(section, metrics),
+      ...configurationStatus(section, metrics),
+      editable: section !== "outdoor",
+    };
+    return section === "outdoor" ? item : { ...item, editSection: section };
+  });
 }
 
 function configurationStatus(
@@ -159,7 +166,22 @@ function configurationStatus(
         tone: complete ? "complete" : partial ? "partial" : "missing",
       };
     }
-    case "comfort":
+    case "comfort": {
+      if (metrics.monitorOnly) {
+        const adjCount = metrics.adjacentRoomCount ?? 0;
+        return adjCount > 0
+          ? {
+              metaKey: "room.config.comfort_monitor_summary",
+              metaParams: { count: String(adjCount) },
+              actionKey: "room.config.action_review_coupling",
+              tone: "complete",
+            }
+          : {
+              metaKey: "room.config.comfort_monitor_optional",
+              actionKey: "room.config.action_optional",
+              tone: "inactive",
+            };
+      }
       return metrics.quietHours || metrics.nightModeEnabled
         ? {
             metaKey: "room.config.comfort_summary",
@@ -176,6 +198,7 @@ function configurationStatus(
             actionKey: "room.config.action_configure_night",
             tone: "missing",
           };
+    }
     case "airflow": {
       const count = metrics.airflowDeviceCount ?? 0;
       return {

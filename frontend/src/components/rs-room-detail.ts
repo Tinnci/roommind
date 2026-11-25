@@ -49,6 +49,7 @@ import type { RoomEditSection } from "../utils/room-edit-dialog";
 export class RsRoomDetail extends LitElement {
   @property({ attribute: false }) public area!: HassArea;
   @property({ attribute: false }) public config: RoomConfig | null = null;
+  @property({ attribute: false }) public rooms: Record<string, RoomConfig> = {};
   @property({ attribute: false }) public hass!: HomeAssistant;
   @property({ type: Boolean }) public presenceEnabled = false;
   @property({ attribute: false }) public presencePersons: string[] = [];
@@ -601,6 +602,7 @@ export class RsRoomDetail extends LitElement {
     return {
       deviceCount: this._devices.length,
       monitorOnly: !this._isOutdoor && this._devices.length === 0,
+      adjacentRoomCount: (this._draft.adjacentRooms ?? []).length,
       temperatureSensorCount: this._temperatureSensorIdsForSave().length,
       humiditySensorConfigured: !!this._selectedHumiditySensor,
       occupancySensorCount: this._selectedOccupancySensors.size,
@@ -691,6 +693,7 @@ export class RsRoomDetail extends LitElement {
                 .hass=${this.hass}
                 .area=${this.area}
                 .config=${this.config}
+                .rooms=${this.rooms}
                 .language=${this.hass.language}
                 @configuration-edit=${this._onConfigurationEdit}
                 @auto-detect-area=${this._onAutoDetectArea}
@@ -702,11 +705,14 @@ export class RsRoomDetail extends LitElement {
           .sections=${layout.configurationSections}
           .metrics=${this._configurationMetrics()}
           .isOutdoor=${this._isOutdoor}
+          .roomRole=${this._isOutdoor ? "outdoor" : this._devices.length > 0 ? "control" : "monitor"}
+          .deviceCount=${this._devices.length}
           .language=${this.hass.language}
           .autoDetectStatus=${this._autoDetectStatus}
           .autoDetectBusy=${this._autoDetectBusy}
           @configuration-edit=${this._onConfigurationEdit}
           @outdoor-changed=${this._onOutdoorToggle}
+          @role-changed=${this._onRoleChanged}
           @auto-detect-area=${this._onAutoDetectArea}
         ></rs-room-configuration-hub>
         ${this._error ? html`<div class="error">${this._error}</div>` : nothing}
@@ -725,6 +731,8 @@ export class RsRoomDetail extends LitElement {
           .coilDryMode=${this.coilDryMode}
           .coilDryFanMode=${this.coilDryFanMode}
           @edit-closed=${this._closeEdit}
+          @continue-monitor-only=${this._onContinueMonitorOnly}
+          @open-section=${this._onConfigurationEdit}
           @schedules-changed=${this._onSchedulesChanged}
           @schedule-selector-changed=${this._onScheduleSelectorChanged}
           @comfort-heat-changed=${this._onComfortHeatChanged}
@@ -1095,6 +1103,44 @@ export class RsRoomDetail extends LitElement {
   private _onOutdoorToggle(e: CustomEvent<boolean>) {
     this._isOutdoor = e.detail;
     this._autoSave();
+  }
+
+  private _onRoleChanged(e: CustomEvent<{ role: "monitor" | "control" | "outdoor" }>) {
+    const role = e.detail.role;
+    if (role === "outdoor") {
+      this._isOutdoor = true;
+      this._autoSave();
+      return;
+    }
+    this._isOutdoor = false;
+    if (role === "monitor") {
+      if (this._devices.length > 0) {
+        this._devices = [];
+        this._valveProtectionExclude = new Set();
+      }
+      if (this.config === null && !this._selectedTempSensor) {
+        void this._onAutoDetectArea();
+      } else {
+        this._autoSave();
+      }
+      return;
+    }
+    if (this._devices.length === 0) {
+      this._editing = "devices";
+    }
+    if (this.config !== null) {
+      this._autoSave();
+    }
+  }
+
+  private _onContinueMonitorOnly() {
+    this._isOutdoor = false;
+    this._editing = null;
+    if (this.config === null) {
+      void this._onAutoDetectArea();
+    } else {
+      this._autoSave();
+    }
   }
 
   private async _onAutoDetectArea() {

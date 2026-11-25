@@ -334,6 +334,9 @@ describe("room config draft", () => {
       ],
       temperature_sensors: ["sensor.living_temp"],
       humidity_sensors: ["sensor.living_rh"],
+      co2_sensor: "sensor.living_co2",
+      voc_sensor: "sensor.living_voc",
+      pm25_sensors: ["sensor.living_pm25"],
       window_sensors: ["binary_sensor.living_window"],
       occupancy_sensors: ["binary_sensor.living_motion"],
       covers: ["cover.living_blinds"],
@@ -347,7 +350,10 @@ describe("room config draft", () => {
       ],
     });
 
-    expect(result.addedCount).toBe(7);
+    expect(result.addedCount).toBe(10);
+    expect(result.draft.co2Sensor).toBe("sensor.living_co2");
+    expect(result.draft.vocSensor).toBe("sensor.living_voc");
+    expect([...result.draft.selectedPm25Sensors]).toEqual(["sensor.living_pm25"]);
     expect(result.draft.devices.map((d) => d.entity_id)).toEqual([
       "climate.existing_ac",
       "climate.second_ac",

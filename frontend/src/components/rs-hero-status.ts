@@ -804,12 +804,30 @@ export class RsHeroStatus extends LitElement {
                     <div class="hero-status-pills">
                       ${
                         isMonitorOnly || hasUnconfiguredPreview
-                          ? html`
-                              <span class="mode-pill mode-monitoring">
-                                <span class="mode-dot"></span>
-                                ${localize("room.control_mode.monitor_only", l)}
-                              </span>
-                            `
+                          ? this.config
+                            ? html`
+                                <button
+                                  class="mode-pill mode-monitoring"
+                                  style="border: none; cursor: pointer; font: inherit;"
+                                  aria-expanded=${this._controlModeInfoExpanded}
+                                  @click=${this._toggleControlModeInfo}
+                                >
+                                  <span class="mode-dot"></span>
+                                  ${localize("room.control_mode.monitor_only", l)}
+                                  <ha-icon
+                                    class="control-mode-info-icon ${
+                                      this._controlModeInfoExpanded ? "active" : ""
+                                    }"
+                                    icon="mdi:information-outline"
+                                  ></ha-icon>
+                                </button>
+                              `
+                            : html`
+                                <span class="mode-pill mode-monitoring">
+                                  <span class="mode-dot"></span>
+                                  ${localize("room.control_mode.monitor_only", l)}
+                                </span>
+                              `
                           : live
                             ? html`
                                 <span
@@ -941,7 +959,7 @@ export class RsHeroStatus extends LitElement {
                           : nothing
                       }
                       ${
-                        this.config
+                        this.config && !isMonitorOnly
                           ? html`
                               <button
                                 class="control-mode-badge"
@@ -949,11 +967,9 @@ export class RsHeroStatus extends LitElement {
                                 @click=${this._toggleControlModeInfo}
                               >
                                 ${
-                                  isMonitorOnly
-                                    ? localize("room.control_mode.monitor_only", l)
-                                    : this.config.temperature_sensor
-                                      ? localize("room.control_mode.full_control", l)
-                                      : localize("room.control_mode.managed", l)
+                                  this.config.temperature_sensor
+                                    ? localize("room.control_mode.full_control", l)
+                                    : localize("room.control_mode.managed", l)
                                 }
                                 <ha-icon
                                   class="control-mode-info-icon ${

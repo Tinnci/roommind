@@ -101,9 +101,78 @@ export function hasConfiguredSensors(config: RoomConfig | null | undefined): boo
     (config.temperature_sensors?.length ?? 0) > 0 ||
     config.humidity_sensor ||
     (config.humidity_sensors?.length ?? 0) > 0 ||
+    config.co2_sensor ||
+    config.voc_sensor ||
+    config.pm25_sensor ||
+    (config.pm25_sensors?.length ?? 0) > 0 ||
     (config.window_sensors?.length ?? 0) > 0 ||
     (config.occupancy_sensors?.length ?? 0) > 0,
   );
+}
+
+export interface ThermalNeighbor {
+  areaId: string;
+  name: string;
+  currentTemp: number | null;
+  deltaC: number | null;
+  mode: string;
+  borrowedConditioning: boolean;
+  hasClimate: boolean;
+}
+
+export function findThermalNeighbors(
+  areaId: string,
+  config: RoomConfig | null | undefined,
+  rooms: Record<string, RoomConfig> | null | undefined,
+  hass: HomeAssistant | null | undefined,
+  currentTempC: number | null | undefined,
+): ThermalNeighbor[] {
+  if (!rooms) return [];
+  const byArea = new Map<string, { borrowedConditioning: boolean }>();
+
+  for (const adj of config?.adjacent_rooms ?? []) {
+    if (!adj.area_id || adj.area_id === areaId || adj.enabled === false) continue;
+    byArea.set(adj.area_id, {
+      borrowedConditioning: adj.allow_borrowed_conditioning !== false,
+    });
+  }
+
+  for (const [otherId, otherCfg] of Object.entries(rooms)) {
+    if (!otherCfg || otherId === areaId) continue;
+    for (const adj of otherCfg.adjacent_rooms ?? []) {
+      if (adj.area_id !== areaId || adj.enabled === false) continue;
+      const existing = byArea.get(otherId);
+      const borrowed = adj.allow_borrowed_conditioning !== false;
+      byArea.set(otherId, {
+        borrowedConditioning: existing ? existing.borrowedConditioning || borrowed : borrowed,
+      });
+    }
+  }
+
+  const neighbors: ThermalNeighbor[] = [];
+  for (const [neighborId, meta] of byArea) {
+    const neighborCfg = rooms[neighborId];
+    const neighborTemp = neighborCfg?.live?.current_temp ?? null;
+    const deltaC =
+      currentTempC != null &&
+      Number.isFinite(currentTempC) &&
+      neighborTemp != null &&
+      Number.isFinite(neighborTemp)
+        ? Math.round((neighborTemp - currentTempC) * 10) / 10
+        : null;
+    const name = neighborCfg?.display_name || hass?.areas?.[neighborId]?.name || neighborId;
+    neighbors.push({
+      areaId: neighborId,
+      name,
+      currentTemp: neighborTemp,
+      deltaC,
+      mode: neighborCfg?.live?.mode ?? "idle",
+      borrowedConditioning: meta.borrowedConditioning,
+      hasClimate: neighborCfg ? hasClimateDevice(neighborCfg) : false,
+    });
+  }
+
+  return neighbors.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export function isMonitorOnlyRoom(config: RoomConfig | null | undefined): boolean {

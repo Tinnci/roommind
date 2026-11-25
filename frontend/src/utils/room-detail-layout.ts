@@ -31,19 +31,14 @@ export function getRoomDetailLayout(input: RoomDetailLayoutInput): RoomDetailLay
   if (input.isOutdoor) {
     return {
       primarySections: [],
-      configurationSections: ["outdoor"],
+      configurationSections: ["sensors"],
     };
   }
 
   if (input.devices.length === 0) {
-    const configurationSections: ConfigurationRoomSection[] = ["sensors"];
-    if (input.hasAirflowDevices) {
-      configurationSections.push("airflow");
-    }
-    configurationSections.push("covers", "devices", "outdoor");
     return {
       primarySections: [],
-      configurationSections,
+      configurationSections: ["sensors", "airflow", "comfort", "covers"],
     };
   }
 
@@ -66,8 +61,6 @@ export function getRoomDetailLayout(input: RoomDetailLayoutInput): RoomDetailLay
   if (input.hasTemperatureSensor && hasTrv && hasAc) {
     configurationSections.push("heatSource");
   }
-
-  configurationSections.push("outdoor");
 
   return {
     primarySections: [],

@@ -4,6 +4,7 @@ import {
   assessRoomComfort,
   buildTrendSummary,
   calculateDewPointC,
+  findThermalNeighbors,
   hasConfiguredSensors,
   inspectAreaSensors,
   isMonitorOnlyRoom,
@@ -34,6 +35,7 @@ function makeRoom(overrides: Partial<RoomConfig> = {}): RoomConfig {
 describe("environment-monitor", () => {
   test("detects monitor-only rooms and configured sensors cleanly", () => {
     const monitored = makeRoom({ temperature_sensor: "sensor.temp" });
+    const aqOnly = makeRoom({ co2_sensor: "sensor.co2" });
     const withDevice = makeRoom({
       devices: [{ entity_id: "climate.ac", type: "ac", role: "auto" }],
       temperature_sensor: "sensor.temp",
@@ -41,11 +43,47 @@ describe("environment-monitor", () => {
     const outdoor = makeRoom({ is_outdoor: true, temperature_sensor: "sensor.temp" });
 
     expect(hasConfiguredSensors(monitored)).toBe(true);
+    expect(hasConfiguredSensors(aqOnly)).toBe(true);
     expect(hasConfiguredSensors(makeRoom())).toBe(false);
     expect(isMonitorOnlyRoom(monitored)).toBe(true);
     expect(isMonitorOnlyRoom(withDevice)).toBe(false);
     expect(isMonitorOnlyRoom(outdoor)).toBe(false);
     expect(isMonitorOnlyRoom(null)).toBe(false);
+  });
+
+  test("finds bidirectional thermal neighbors for monitor-only rooms", () => {
+    const living = makeRoom({ area_id: "ke_ting" });
+    const bedroom = makeRoom({
+      area_id: "wo_shi",
+      devices: [{ entity_id: "climate.bedroom_ac", type: "ac", role: "auto" }],
+      adjacent_rooms: [{ area_id: "ke_ting", enabled: true, allow_borrowed_conditioning: true }],
+      live: { current_temp: 21.2, mode: "heating" } as NonNullable<RoomConfig["live"]>,
+    });
+    const hass = {
+      areas: {
+        ke_ting: { area_id: "ke_ting", name: "Living Room", picture: null, floor_id: null },
+        wo_shi: { area_id: "wo_shi", name: "Bedroom", picture: null, floor_id: null },
+      },
+    } as unknown as HomeAssistant;
+
+    const neighbors = findThermalNeighbors(
+      "ke_ting",
+      living,
+      { ke_ting: living, wo_shi: bedroom },
+      hass,
+      19.8,
+    );
+    expect(neighbors).toEqual([
+      {
+        areaId: "wo_shi",
+        name: "Bedroom",
+        currentTemp: 21.2,
+        deltaC: 1.4,
+        mode: "heating",
+        borrowedConditioning: true,
+        hasClimate: true,
+      },
+    ]);
   });
 
   test("computes Magnus-Tetens dew point accurately", () => {

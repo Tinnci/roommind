@@ -1,26 +1,37 @@
 import { LitElement, html, css, nothing } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 import {
   buildConfigurationHubItems,
   type ConfigurationEditSection,
   type ConfigurationHubMetrics,
 } from "../utils/room-configuration-hub";
 import type { ConfigurationRoomSection } from "../utils/room-detail-layout";
-import { localize } from "../utils/localize";
+import { localize, type TranslationKey } from "../utils/localize";
 import "./rs-section-card";
+
+type RoomRole = "monitor" | "control" | "outdoor";
 
 @customElement("rs-room-configuration-hub")
 export class RsRoomConfigurationHub extends LitElement {
   @property({ attribute: false }) public sections: ConfigurationRoomSection[] = [];
   @property({ attribute: false }) public metrics: ConfigurationHubMetrics = {};
   @property({ type: Boolean }) public isOutdoor = false;
+  @property({ type: String }) public roomRole: RoomRole = "monitor";
+  @property({ type: Number }) public deviceCount = 0;
   @property({ type: String }) public language = "en";
   @property({ type: String }) public autoDetectStatus = "";
   @property({ type: Boolean }) public autoDetectBusy = false;
 
+  @state() private _confirmMonitor = false;
+
   override render() {
     if (this.sections.length === 0) return nothing;
     const items = buildConfigurationHubItems(this.sections, this.metrics);
+    const roles: { id: RoomRole; icon: string; labelKey: TranslationKey }[] = [
+      { id: "monitor", icon: "mdi:eye-outline", labelKey: "room.role.monitor" },
+      { id: "control", icon: "mdi:thermostat", labelKey: "room.role.control" },
+      { id: "outdoor", icon: "mdi:tree", labelKey: "room.role.outdoor" },
+    ];
 
     return html`
       <rs-section-card
@@ -39,6 +50,51 @@ export class RsRoomConfigurationHub extends LitElement {
                 <ha-icon icon="mdi:auto-fix"></ha-icon>
                 <span>${localize("room.config.auto_detect", this.language)}</span>
               </button>`
+            : nothing
+        }
+        <div class="role-bar" role="group" aria-label=${localize("room.role.label", this.language)}>
+          ${roles.map(
+            (r) => html`
+              <button
+                type="button"
+                class="role-btn ${this.roomRole === r.id ? "active" : ""}"
+                @click=${() => this._onRoleClick(r.id)}
+              >
+                <ha-icon icon=${r.icon}></ha-icon>
+                <span>${localize(r.labelKey, this.language)}</span>
+              </button>
+            `,
+          )}
+        </div>
+        ${
+          this._confirmMonitor
+            ? html`
+                <div class="role-confirm">
+                  <span>
+                    ${localize("room.role.confirm_monitor", this.language, {
+                      count: this.deviceCount,
+                    })}
+                  </span>
+                  <div class="role-confirm-actions">
+                    <button
+                      type="button"
+                      class="role-confirm-btn"
+                      @click=${() => {
+                        this._confirmMonitor = false;
+                      }}
+                    >
+                      ${localize("room.role.cancel", this.language)}
+                    </button>
+                    <button
+                      type="button"
+                      class="role-confirm-btn danger"
+                      @click=${this._confirmSwitchToMonitor}
+                    >
+                      ${localize("room.role.switch_action", this.language)}
+                    </button>
+                  </div>
+                </div>
+              `
             : nothing
         }
         ${
@@ -129,6 +185,34 @@ export class RsRoomConfigurationHub extends LitElement {
     );
   }
 
+  private _onRoleClick(role: RoomRole) {
+    if (role === this.roomRole) {
+      this._confirmMonitor = false;
+      return;
+    }
+    if (role === "monitor" && this.roomRole === "control" && this.deviceCount > 0) {
+      this._confirmMonitor = true;
+      return;
+    }
+    this._confirmMonitor = false;
+    this._emitRole(role);
+  }
+
+  private _confirmSwitchToMonitor() {
+    this._confirmMonitor = false;
+    this._emitRole("monitor");
+  }
+
+  private _emitRole(role: RoomRole) {
+    this.dispatchEvent(
+      new CustomEvent("role-changed", {
+        detail: { role },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
   private _emitAutoDetect() {
     this.dispatchEvent(
       new CustomEvent("auto-detect-area", {
@@ -172,6 +256,82 @@ export class RsRoomConfigurationHub extends LitElement {
       color: var(--primary-color);
       margin-bottom: 10px;
       font-weight: 500;
+    }
+
+    .role-bar {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .role-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 7px 10px;
+      border-radius: 9px;
+      border: var(--roommind-border-faint);
+      background: var(--roommind-surface-subtle);
+      color: var(--secondary-text-color);
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      --mdc-icon-size: 15px;
+      transition:
+        background var(--roommind-motion-duration) ease,
+        border-color var(--roommind-motion-duration) ease,
+        color var(--roommind-motion-duration) ease;
+    }
+
+    .role-btn:hover {
+      border-color: var(--roommind-card-border-hover);
+      color: var(--primary-text-color);
+    }
+
+    .role-btn.active {
+      border-color: rgba(var(--rgb-primary-color, 3, 169, 244), 0.45);
+      background: rgba(var(--rgb-primary-color, 3, 169, 244), 0.12);
+      color: var(--primary-color);
+    }
+
+    .role-confirm {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 8px 12px;
+      margin-bottom: 10px;
+      border-radius: 9px;
+      border: 1px solid var(--roommind-warning-border, rgba(255, 152, 0, 0.35));
+      background: var(--roommind-warning-tint, rgba(255, 152, 0, 0.08));
+      font-size: 12px;
+      color: var(--primary-text-color);
+    }
+
+    .role-confirm-actions {
+      display: inline-flex;
+      gap: 6px;
+    }
+
+    .role-confirm-btn {
+      padding: 4px 10px;
+      border-radius: 7px;
+      border: var(--roommind-border-subtle);
+      background: var(--roommind-surface);
+      color: var(--primary-text-color);
+      font: inherit;
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .role-confirm-btn.danger {
+      border-color: var(--roommind-warning-border, rgba(255, 152, 0, 0.45));
+      color: var(--warning-color, #ed6c02);
     }
 
     .config-grid {

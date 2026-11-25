@@ -506,6 +506,26 @@ export function mergeAreaSuggestionsIntoDraft(
     }
   }
 
+  let co2Sensor = draft.co2Sensor;
+  if (!co2Sensor && suggestion.co2_sensor) {
+    co2Sensor = suggestion.co2_sensor;
+    addedCount += 1;
+  }
+
+  let vocSensor = draft.vocSensor;
+  if (!vocSensor && suggestion.voc_sensor) {
+    vocSensor = suggestion.voc_sensor;
+    addedCount += 1;
+  }
+
+  const selectedPm25Sensors = new Set(draft.selectedPm25Sensors);
+  for (const eid of suggestion.pm25_sensors ?? []) {
+    if (!selectedPm25Sensors.has(eid)) {
+      selectedPm25Sensors.add(eid);
+      addedCount += 1;
+    }
+  }
+
   return {
     addedCount,
     draft: patchRoomConfigDraft(draft, {
@@ -515,6 +535,9 @@ export function mergeAreaSuggestionsIntoDraft(
       selectedTempSensors,
       selectedHumiditySensor,
       selectedHumiditySensors,
+      co2Sensor,
+      vocSensor,
+      selectedPm25Sensors,
       selectedWindowSensors,
       selectedOccupancySensors,
       selectedCovers,
