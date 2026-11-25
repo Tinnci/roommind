@@ -98,11 +98,11 @@ export function hasConfiguredSensors(config: RoomConfig | null | undefined): boo
   if (!config) return false;
   return Boolean(
     config.temperature_sensor ||
-      (config.temperature_sensors?.length ?? 0) > 0 ||
-      config.humidity_sensor ||
-      (config.humidity_sensors?.length ?? 0) > 0 ||
-      (config.window_sensors?.length ?? 0) > 0 ||
-      (config.occupancy_sensors?.length ?? 0) > 0,
+    (config.temperature_sensors?.length ?? 0) > 0 ||
+    config.humidity_sensor ||
+    (config.humidity_sensors?.length ?? 0) > 0 ||
+    (config.window_sensors?.length ?? 0) > 0 ||
+    (config.occupancy_sensors?.length ?? 0) > 0,
   );
 }
 
@@ -310,11 +310,7 @@ export function inspectAreaSensors(
         const value = parseNumericState(entityState?.state);
         const unit = String(attrs.unit_of_measurement ?? "");
         const displayValue =
-          value !== null
-            ? Number.isInteger(value)
-              ? String(value)
-              : value.toFixed(1)
-            : "--";
+          value !== null ? (Number.isInteger(value) ? String(value) : value.toFixed(1)) : "--";
         airQualitySensors.push({
           entityId,
           name,
@@ -329,14 +325,12 @@ export function inspectAreaSensors(
       const configured = configuredWin.has(entityId) || configuredOcc.has(entityId);
       if (BINARY_ENV_DEVICE_CLASSES.has(deviceClass) || configured) {
         const rawState = entityState?.state;
-        const isOn =
-          rawState === "on" ? true : rawState === "off" ? false : null;
+        const isOn = rawState === "on" ? true : rawState === "off" ? false : null;
         binarySensors.push({
           entityId,
           name,
           isOn,
-          deviceClass:
-            deviceClass || (configuredWin.has(entityId) ? "window" : "occupancy"),
+          deviceClass: deviceClass || (configuredWin.has(entityId) ? "window" : "occupancy"),
           configured,
         });
       }
@@ -360,12 +354,8 @@ export function inspectAreaSensors(
     (a, b) => Number(b.configured) - Number(a.configured) || a.name.localeCompare(b.name),
   );
 
-  const validTemps = temperatureSensors
-    .map((s) => s.valueC)
-    .filter((v): v is number => v !== null);
-  const validHums = humiditySensors
-    .map((s) => s.value)
-    .filter((v): v is number => v !== null);
+  const validTemps = temperatureSensors.map((s) => s.valueC).filter((v): v is number => v !== null);
+  const validHums = humiditySensors.map((s) => s.value).filter((v): v is number => v !== null);
 
   const previewTempC =
     validTemps.length > 0

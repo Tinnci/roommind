@@ -149,12 +149,7 @@ export function getModeClass(mode: DisplayMode | null | undefined): string {
 }
 
 export type RoomModeSource =
-  | "observed"
-  | "mode_only"
-  | "offline"
-  | "assumed"
-  | "conflict"
-  | "waiting";
+  "observed" | "mode_only" | "offline" | "assumed" | "conflict" | "waiting";
 
 export interface RoomModePresentation {
   mode: DisplayMode | null;

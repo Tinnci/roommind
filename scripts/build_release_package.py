@@ -44,6 +44,7 @@ def _validate_component(component_dir: Path, tag: str | None) -> None:
     manifest_path = component_dir / "manifest.json"
     const_path = component_dir / "const.py"
     frontend_bundle = component_dir / "frontend" / "roommind-panel.js"
+    card_bundle = component_dir / "frontend" / "roommind-card.js"
     if not manifest_path.is_file():
         raise ReleasePackageError(f"Missing manifest: {manifest_path}")
     if not const_path.is_file():
@@ -52,6 +53,10 @@ def _validate_component(component_dir: Path, tag: str | None) -> None:
         raise ReleasePackageError(f"Missing frontend bundle: {frontend_bundle}")
     if frontend_bundle.stat().st_size == 0:
         raise ReleasePackageError(f"Frontend bundle is empty: {frontend_bundle}")
+    if not card_bundle.is_file():
+        raise ReleasePackageError(f"Missing frontend card bundle: {card_bundle}")
+    if card_bundle.stat().st_size == 0:
+        raise ReleasePackageError(f"Frontend card bundle is empty: {card_bundle}")
 
     version = _read_manifest_version(manifest_path)
 

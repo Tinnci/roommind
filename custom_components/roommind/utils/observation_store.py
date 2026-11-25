@@ -12,6 +12,7 @@ from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from typing import Any
 
+from .parsing import safe_float as _safe_float
 from .thermal_analysis import build_observed_windows, build_thermal_episodes
 
 
@@ -1062,16 +1063,6 @@ def _value_fields(value: Any) -> tuple[str | None, float | None]:
         return None, None
     value_text = str(value)
     return value_text, _safe_float(value)
-
-
-def _safe_float(value: Any) -> float | None:
-    if value in ("", None):
-        return None
-    try:
-        result = float(value)
-    except TypeError, ValueError:
-        return None
-    return result if result == result else None
 
 
 def _optional_text(value: Any) -> str | None:

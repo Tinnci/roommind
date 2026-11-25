@@ -1481,9 +1481,7 @@ export class RsAreaCard extends LitElement {
 
   private _renderUnconfigured(hasClimateDevices: boolean) {
     const l = this.hass.language;
-    const inv = !hasClimateDevices
-      ? inspectAreaSensors(this.area.area_id, this.hass, null)
-      : null;
+    const inv = !hasClimateDevices ? inspectAreaSensors(this.area.area_id, this.hass, null) : null;
     const sensorCount =
       (inv?.temperatureSensors.length ?? this.tempSensorCount) +
       (inv?.humiditySensors.length ?? this.humiditySensorCount);

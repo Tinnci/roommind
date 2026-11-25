@@ -898,8 +898,7 @@ export class RsSensorSection extends LitElement {
         selectedCount: this.windowSensors.size,
         extras: this._renderWindowExtras(lang),
       })}
-      ${this._renderAirQualityBlock(lang)}
-      ${this._renderGlobalAdd(lang)}
+      ${this._renderAirQualityBlock(lang)} ${this._renderGlobalAdd(lang)}
     `;
   }
 
@@ -1362,7 +1361,9 @@ export class RsSensorSection extends LitElement {
     if (this.occupancySensors.size === 0) return nothing;
     return html`
       <div class="delay-fields" style="align-items: center; margin-top: 8px">
-        <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer">
+        <label
+          style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer"
+        >
           <ha-checkbox
             .checked=${this.occupancyEcoEnabled}
             @change=${(e: Event) =>

@@ -710,9 +710,7 @@ export class RsHeroStatus extends LitElement {
     return html`
       <div class="hero-target">
         <div class="hero-target-label">${localize("card.humidity_label", l)}</div>
-        <div class="hero-target-value">
-          ${humidity != null ? `${humidity.toFixed(0)}%` : "--"}
-        </div>
+        <div class="hero-target-value">${humidity != null ? `${humidity.toFixed(0)}%` : "--"}</div>
         ${
           comfort
             ? html`<div class="hero-comfort-chip" data-tone=${comfort.tone}>
@@ -849,7 +847,9 @@ export class RsHeroStatus extends LitElement {
                               title=${
                                 live.thermal_load_status
                                   ? `${localize("hero.thermal_load_hint", l, {
-                                      pct: String(Math.round(live.thermal_load_status.load_fraction * 100)),
+                                      pct: String(
+                                        Math.round(live.thermal_load_status.load_fraction * 100),
+                                      ),
                                     })}`
                                   : ""
                               }
@@ -873,12 +873,17 @@ export class RsHeroStatus extends LitElement {
                               title=${localize("hero.coil_dry_info", l)}
                             >
                               ${localize(
-                                live.coil_dry_phase === "drain" ? "hero.coil_dry_drain" : "hero.coil_dry",
+                                live.coil_dry_phase === "drain"
+                                  ? "hero.coil_dry_drain"
+                                  : "hero.coil_dry",
                                 l,
                                 {
                                   time: `${
                                     live.coil_dry_until
-                                      ? Math.max(1, Math.ceil((live.coil_dry_until - Date.now() / 1000) / 60))
+                                      ? Math.max(
+                                          1,
+                                          Math.ceil((live.coil_dry_until - Date.now() / 1000) / 60),
+                                        )
                                       : 1
                                   } min`,
                                 },

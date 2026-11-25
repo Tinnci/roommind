@@ -2,7 +2,13 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { HomeAssistant } from "../../types";
 import { localize } from "../../utils/localize";
-import { DAY_MINUTES, hm, parseTime, type ScheduleBlock, type BlockData } from "../../utils/schedule-week";
+import {
+  DAY_MINUTES,
+  hm,
+  parseTime,
+  type ScheduleBlock,
+  type BlockData,
+} from "../../utils/schedule-week";
 import { tempUnit } from "../../utils/temperature";
 
 export function blockTempText(data: BlockData | undefined, unit: string): string {
@@ -53,7 +59,8 @@ export class RsBlockForm extends LitElement {
   private _onApply() {
     if (!this.block) return;
     const start = parseTime(this._startStr);
-    const end = this._endStr === "24:00" || this._endStr === "00:00" ? DAY_MINUTES : parseTime(this._endStr);
+    const end =
+      this._endStr === "24:00" || this._endStr === "00:00" ? DAY_MINUTES : parseTime(this._endStr);
     if (end <= start) return;
     this.dispatchEvent(
       new CustomEvent("block-apply", {

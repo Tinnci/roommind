@@ -46,6 +46,7 @@ class BacktestResult:
 
     def figures(self) -> dict:
         total_n = self.idle.n + self.active.n
+        overall: dict[str, int | float | None]
         if total_n >= MIN_BACKTEST_WINDOWS:
             overall = {
                 "n": total_n,

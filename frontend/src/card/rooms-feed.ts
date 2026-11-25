@@ -83,10 +83,9 @@ class RoomsFeed {
     this._timer = setInterval(() => void this.refresh(), REFRESH_MS);
     if (this._hass?.connection?.subscribeMessage && !this._unsubPush) {
       this._hass.connection
-        .subscribeMessage(
-          (msg: unknown) => this._publish(msg as Partial<RoomsSnapshot>),
-          { type: "roommind/rooms/subscribe" },
-        )
+        .subscribeMessage((msg: unknown) => this._publish(msg as Partial<RoomsSnapshot>), {
+          type: "roommind/rooms/subscribe",
+        })
         .then((unsub) => {
           if (this._subscribers.size === 0) unsub();
           else this._unsubPush = unsub;

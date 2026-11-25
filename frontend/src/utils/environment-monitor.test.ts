@@ -80,33 +80,79 @@ describe("environment-monitor", () => {
         dev_aq: { id: "dev_aq", area_id: "living" },
       },
       entities: {
-        "sensor.lr_temp": { entity_id: "sensor.lr_temp", area_id: "living", device_id: null, platform: "xiaomi" },
-        "sensor.lr_temp_f": { entity_id: "sensor.lr_temp_f", area_id: null, device_id: "dev_aq", platform: "xiaomi" },
-        "sensor.lr_hum": { entity_id: "sensor.lr_hum", area_id: "living", device_id: null, platform: "xiaomi" },
-        "sensor.lr_pm25": { entity_id: "sensor.lr_pm25", area_id: null, device_id: "dev_aq", platform: "xiaomi" },
-        "binary_sensor.lr_win": { entity_id: "binary_sensor.lr_win", area_id: "living", device_id: null, platform: "xiaomi" },
-        "sensor.roommind_living_temp": { entity_id: "sensor.roommind_living_temp", area_id: "living", device_id: null, platform: "roommind" },
+        "sensor.lr_temp": {
+          entity_id: "sensor.lr_temp",
+          area_id: "living",
+          device_id: null,
+          platform: "xiaomi",
+        },
+        "sensor.lr_temp_f": {
+          entity_id: "sensor.lr_temp_f",
+          area_id: null,
+          device_id: "dev_aq",
+          platform: "xiaomi",
+        },
+        "sensor.lr_hum": {
+          entity_id: "sensor.lr_hum",
+          area_id: "living",
+          device_id: null,
+          platform: "xiaomi",
+        },
+        "sensor.lr_pm25": {
+          entity_id: "sensor.lr_pm25",
+          area_id: null,
+          device_id: "dev_aq",
+          platform: "xiaomi",
+        },
+        "binary_sensor.lr_win": {
+          entity_id: "binary_sensor.lr_win",
+          area_id: "living",
+          device_id: null,
+          platform: "xiaomi",
+        },
+        "sensor.roommind_living_temp": {
+          entity_id: "sensor.roommind_living_temp",
+          area_id: "living",
+          device_id: null,
+          platform: "roommind",
+        },
       },
       states: {
         "sensor.lr_temp": {
           entity_id: "sensor.lr_temp",
           state: "22.0",
-          attributes: { device_class: "temperature", unit_of_measurement: "°C", friendly_name: "LR Temp" },
+          attributes: {
+            device_class: "temperature",
+            unit_of_measurement: "°C",
+            friendly_name: "LR Temp",
+          },
         },
         "sensor.lr_temp_f": {
           entity_id: "sensor.lr_temp_f",
           state: "68.0",
-          attributes: { device_class: "temperature", unit_of_measurement: "°F", friendly_name: "LR F Temp" },
+          attributes: {
+            device_class: "temperature",
+            unit_of_measurement: "°F",
+            friendly_name: "LR F Temp",
+          },
         },
         "sensor.lr_hum": {
           entity_id: "sensor.lr_hum",
           state: "48",
-          attributes: { device_class: "humidity", unit_of_measurement: "%", friendly_name: "LR Hum" },
+          attributes: {
+            device_class: "humidity",
+            unit_of_measurement: "%",
+            friendly_name: "LR Hum",
+          },
         },
         "sensor.lr_pm25": {
           entity_id: "sensor.lr_pm25",
           state: "14",
-          attributes: { device_class: "pm25", unit_of_measurement: "μg/m³", friendly_name: "LR PM2.5" },
+          attributes: {
+            device_class: "pm25",
+            unit_of_measurement: "μg/m³",
+            friendly_name: "LR PM2.5",
+          },
         },
         "binary_sensor.lr_win": {
           entity_id: "binary_sensor.lr_win",
@@ -128,7 +174,9 @@ describe("environment-monitor", () => {
     });
 
     const inv = inspectAreaSensors("living", hass, config);
-    expect(inv.temperatureSensors.map((s) => [s.entityId, s.valueC, s.isPrimary, s.configured])).toEqual([
+    expect(
+      inv.temperatureSensors.map((s) => [s.entityId, s.valueC, s.isPrimary, s.configured]),
+    ).toEqual([
       ["sensor.lr_temp", 22.0, true, true],
       ["sensor.lr_temp_f", 20.0, false, false],
     ]);
@@ -144,14 +192,57 @@ describe("environment-monitor", () => {
 
   test("builds 24h SVG trend summary and requires at least 2 points", () => {
     const singlePoint: AnalyticsDataPoint[] = [
-      { ts: 100, room_temp: 21.0, outdoor_temp: 10, target_temp: null, mode: "idle", predicted_temp: null, window_open: false, heating_power: 0, solar_irradiance: 0 },
+      {
+        ts: 100,
+        room_temp: 21.0,
+        outdoor_temp: 10,
+        target_temp: null,
+        mode: "idle",
+        predicted_temp: null,
+        window_open: false,
+        heating_power: 0,
+        solar_irradiance: 0,
+      },
     ];
     expect(buildTrendSummary(singlePoint, "temp")).toBeNull();
 
     const points: AnalyticsDataPoint[] = [
-      { ts: 100, room_temp: 20.0, room_humidity: 50, outdoor_temp: 10, target_temp: null, mode: "idle", predicted_temp: null, window_open: false, heating_power: 0, solar_irradiance: 0 },
-      { ts: 200, room_temp: 21.5, room_humidity: 46, outdoor_temp: 10, target_temp: null, mode: "idle", predicted_temp: null, window_open: false, heating_power: 0, solar_irradiance: 0 },
-      { ts: 300, room_temp: 21.0, room_humidity: 48, outdoor_temp: 10, target_temp: null, mode: "idle", predicted_temp: null, window_open: false, heating_power: 0, solar_irradiance: 0 },
+      {
+        ts: 100,
+        room_temp: 20.0,
+        room_humidity: 50,
+        outdoor_temp: 10,
+        target_temp: null,
+        mode: "idle",
+        predicted_temp: null,
+        window_open: false,
+        heating_power: 0,
+        solar_irradiance: 0,
+      },
+      {
+        ts: 200,
+        room_temp: 21.5,
+        room_humidity: 46,
+        outdoor_temp: 10,
+        target_temp: null,
+        mode: "idle",
+        predicted_temp: null,
+        window_open: false,
+        heating_power: 0,
+        solar_irradiance: 0,
+      },
+      {
+        ts: 300,
+        room_temp: 21.0,
+        room_humidity: 48,
+        outdoor_temp: 10,
+        target_temp: null,
+        mode: "idle",
+        predicted_temp: null,
+        window_open: false,
+        heating_power: 0,
+        solar_irradiance: 0,
+      },
     ];
     const summary = buildTrendSummary(points, "temp");
     expect(summary).not.toBeNull();

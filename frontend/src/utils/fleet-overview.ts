@@ -2,7 +2,11 @@
  * Whole-home HVAC fleet summary and interactive overview filtering helpers.
  */
 import type { AreaInfo, CompressorGroup, HomeAssistant } from "../types";
-import { hasClimateDevice, isMonitorOnlyRoom, isRoomControlEffective } from "./room-overview-status";
+import {
+  hasClimateDevice,
+  isMonitorOnlyRoom,
+  isRoomControlEffective,
+} from "./room-overview-status";
 import { resolveRoomModePresentation } from "./room-state";
 import { buildThermostatFleet } from "./thermostat-fleet";
 

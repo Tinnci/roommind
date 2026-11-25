@@ -19,6 +19,8 @@ from ..control.mpc_controller import (
     DEFAULT_OUTDOOR_TEMP_FALLBACK,
     check_acs_can_heat,
 )
+from ..utils.parsing import safe_float as _safe_float
+from ..utils.parsing import safe_int as _parse_int
 from ..utils.target_resolution import ControlTargetPlan, prepare_control_target_plan
 from .analytics_stats import compute_period_stats
 from .model_backtest import backtest
@@ -40,24 +42,9 @@ _RANGE_MAX_AGE: dict[str, int] = {
 }
 
 
-def _safe_float(value: str) -> float | None:
-    """Convert CSV string to float, or None for empty/invalid values."""
-    if not value:
-        return None
-    try:
-        return float(value)
-    except ValueError, TypeError:
-        return None
-
-
 def _safe_int(value: str) -> int | None:
     """Convert CSV string to int, or None for empty/invalid values."""
-    if not value:
-        return None
-    try:
-        return int(float(value))
-    except ValueError, TypeError:
-        return None
+    return _parse_int(value, allow_float_str=True)
 
 
 def _safe_bool(value: Any) -> bool:

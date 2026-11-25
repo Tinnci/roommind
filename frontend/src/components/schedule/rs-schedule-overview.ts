@@ -113,7 +113,6 @@ export class RsScheduleOverview extends LitElement {
         </div>
 
         ${this._error ? html`<div class="error">${this._error}</div>` : nothing}
-
         ${
           this._creating
             ? html`
@@ -131,10 +130,7 @@ export class RsScheduleOverview extends LitElement {
                       .value=${this._templateId}
                       @change=${(e: Event) => {
                         this._templateId = (e.target as HTMLSelectElement).value as
-                          | "split"
-                          | "day"
-                          | "home"
-                          | "empty";
+                          "split" | "day" | "home" | "empty";
                       }}
                     >
                       ${TEMPLATES.map(
@@ -158,7 +154,6 @@ export class RsScheduleOverview extends LitElement {
               `
             : nothing
         }
-
         ${
           scheduleIds.length === 0
             ? html`<ha-card class="empty-card">${localize("schedule_editor.empty", l)}</ha-card>`

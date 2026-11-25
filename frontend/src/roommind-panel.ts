@@ -1030,12 +1030,8 @@ export class RoomMindPanel extends LitElement {
       areaInfos.flatMap((info) => (info.config ? [info.config] : [])),
       this._climateControlActive,
     );
-    const {
-      activeCount,
-      externalActiveCount,
-      effectiveOverrideCount,
-      pausedOverrideCount,
-    } = overviewStatus;
+    const { activeCount, externalActiveCount, effectiveOverrideCount, pausedOverrideCount } =
+      overviewStatus;
     let modeOnlyActiveCount = 0;
     let trueUnknownCount = 0;
     for (const info of areaInfos) {

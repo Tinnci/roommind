@@ -29,6 +29,7 @@ def _write_component(tmp_path: Path, *, version: str = "1.2.3", const_version: s
     (component / "const.py").write_text(f'VERSION = "{const_version}"\n', encoding="utf-8")
     (component / "frontend").mkdir()
     (component / "frontend" / "roommind-panel.js").write_text("console.log('ok');\n", encoding="utf-8")
+    (component / "frontend" / "roommind-card.js").write_text("console.log('card');\n", encoding="utf-8")
     (component / "__pycache__").mkdir()
     (component / "__pycache__" / "ignored.pyc").write_bytes(b"pyc")
     (component / ".DS_Store").write_bytes(b"finder")
@@ -47,6 +48,7 @@ def test_release_package_contains_component_root_and_excludes_generated_files(tm
 
     assert "manifest.json" in names
     assert "frontend/roommind-panel.js" in names
+    assert "frontend/roommind-card.js" in names
     assert "__pycache__/ignored.pyc" not in names
     assert ".DS_Store" not in names
     assert "frontend/roommind-panel.js.map" not in names

@@ -11,6 +11,8 @@ from homeassistant.const import STATE_OFF, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from ..utils.parsing import safe_float as _safe_float
+from ..utils.parsing import safe_int as _safe_int
 from .airflow_levels import fan_mode_level, fan_preset_mode_level
 
 AIRFLOW_ROLE_CIRCULATION = "circulation"
@@ -379,17 +381,3 @@ def _unique_levels(levels: Any) -> tuple[float, ...]:
 
 def _round_level(value: float) -> float:
     return round(max(0.0, min(1.0, float(value))), 3)
-
-
-def _safe_float(value: Any) -> float | None:
-    try:
-        return float(value)
-    except TypeError, ValueError:
-        return None
-
-
-def _safe_int(value: Any) -> int | None:
-    try:
-        return int(value)
-    except TypeError, ValueError:
-        return None

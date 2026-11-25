@@ -20,7 +20,13 @@ export interface HeroMetricSelectionInput {
 }
 
 export function selectHeroMetricIds(input: HeroMetricSelectionInput): HeroMetricId[] {
-  const { live, isOutdoor, climateControlActive, roomControlEnabled, hasClimateDevices = true } = input;
+  const {
+    live,
+    isOutdoor,
+    climateControlActive,
+    roomControlEnabled,
+    hasClimateDevices = true,
+  } = input;
 
   if (isOutdoor) {
     return live.current_humidity !== null ? ["humidity"] : [];

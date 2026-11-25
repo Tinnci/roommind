@@ -69,7 +69,11 @@ export class RoomMindRoomCard extends LitElement {
     const base =
       live?.override_active && live.override_temp != null
         ? live.override_temp
-        : (live?.target_temp ?? live?.heat_target ?? live?.cool_target ?? live?.current_temp ?? 22.0);
+        : (live?.target_temp ??
+          live?.heat_target ??
+          live?.cool_target ??
+          live?.current_temp ??
+          22.0);
     const next = Math.max(5, Math.min(35, Math.round((base + deltaC) * 10) / 10));
     this._busy = true;
     try {
@@ -118,7 +122,9 @@ export class RoomMindRoomCard extends LitElement {
     const l = this.hass?.language ?? "en";
     const areaId = this._areaId;
     if (!areaId) {
-      return html`<ha-card><div class="card-empty">${localize("roomcard.select_room", l)}</div></ha-card>`;
+      return html`<ha-card
+        ><div class="card-empty">${localize("roomcard.select_room", l)}</div></ha-card
+      >`;
     }
     const room = this._snapshot?.rooms?.[areaId];
     if (!room) {
@@ -127,16 +133,14 @@ export class RoomMindRoomCard extends LitElement {
 
     const live = room.live;
     const isMonitorOnly = !room.is_outdoor && !hasClimateDevice(room);
-    const areaName =
-      room.display_name || this.hass?.areas?.[areaId]?.name || areaId;
+    const areaName = room.display_name || this.hass?.areas?.[areaId]?.name || areaId;
     const modeInfo = resolveRoomModePresentation(live, room);
     const controlActive = isRoomControlEffective(
       room,
       this._snapshot?.climate_control_active ?? true,
     );
-    const targetTemp = live?.override_active && live.override_temp != null
-      ? live.override_temp
-      : live?.target_temp;
+    const targetTemp =
+      live?.override_active && live.override_temp != null ? live.override_temp : live?.target_temp;
     const step = toCelsiusDelta(parseFloat(tempStep(this.hass)) || 0.5, this.hass);
     const aqChips = [
       live?.co2 != null ? `CO₂ ${Math.round(live.co2)} ppm` : "",
@@ -246,9 +250,7 @@ export class RoomMindRoomCard extends LitElement {
         </div>
 
         ${
-          aqChips.length > 0
-            ? html`<div class="card-footer">${aqChips.join(" · ")}</div>`
-            : nothing
+          aqChips.length > 0 ? html`<div class="card-footer">${aqChips.join(" · ")}</div>` : nothing
         }
       </ha-card>
     `;
@@ -377,7 +379,9 @@ export class RoomMindRoomCardEditor extends LitElement {
 
     return html`
       <div style="display: flex; flex-direction: column; gap: 12px; padding: 8px 0">
-        <label style="font-size: 13px; font-weight: 500">${localize("roomcard.select_room", l)}</label>
+        <label style="font-size: 13px; font-weight: 500"
+          >${localize("roomcard.select_room", l)}</label
+        >
         <select
           style="padding: 8px; border-radius: 6px; border: 1px solid var(--divider-color, #ccc)"
           .value=${selected}

@@ -28,7 +28,7 @@ export default defineConfig({
   plugins: [cardLocales()],
   build: {
     lib: {
-      entry: resolve(__dirname, "src/card.ts"),
+      entry: resolve(import.meta.dirname, "src/card.ts"),
       name: "RoomMindCard",
       formats: ["iife"],
       fileName: () => "roommind-card.js",

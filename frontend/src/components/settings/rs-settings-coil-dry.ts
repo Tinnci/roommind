@@ -172,9 +172,7 @@ export class RsSettingsCoilDry extends RsSettingsBase {
                     <ha-list-item value=${KEEP}
                       >${localize("coil_dry.fan_mode_keep", l)}</ha-list-item
                     >
-                    ${fanModes.map(
-                      (m) => html`<ha-list-item value=${m}>${m}</ha-list-item>`,
-                    )}
+                    ${fanModes.map((m) => html`<ha-list-item value=${m}>${m}</ha-list-item>`)}
                   </ha-select>
                   <span class="field-hint">${localize("coil_dry.fan_mode_hint", l)}</span>
                 </div>

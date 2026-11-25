@@ -1,6 +1,12 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import type { AnalyticsData, AnalyticsDataPoint, HassArea, HomeAssistant, RoomConfig } from "../types";
+import type {
+  AnalyticsData,
+  AnalyticsDataPoint,
+  HassArea,
+  HomeAssistant,
+  RoomConfig,
+} from "../types";
 import { roommindThemeStyles } from "../styles/theme-styles";
 import { openEntityInfo } from "../utils/events";
 import {
@@ -11,7 +17,7 @@ import {
   type TrendSummary,
 } from "../utils/environment-monitor";
 import { localize } from "../utils/localize";
-import { formatTemp, tempUnit, toDisplay, toDisplayDelta } from "../utils/temperature";
+import { formatTemp, tempUnit, toDisplayDelta } from "../utils/temperature";
 import "./rs-section-card";
 
 @customElement("rs-environment-monitor")
@@ -367,7 +373,8 @@ export class RsEnvironmentMonitor extends LitElement {
       this.config &&
       this.hass &&
       this.area?.area_id &&
-      (changedProps.has("area") || (changedProps.has("config") && this._trendAreaId !== this.area.area_id))
+      (changedProps.has("area") ||
+        (changedProps.has("config") && this._trendAreaId !== this.area.area_id))
     ) {
       this._fetchTrends(this.area.area_id);
     } else if (!this.config && this._trendAreaId) {
@@ -421,7 +428,12 @@ export class RsEnvironmentMonitor extends LitElement {
           <span class="trend-title">${title}</span>
           <span class="trend-delta ${deltaClass}">${deltaSign}${formatDelta(summary.delta)}</span>
         </div>
-        <svg class="trend-sparkline" viewBox="0 0 180 44" preserveAspectRatio="none" aria-hidden="true">
+        <svg
+          class="trend-sparkline"
+          viewBox="0 0 180 44"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
           <path d=${summary.areaPath} fill=${stroke} fill-opacity="0.14"></path>
           <path
             d=${summary.path}
@@ -456,8 +468,20 @@ export class RsEnvironmentMonitor extends LitElement {
     const comfort = assessRoomComfort(effectiveTemp, effectiveHumidity, live?.mold_risk_level);
     const dewPoint = calculateDewPointC(effectiveTemp, effectiveHumidity);
     const feelsLike = live?.perceived_temp ?? null;
-    const windowOpen = live?.window_open ?? inv.binarySensors.some((s) => s.isOn === true && (s.deviceClass === "window" || s.deviceClass === "door" || s.deviceClass === "opening"));
-    const occupied = inv.binarySensors.some((s) => s.isOn === true && (s.deviceClass === "occupancy" || s.deviceClass === "motion" || s.deviceClass === "presence"));
+    const windowOpen =
+      live?.window_open ??
+      inv.binarySensors.some(
+        (s) =>
+          s.isOn === true &&
+          (s.deviceClass === "window" || s.deviceClass === "door" || s.deviceClass === "opening"),
+      );
+    const occupied = inv.binarySensors.some(
+      (s) =>
+        s.isOn === true &&
+        (s.deviceClass === "occupancy" ||
+          s.deviceClass === "motion" ||
+          s.deviceClass === "presence"),
+    );
     const fusionEntries = live?.sensor_fusion_status ?? [];
     const fusionByEntity = new Map(fusionEntries.map((f) => [f.entity_id, f]));
 
@@ -481,7 +505,9 @@ export class RsEnvironmentMonitor extends LitElement {
                     @click=${this._emitAutoDetect}
                   >
                     <ha-icon icon="mdi:link-plus"></ha-icon>
-                    <span>${localize("monitor.link_sensors", l, { count: inv.unlinkedSensorCount })}</span>
+                    <span
+                      >${localize("monitor.link_sensors", l, { count: inv.unlinkedSensorCount })}</span
+                    >
                   </button>`
                 : nothing
             }
@@ -496,7 +522,9 @@ export class RsEnvironmentMonitor extends LitElement {
               ? html`
                   <div class="quickstart-banner">
                     <div class="quickstart-copy">
-                      <span class="quickstart-title">${localize("monitor.unconfigured_title", l)}</span>
+                      <span class="quickstart-title"
+                        >${localize("monitor.unconfigured_title", l)}</span
+                      >
                       <span class="quickstart-desc">
                         ${localize("monitor.unconfigured_desc", l, { count: detectedCount })}
                       </span>
@@ -717,11 +745,12 @@ export class RsEnvironmentMonitor extends LitElement {
                 `
               : html`<div class="empty-sensors">${localize("monitor.no_sensors_yet", l)}</div>`
           }
-
           ${
             inv.airQualitySensors.length > 0 || inv.binarySensors.length > 0
               ? html`
-                  <div class="sensor-group-label">${localize("monitor.air_quality_heading", l)}</div>
+                  <div class="sensor-group-label">
+                    ${localize("monitor.air_quality_heading", l)}
+                  </div>
                   <div class="sensor-list">
                     ${inv.airQualitySensors.map(
                       (s) => html`
@@ -736,7 +765,9 @@ export class RsEnvironmentMonitor extends LitElement {
                               <span class="sensor-name">${s.name}</span>
                             </span>
                           </span>
-                          <span class="sensor-value">${s.displayValue}${s.unit ? ` ${s.unit}` : ""}</span>
+                          <span class="sensor-value"
+                            >${s.displayValue}${s.unit ? ` ${s.unit}` : ""}</span
+                          >
                         </button>
                       `,
                     )}
@@ -750,7 +781,9 @@ export class RsEnvironmentMonitor extends LitElement {
                           <span class="sensor-row-left">
                             <ha-icon
                               .icon=${
-                                s.deviceClass === "window" || s.deviceClass === "door" || s.deviceClass === "opening"
+                                s.deviceClass === "window" ||
+                                s.deviceClass === "door" ||
+                                s.deviceClass === "opening"
                                   ? s.isOn
                                     ? "mdi:window-open-variant"
                                     : "mdi:window-closed-variant"
@@ -765,8 +798,13 @@ export class RsEnvironmentMonitor extends LitElement {
                             ${
                               s.isOn === null
                                 ? "--"
-                                : s.deviceClass === "window" || s.deviceClass === "door" || s.deviceClass === "opening"
-                                  ? localize(s.isOn ? "monitor.window_open" : "monitor.window_closed", l)
+                                : s.deviceClass === "window" ||
+                                    s.deviceClass === "door" ||
+                                    s.deviceClass === "opening"
+                                  ? localize(
+                                      s.isOn ? "monitor.window_open" : "monitor.window_closed",
+                                      l,
+                                    )
                                   : localize(s.isOn ? "monitor.occupied" : "monitor.clear", l)
                             }
                           </span>

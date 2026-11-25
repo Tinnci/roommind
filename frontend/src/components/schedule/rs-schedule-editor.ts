@@ -3,12 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import type { HomeAssistant } from "../../types";
 import { localize, type TranslationKey } from "../../utils/localize";
 import { fireSaveStatus } from "../../utils/events";
-import {
-  loadSchedule,
-  saveSchedule,
-  isAdmin,
-  type LoadedSchedule,
-} from "../../utils/schedule-api";
+import { loadSchedule, saveSchedule, isAdmin, type LoadedSchedule } from "../../utils/schedule-api";
 import {
   WEEKDAYS,
   DAY_GROUPS,
@@ -128,7 +123,9 @@ export class RsScheduleEditor extends LitElement {
     }
 
     const activeBlock =
-      this._selectedIndex !== null ? this._week[this._selectedDay]?.[this._selectedIndex] ?? null : null;
+      this._selectedIndex !== null
+        ? (this._week[this._selectedDay]?.[this._selectedIndex] ?? null)
+        : null;
 
     return html`
       <ha-card>
@@ -137,7 +134,9 @@ export class RsScheduleEditor extends LitElement {
             type="button"
             class="back-btn"
             @click=${() =>
-              this.dispatchEvent(new CustomEvent("schedule-back", { bubbles: true, composed: true }))}
+              this.dispatchEvent(
+                new CustomEvent("schedule-back", { bubbles: true, composed: true }),
+              )}
           >
             <ha-icon icon="mdi:arrow-left"></ha-icon>
             <span>${localize("settings_hub.back", l)}</span>
@@ -161,12 +160,18 @@ export class RsScheduleEditor extends LitElement {
             return html`
               <div class="day-row ${this._selectedDay === dayIdx ? "is-selected" : ""}">
                 <div class="day-header">
-                  <span class="day-label">${localize(`schedule_editor.day_${dayName}` as TranslationKey, l)}</span>
+                  <span class="day-label"
+                    >${localize(`schedule_editor.day_${dayName}` as TranslationKey, l)}</span
+                  >
                   ${
                     !this._readOnly
                       ? html`
                           <div class="day-actions">
-                            <button type="button" class="chip-btn" @click=${() => this._addSuggested(dayIdx)}>
+                            <button
+                              type="button"
+                              class="chip-btn"
+                              @click=${() => this._addSuggested(dayIdx)}
+                            >
                               + ${localize("schedule_editor.add_block", l)}
                             </button>
                             <button
@@ -188,7 +193,8 @@ export class RsScheduleEditor extends LitElement {
                   ${
                     blocks.length > 0
                       ? blocks.map((b, idx) => {
-                          const isSelected = this._selectedDay === dayIdx && this._selectedIndex === idx;
+                          const isSelected =
+                            this._selectedDay === dayIdx && this._selectedIndex === idx;
                           const tempText = blockTempText(b.data, tempUnit(this.hass));
                           return html`
                             <button
