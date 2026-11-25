@@ -88,11 +88,15 @@ export class RsAnalytics extends LitElement {
         .language=${l}
         @room-selected=${this._onRoomSelected}
         @range-changed=${this._onRangeChanged}
+        @refresh-requested=${this._fetchData}
       ></rs-analytics-toolbar>
       ${
         this._selectedRoom
           ? this._loading
-            ? html`<div class="loading">${localize("panel.loading", l)}</div>`
+            ? html`<div class="loading-card">
+                <ha-icon icon="mdi:loading"></ha-icon>
+                <span>${localize("analytics.loading", l)}</span>
+              </div>`
             : html`
                 <rs-analytics-chart
                   .hass=${this.hass}
@@ -105,7 +109,7 @@ export class RsAnalytics extends LitElement {
                 ></rs-analytics-chart>
                 ${
                   !this.rooms[this._selectedRoom]?.is_outdoor
-                    ? html` <rs-analytics-model
+                    ? html`<rs-analytics-model
                         .hass=${this.hass}
                         .data=${this._data}
                         .language=${l}
@@ -191,7 +195,11 @@ export class RsAnalytics extends LitElement {
     roommindThemeStyles,
     css`
       :host {
-        display: block;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        max-width: 1280px;
+        margin: 0 auto;
       }
 
       .no-data {
@@ -199,25 +207,37 @@ export class RsAnalytics extends LitElement {
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        padding: 80px 16px;
+        padding: 72px 16px;
         text-align: center;
         color: var(--secondary-text-color);
+        border-radius: var(--roommind-radius-card, 12px);
+        border: var(--roommind-border-subtle);
+        background: var(--roommind-surface);
       }
 
       .no-data p {
-        font-size: 15px;
+        font-size: 14px;
         max-width: 400px;
         line-height: 1.5;
-        margin-top: 16px;
+        margin-top: 12px;
       }
 
-      .loading {
+      .loading-card {
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 80px 16px;
+        gap: 10px;
+        padding: 72px 16px;
+        border-radius: var(--roommind-radius-card, 12px);
+        border: var(--roommind-border-subtle);
+        background: var(--roommind-surface);
         color: var(--secondary-text-color);
-        font-size: 14px;
+        font-size: 13.5px;
+      }
+
+      .loading-card ha-icon {
+        --mdc-icon-size: 20px;
+        color: var(--primary-color);
       }
     `,
   ];
