@@ -233,6 +233,74 @@ class TestCoverageGaps:
             "select.roommind_ke_ting_climate_mode",
         }
 
+    def test_cleanup_orphaned_entities_handles_prefix_colliding_area_ids(self, hass, mock_config_entry):
+        """cleanup_orphaned_entities matches longer area_ids (wo_shi_2) before shorter prefixes (wo_shi)."""
+        from custom_components.roommind.const import DOMAIN
+
+        coordinator = _create_coordinator(hass, mock_config_entry)
+        store = MagicMock()
+        # Intentionally place shorter prefix first in dict order
+        store.get_rooms.return_value = {
+            "wo_shi": {"devices": [{"entity_id": "climate.ac1", "type": "ac", "role": "auto"}]},
+            "wo_shi_2": {"devices": [{"entity_id": "climate.ac2", "type": "ac", "role": "auto"}]},
+        }
+        hass.data = {DOMAIN: {"store": store}}
+
+        entries = []
+        for area in ("wo_shi", "wo_shi_2"):
+            for suffix in (
+                "temperature",
+                "humidity",
+                "dew_point",
+                "mold_risk",
+                "target_temp",
+                "mode",
+                "override",
+                "comfort",
+                "climate_control",
+                "climate_mode",
+            ):
+                e = MagicMock()
+                e.unique_id = f"{DOMAIN}_{area}_{suffix}"
+                e.entity_id = f"entity.roommind_{area}_{suffix}"
+                entries.append(e)
+
+        mock_registry = MagicMock()
+        mock_registry.entities.values.return_value = entries
+        with patch("homeassistant.helpers.entity_registry.async_get", return_value=mock_registry):
+            coordinator.cleanup_orphaned_entities()
+
+        mock_registry.async_remove.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_room_removed_does_not_remove_prefix_colliding_room_entities(self, hass, mock_config_entry):
+        """Removing wo_shi must leave wo_shi_2 entities untouched."""
+        from custom_components.roommind.const import DOMAIN
+
+        coordinator = _create_coordinator(hass, mock_config_entry)
+        coordinator.async_request_refresh = AsyncMock()
+
+        entries = []
+        for area in ("wo_shi", "wo_shi_2"):
+            for suffix in ("temperature", "target_temp", "comfort", "climate_control"):
+                e = MagicMock()
+                e.unique_id = f"{DOMAIN}_{area}_{suffix}"
+                e.entity_id = f"entity.roommind_{area}_{suffix}"
+                entries.append(e)
+
+        mock_registry = MagicMock()
+        mock_registry.entities.values.return_value = entries
+        with patch("homeassistant.helpers.entity_registry.async_get", return_value=mock_registry):
+            await coordinator.async_room_removed("wo_shi")
+
+        removed = {c.args[0] for c in mock_registry.async_remove.call_args_list}
+        assert removed == {
+            "entity.roommind_wo_shi_temperature",
+            "entity.roommind_wo_shi_target_temp",
+            "entity.roommind_wo_shi_comfort",
+            "entity.roommind_wo_shi_climate_control",
+        }
+
     @pytest.mark.asyncio
     async def test_room_removed_cleans_history_store(self, hass, mock_config_entry):
         """async_room_removed calls history_store.remove_room."""

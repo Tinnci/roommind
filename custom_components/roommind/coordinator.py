@@ -175,6 +175,18 @@ def has_climate_control_devices(room: dict) -> bool:
     )
 
 
+_MONITOR_ENTITY_SUFFIXES = ("_temperature", "_humidity", "_dew_point", "_mold_risk")
+_CONTROL_ENTITY_SUFFIXES = ("_target_temp", "_mode", "_override", "_comfort", "_climate_control", "_climate_mode")
+_COVER_ENTITY_SUFFIXES = ("_cover_auto", "_cover_paused")
+_AQ_ENTITY_SUFFIXES = ("_air_quality",)
+_ALL_ROOM_ENTITY_SUFFIXES = (
+    *_MONITOR_ENTITY_SUFFIXES,
+    *_CONTROL_ENTITY_SUFFIXES,
+    *_COVER_ENTITY_SUFFIXES,
+    *_AQ_ENTITY_SUFFIXES,
+)
+
+
 @dataclass
 class _EntityPlatformRegistration:
     """Callback and registered rooms for one Home Assistant entity platform."""
@@ -3027,10 +3039,7 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if not hasattr(registry, "entities") or not hasattr(registry, "async_remove"):
             return
 
-        control_unique_ids = {
-            f"{DOMAIN}_{area_id}{suffix}"
-            for suffix in ("_target_temp", "_mode", "_override", "_comfort", "_climate_control", "_climate_mode")
-        }
+        control_unique_ids = {f"{DOMAIN}_{area_id}{suffix}" for suffix in _CONTROL_ENTITY_SUFFIXES}
         to_remove = [
             entry.entity_id
             for entry in list(registry.entities.values())
@@ -3071,11 +3080,12 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         registry = er.async_get(self.hass)
 
-        # Find and remove all entities whose unique_id belongs to this area
+        # Match exact unique_ids so removing `wo_shi` never removes `wo_shi_2` entities.
+        room_unique_ids = {f"{DOMAIN}_{area_id}{suffix}" for suffix in _ALL_ROOM_ENTITY_SUFFIXES}
         entries_to_remove = [
             entity_entry.entity_id
-            for entity_entry in registry.entities.values()
-            if entity_entry.unique_id and entity_entry.unique_id.startswith(f"{DOMAIN}_{area_id}_")
+            for entity_entry in list(registry.entities.values())
+            if isinstance(getattr(entity_entry, "unique_id", None), str) and entity_entry.unique_id in room_unique_ids
         ]
 
         for entity_id in entries_to_remove:
@@ -3123,16 +3133,13 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         rooms = store.get_rooms()
         registry = er.async_get(self.hass)
 
-        # Known valid suffixes for each condition
-        monitor_always_valid = ("_temperature", "_humidity", "_dew_point", "_mold_risk")
-        control_only = ("_target_temp", "_mode", "_override", "_comfort", "_climate_control", "_climate_mode")
-        cover_only = ("_cover_auto", "_cover_paused")
-        aq_only = ("_air_quality",)
         # Global entities (not per-room) that should never be cleaned up
         global_uids = {f"{DOMAIN}_vacation", f"{DOMAIN}_climate_control"}
+        # Longest area_id first so `wo_shi_2` matches before prefix `wo_shi`.
+        sorted_area_ids = sorted(rooms, key=len, reverse=True)
 
         to_remove: list[str] = []
-        for entity_entry in registry.entities.values():
+        for entity_entry in list(registry.entities.values()):
             uid = entity_entry.unique_id
             if not isinstance(uid, str) or not uid.startswith(f"{DOMAIN}_"):
                 continue
@@ -3141,12 +3148,7 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             # Extract area_id: roommind_{area_id}_{suffix}
             parts = uid.removeprefix(f"{DOMAIN}_")
-            # Find which room this belongs to
-            matched_area = None
-            for area_id in rooms:
-                if parts.startswith(f"{area_id}_"):
-                    matched_area = area_id
-                    break
+            matched_area = next((area_id for area_id in sorted_area_ids if parts.startswith(f"{area_id}_")), None)
 
             if matched_area is None:
                 # Room no longer exists — orphaned entity
@@ -3156,13 +3158,13 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             suffix = parts.removeprefix(f"{matched_area}")
             room = rooms[matched_area]
 
-            if suffix in monitor_always_valid:
+            if suffix in _MONITOR_ENTITY_SUFFIXES:
                 continue
-            if suffix in control_only and has_climate_control_devices(room):
+            if suffix in _CONTROL_ENTITY_SUFFIXES and has_climate_control_devices(room):
                 continue
-            if suffix in cover_only and room.get("covers"):
+            if suffix in _COVER_ENTITY_SUFFIXES and room.get("covers"):
                 continue
-            if suffix in aq_only and has_air_quality_sensor(room):
+            if suffix in _AQ_ENTITY_SUFFIXES and has_air_quality_sensor(room):
                 continue
 
             # Entity does not match any valid type — orphaned
