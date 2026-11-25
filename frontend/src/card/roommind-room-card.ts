@@ -4,6 +4,7 @@ import type { HomeAssistant, RoomConfig } from "../types";
 import { localize, type TranslationKey } from "../utils/localize";
 import { getModeClass, resolveRoomModePresentation } from "../utils/room-state";
 import { hasClimateDevice, isRoomControlEffective } from "../utils/room-overview-status";
+import { assessRoomComfort, calculateDewPointC } from "../utils/environment-monitor";
 import { formatTemp, tempStep, tempUnit, toDisplay, toCelsiusDelta } from "../utils/temperature";
 import { modeStyles } from "../styles/shared-mode-styles";
 import { roommindThemeStyles } from "../styles/theme-styles";
@@ -142,10 +143,28 @@ export class RoomMindRoomCard extends LitElement {
     const targetTemp =
       live?.override_active && live.override_temp != null ? live.override_temp : live?.target_temp;
     const step = toCelsiusDelta(parseFloat(tempStep(this.hass)) || 0.5, this.hass);
+    const comfort = assessRoomComfort(
+      live?.current_temp ?? null,
+      live?.current_humidity ?? null,
+      live?.mold_risk_level,
+    );
+    const dewPoint = calculateDewPointC(live?.current_temp ?? null, live?.current_humidity ?? null);
+    const showComfortPill =
+      comfort !== null &&
+      (isMonitorOnly || comfort.tone === "warning" || comfort.tone === "critical");
     const aqChips = [
       live?.co2 != null ? `CO₂ ${Math.round(live.co2)} ppm` : "",
       live?.pm25 != null ? `PM2.5 ${live.pm25.toFixed(1)}` : "",
       live?.voc != null ? `VOC ${Math.round(live.voc)}` : "",
+    ];
+    const footerChips = [
+      dewPoint !== null
+        ? localize("card.dew_point_short", l, {
+            value: formatTemp(dewPoint, this.hass),
+            unit: tempUnit(this.hass),
+          })
+        : "",
+      ...aqChips,
     ].filter(Boolean);
 
     return html`
@@ -166,8 +185,20 @@ export class RoomMindRoomCard extends LitElement {
                     </span>`
               }
               ${
+                showComfortPill
+                  ? html`<span class="status-pill" data-tone=${comfort.tone}>
+                      ${localize(comfort.labelKey, l)}
+                    </span>`
+                  : nothing
+              }
+              ${
+                live?.window_open
+                  ? html`<span class="status-pill warn">${localize("card.window_open", l)}</span>`
+                  : nothing
+              }
+              ${
                 live?.air_quality_bad
-                  ? html`<span class="aq-pill warn"
+                  ? html`<span class="status-pill warn"
                       >${localize("hero.air_quality_bad", l, {
                         reason: (live.air_quality_reason ?? "AQ").toUpperCase(),
                       })}</span
@@ -250,7 +281,9 @@ export class RoomMindRoomCard extends LitElement {
         </div>
 
         ${
-          aqChips.length > 0 ? html`<div class="card-footer">${aqChips.join(" · ")}</div>` : nothing
+          footerChips.length > 0
+            ? html`<div class="card-footer">${footerChips.join(" · ")}</div>`
+            : nothing
         }
       </ha-card>
     `;
@@ -289,13 +322,28 @@ export class RoomMindRoomCard extends LitElement {
         gap: 6px;
         margin-top: 4px;
       }
-      .aq-pill.warn {
+      .status-pill {
         font-size: 11px;
         font-weight: 600;
         padding: 2px 8px;
         border-radius: 999px;
+      }
+      .status-pill.warn,
+      .status-pill[data-tone="warning"] {
         background: var(--roommind-warning-tint, rgba(255, 152, 0, 0.16));
         color: var(--warning-color, #ed6c02);
+      }
+      .status-pill[data-tone="success"] {
+        background: var(--roommind-success-tint, rgba(76, 175, 80, 0.14));
+        color: var(--roommind-success-color, #4caf50);
+      }
+      .status-pill[data-tone="info"] {
+        background: var(--roommind-info-tint, rgba(33, 150, 243, 0.14));
+        color: var(--roommind-info-color, #2196f3);
+      }
+      .status-pill[data-tone="critical"] {
+        background: var(--roommind-error-tint, rgba(244, 67, 54, 0.14));
+        color: var(--error-color, #f44336);
       }
       .card-metrics {
         display: flex;
