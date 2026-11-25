@@ -29,7 +29,10 @@ from .const import (
     CLIMATE_MODE_FAN_ONLY,
     CLIMATE_MODE_HEAT_ONLY,
     CLIMATE_MODE_OFF,
+    DEFAULT_CO2_THRESHOLD,
     DEFAULT_OUTDOOR_HEATING_MAX,
+    DEFAULT_PM25_CLEAR_THRESHOLD,
+    DEFAULT_PM25_THRESHOLD,
     DOMAIN,
     EVENT_ROOMMIND_ALERT,
     HISTORY_ROTATE_CYCLES,
@@ -79,6 +82,7 @@ from .control.thermal_model import (
     TemperatureObservation,
 )
 from .managers.ac_coil_dry_manager import AcCoilDryManager
+from .managers.air_quality_manager import AirQualityTracker, VentilationController, read_pm25_value
 from .managers.airflow_control_manager import AirflowControlManager, AirflowRuntimeContext
 from .managers.compressor_group_manager import (
     CompressorCommandOutcome,
@@ -100,6 +104,7 @@ from .managers.heat_source_orchestrator import evaluate_heat_sources
 from .managers.hvac_output_observer import HVACOutputObserver
 from .managers.mold_manager import MoldManager
 from .managers.night_mode_manager import NightModeManager
+from .managers.price_manager import PriceManager
 from .managers.residual_heat_tracker import ResidualHeatSimulationState, ResidualHeatTracker
 from .managers.room_coupling_manager import RoomCouplingManager
 from .managers.sensor_fusion_manager import SensorFusionManager
@@ -142,6 +147,25 @@ class EntityPlatform(StrEnum):
     CLIMATE_CONTROL_SWITCH = "climate_control_switch"
     COVER_SWITCH = "cover_switch"
     COVER_BINARY_SENSOR = "cover_binary_sensor"
+    AIR_QUALITY_BINARY_SENSOR = "air_quality_binary_sensor"
+
+
+_NO_AIR_QUALITY: dict[str, Any] = {
+    "co2": None,
+    "voc": None,
+    "pm25": None,
+    "air_quality_bad": False,
+    "air_quality_reason": None,
+    "ventilation_active": False,
+}
+
+
+def has_air_quality_sensor(room: dict) -> bool:
+    """Return True if an indoor room monitors CO2, VOC, or PM2.5."""
+    return (
+        bool(room.get("co2_sensor") or room.get("voc_sensor") or room.get("pm25_sensor") or room.get("pm25_sensors"))
+        and not room.get("is_outdoor", False)
+    )
 
 
 @dataclass
@@ -334,6 +358,9 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._inverter_regime = InverterRegimeManager()
         self._prev_slope_sample: dict[str, tuple[float, float]] = {}
         self._coil_dry_manager = AcCoilDryManager(hass)
+        self._air_quality = AirQualityTracker()
+        self._ventilation = VentilationController(hass)
+        self._price_manager = PriceManager(hass)
         self.device_setpoints: DeviceSetpointTracker = hass.data.setdefault(DOMAIN, {}).setdefault(
             "device_setpoints", DeviceSetpointTracker(time.monotonic)
         )
@@ -686,6 +713,7 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._begin_observation_cycle(settings)
 
         outdoor_forecast = await self._async_update_weather_environment(settings)
+        await self._price_manager.async_update(settings)
         observations: dict[str, RoomControlObservation] = {}
         for area_id, room in rooms.items():
             try:
@@ -711,6 +739,7 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         self._update_room_couplings(rooms, room_states)
         await self._async_control_master_devices(room_states, rooms, settings)
+        await self._async_reconcile_ventilation(rooms, room_states, settings, store)
 
         if self._observation_store and self._raw_observation_buffer:
             try:
@@ -780,6 +809,7 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     self._ac_overdrive = ACOverdriveManager.from_dict(thermal_data.get("ac_overdrive", {}))
             self._valve_manager.load_actuation_data(settings.get("valve_last_actuation", {}))
             self._coil_dry_manager.load_state(settings.get("coil_dry_state", {}))
+            self._ventilation.load_state(settings.get("ventilation_state", {}))
             self._model_loaded = True
 
         if self._history_store is None:
@@ -2340,7 +2370,86 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         room_state["coil_dry_entities"] = sorted(coil_dry.controlled_eids)
         room_state["preheat"] = controller.preheat if controller.preheat and controller.preheat.get("mode") == mode else None
         room_state["occupancy_vacant"] = target_plan.occupancy_vacant
+        room_state["price_level"] = target_plan.price_level
+        room_state["price_shift_heat"] = target_plan.price_shift_heat
+        room_state["price_shift_cool"] = target_plan.price_shift_cool
+        aq = self._evaluate_air_quality(area_id, room)
+        room_state.update(aq)
         return room_state
+
+    def price_status(self) -> dict | None:
+        """Return current electricity price status for settings diagnostics."""
+        return self._price_manager.status()
+
+    def _evaluate_air_quality(self, area_id: str, room: dict) -> dict[str, Any]:
+        """Evaluate CO2, VOC, and PM2.5 sensors with hysteresis."""
+        now = time.time()
+        result = dict(_NO_AIR_QUALITY)
+        bad: list[str] = []
+        venting = self._ventilation.is_running(room.get("ventilation_entity") or "")
+        for kind, threshold, clear_below in (
+            ("co2", room.get("co2_threshold") or DEFAULT_CO2_THRESHOLD, None),
+            ("voc", room.get("voc_threshold"), None),
+        ):
+            sensor = room.get(f"{kind}_sensor")
+            if not sensor:
+                continue
+            value = read_sensor_value(self.hass, sensor, area_id, kind.upper())
+            result[kind] = value
+            if self._air_quality.evaluate(
+                area_id, kind, value, threshold, now, assume_bad=venting, clear_below=clear_below
+            ):
+                bad.append(kind)
+
+        pm25_val = read_pm25_value(self.hass, room, area_id)
+        if pm25_val is not None or room.get("pm25_sensors") or room.get("pm25_sensor"):
+            result["pm25"] = pm25_val
+            pm25_thresh = float(room.get("air_quality_pm25_threshold") or DEFAULT_PM25_THRESHOLD)
+            pm25_clear = round(pm25_thresh * (DEFAULT_PM25_CLEAR_THRESHOLD / DEFAULT_PM25_THRESHOLD), 1)
+            if self._air_quality.evaluate(
+                area_id, "pm25", pm25_val, pm25_thresh, now, assume_bad=venting, clear_below=pm25_clear
+            ):
+                bad.append("pm25")
+
+        result["air_quality_bad"] = bool(bad)
+        result["air_quality_reason"] = bad[0] if bad else None
+        return result
+
+    async def _async_reconcile_ventilation(
+        self,
+        rooms: dict[str, dict],
+        room_states: dict[str, dict],
+        settings: dict,
+        store: RoomMindStore,
+    ) -> None:
+        """Turn shared/room ventilation entities on for bad air and off when clear."""
+        now = time.time()
+        wanted: dict[str, bool] = {}
+        blocked: set[str] = set()
+        global_active = settings.get("climate_control_active", True)
+        for area_id, room in rooms.items():
+            eid = room.get("ventilation_entity") or ""
+            if not eid or room.get("is_outdoor", False):
+                continue
+            if not (global_active and room.get("climate_control_enabled", True)):
+                continue
+            rs = room_states.get(area_id)
+            if not rs:
+                continue
+            if rs.get("window_open"):
+                blocked.add(eid)
+                continue
+            wanted[eid] = wanted.get(eid, False) or bool(rs.get("air_quality_bad", False))
+        for eid in blocked:
+            wanted.pop(eid, None)
+        await self._ventilation.async_reconcile(wanted, now, blocked=blocked)
+        if self._ventilation.dirty:
+            await store.async_save_settings({"ventilation_state": self._ventilation.get_state()})
+            self._ventilation.dirty = False
+        for area_id, room in rooms.items():
+            eid = room.get("ventilation_entity") or ""
+            if area_id in room_states and eid:
+                room_states[area_id]["ventilation_active"] = self._ventilation.is_running(eid)
 
     def _update_temp_slope(self, area_id: str, temp_c: float | None) -> float | None:
         """Track filtered room temperature slope in °C/h across cycles."""
@@ -2800,6 +2909,8 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if has_covers:
             self._add_entity_platform_room(EntityPlatform.COVER_SWITCH, area_id)
             self._add_entity_platform_room(EntityPlatform.COVER_BINARY_SENSOR, area_id)
+        if has_air_quality_sensor(room):
+            self._add_entity_platform_room(EntityPlatform.AIR_QUALITY_BINARY_SENSOR, area_id)
 
         await self.async_request_refresh()
 
@@ -2834,6 +2945,7 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._ekf_training.remove_room(area_id)
         self._inverter_regime.reset_room(area_id)
         self._coil_dry_manager.remove_room(area_id)
+        self._air_quality.remove_room(area_id)
         self._prev_slope_sample.pop(area_id, None)
         self._pending_predictions.pop(area_id, None)
         self._residual_tracker.remove_room(area_id)
@@ -2863,6 +2975,7 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Known valid suffixes for each condition
         always_valid = ("_target_temp", "_mode", "_override", "_comfort", "_climate_control", "_climate_mode")
         cover_only = ("_cover_auto", "_cover_paused")
+        aq_only = ("_air_quality",)
         # Global entities (not per-room) that should never be cleaned up
         global_uids = {f"{DOMAIN}_vacation", f"{DOMAIN}_climate_control"}
 
@@ -2894,6 +3007,8 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if suffix in always_valid:
                 continue
             if suffix in cover_only and room.get("covers"):
+                continue
+            if suffix in aq_only and has_air_quality_sensor(room):
                 continue
 
             # Entity does not match any valid type — orphaned
@@ -2952,6 +3067,7 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             mold_prevention_delta=mold_prevention_delta,
             tonight_override=tonight_override,
             sleep_device_heating=sleep_device_heating,
+            price_signal=self._price_manager.signal,
         )
 
     def analytics_runtime_snapshot(

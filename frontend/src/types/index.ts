@@ -95,6 +95,15 @@ export interface RoomLiveData {
   coil_dry_entities?: string[];
   preheat?: { mode: RoomMode; target: number } | null;
   occupancy_vacant?: boolean;
+  co2?: number | null;
+  voc?: number | null;
+  pm25?: number | null;
+  air_quality_bad?: boolean;
+  air_quality_reason?: string | null;
+  ventilation_active?: boolean;
+  price_level?: "cheap" | "normal" | "expensive" | null;
+  price_shift_heat?: number;
+  price_shift_cool?: number;
   current_temp: number | null;
   current_temp_raw?: number | null;
   current_humidity: number | null;
@@ -483,6 +492,15 @@ export interface RoomConfig {
   preheat_enabled?: boolean;
   occupancy_eco_enabled?: boolean;
   occupancy_eco_delay_minutes?: number;
+  co2_sensor?: string;
+  co2_threshold?: number;
+  voc_sensor?: string;
+  voc_threshold?: number | null;
+  pm25_sensor?: string;
+  pm25_sensors?: string[];
+  air_quality_pm25_threshold?: number;
+  ventilation_entity?: string;
+  price_shift?: number;
   live?: RoomLiveData;
 }
 
@@ -539,6 +557,7 @@ export interface GlobalSettings {
   mold_prevention_notify_enabled?: boolean;
   mold_prevention_notify_targets?: NotificationTarget[];
   compressor_groups?: CompressorGroup[];
+  price_entity?: string;
   coil_dry_enabled?: boolean;
   coil_dry_minutes?: number;
   coil_dry_mode?: "fan_only" | "dry";
@@ -569,6 +588,7 @@ export interface HomeAssistant {
   entities: Record<string, HassEntityRegistryEntry>;
   devices: Record<string, HassDeviceRegistryEntry>;
   language: string;
+  user?: { is_admin?: boolean };
   config: { unit_system: { temperature: string } };
   connection?: HassConnection;
 }
@@ -668,10 +688,26 @@ export interface AnalyticsDataPoint {
   humidity_primary_available?: boolean;
 }
 
+export interface BacktestFigures {
+  n: number;
+  mae: number | null;
+  rmse?: number | null;
+  bias: number | null;
+}
+
+export interface BacktestData {
+  horizon_minutes: number;
+  overall?: BacktestFigures;
+  idle: BacktestFigures;
+  active: BacktestFigures;
+}
+
 export interface AnalyticsData {
   detail: AnalyticsDataPoint[];
   history: AnalyticsDataPoint[];
   forecast?: AnalyticsDataPoint[];
+  backtest?: BacktestData | null;
+  period_stats?: Record<string, unknown> | null;
   model: {
     confidence: number;
     model: {

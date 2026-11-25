@@ -73,6 +73,12 @@ describe("room config draft", () => {
       preheat_enabled: false,
       occupancy_eco_enabled: true,
       occupancy_eco_delay_minutes: 30,
+      co2_sensor: "sensor.co2",
+      co2_threshold: 1100,
+      pm25_sensors: ["sensor.pm25"],
+      air_quality_pm25_threshold: 35,
+      ventilation_entity: "fan.erv",
+      price_shift: 1.5,
       devices: [
         { entity_id: "climate.radiator", type: "trv", role: "auto", max_setpoint_offset_c: 0 },
         {
@@ -92,6 +98,11 @@ describe("room config draft", () => {
     expect(payload.preheat_enabled).toBe(false);
     expect(payload.occupancy_eco_enabled).toBe(true);
     expect(payload.occupancy_eco_delay_minutes).toBe(30);
+    expect(payload.co2_sensor).toBe("sensor.co2");
+    expect(payload.co2_threshold).toBe(1100);
+    expect(payload.pm25_sensors).toEqual(["sensor.pm25"]);
+    expect(payload.ventilation_entity).toBe("fan.erv");
+    expect(payload.price_shift).toBe(1.5);
     expect(payload.devices).toEqual(draft.devices);
     expect(draft.devices[0]?.max_setpoint_offset_c).toBe(0);
     expect(draft.devices[1]?.coil_dry).toBe("on");

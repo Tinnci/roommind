@@ -93,12 +93,13 @@ async def test_async_setup_entry_creates_entities_for_rooms_with_covers():
 
     await async_setup_entry(hass, entry, async_add_entities)
 
-    coordinator.register_entity_platform.assert_called_once_with(
+    coordinator.register_entity_platform.assert_any_call(
         EntityPlatform.COVER_BINARY_SENSOR,
         async_add_entities,
         create_room_binary_sensors,
         ["living_room"],
     )
+    assert coordinator.register_entity_platform.call_count == 2
     # Only living_room has covers, so one entity created
     async_add_entities.assert_called_once()
     entities = async_add_entities.call_args[0][0]

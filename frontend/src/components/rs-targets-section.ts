@@ -2,7 +2,15 @@ import { LitElement, css, html } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import type { ClimateMode, HomeAssistant } from "../types";
 import { localize } from "../utils/localize";
-import { tempRange, tempStep, tempUnit, toCelsius, toDisplay } from "../utils/temperature";
+import {
+  tempRange,
+  tempStep,
+  tempUnit,
+  toCelsius,
+  toCelsiusDelta,
+  toDisplay,
+  toDisplayDelta,
+} from "../utils/temperature";
 import { inputStyles } from "../styles/input-styles";
 
 @customElement("rs-targets-section")
@@ -14,6 +22,7 @@ export class RsTargetsSection extends LitElement {
   @property({ type: Number }) public ecoHeat = 17.0;
   @property({ type: Number }) public ecoCool = 27.0;
   @property({ type: Boolean }) public preheatEnabled = true;
+  @property({ type: Number }) public priceShift = 0;
 
   static override styles = [
     inputStyles,
@@ -218,6 +227,32 @@ export class RsTargetsSection extends LitElement {
         </label>
         <div class="fallback-hint" style="margin: 4px 0 0 36px">
           ${localize("targets.preheat_enabled_hint", l)}
+        </div>
+      </div>
+      <div class="preheat-row">
+        <ha-textfield
+          type="number"
+          .label=${localize("targets.price_shift", l)}
+          suffix=${tempUnit(this.hass)}
+          .value=${String(toDisplayDelta(this.priceShift, this.hass))}
+          step="0.5"
+          min="0"
+          max=${String(toDisplayDelta(2.0, this.hass))}
+          @change=${(e: Event) => {
+            const raw = parseFloat((e.target as HTMLInputElement).value);
+            if (!Number.isFinite(raw)) return;
+            const celsius = Math.max(0, Math.min(2.0, toCelsiusDelta(raw, this.hass)));
+            this.dispatchEvent(
+              new CustomEvent("price-shift-changed", {
+                detail: { value: Math.round(celsius * 10) / 10 },
+                bubbles: true,
+                composed: true,
+              }),
+            );
+          }}
+        ></ha-textfield>
+        <div class="fallback-hint" style="margin: 6px 0 0">
+          ${localize("targets.price_shift_hint", l)}
         </div>
       </div>
     `;

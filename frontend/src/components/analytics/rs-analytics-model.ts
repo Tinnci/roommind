@@ -270,6 +270,20 @@ export class RsAnalyticsModel extends LitElement {
                   )
                 : nothing
             }
+            ${
+              this.data?.backtest?.overall && this.data.backtest.overall.mae != null
+                ? stat(
+                    "backtest_1h_mae",
+                    "mdi:chart-timeline-variant",
+                    toDisplayDelta(this.data.backtest.overall.mae, this.hass).toFixed(2) +
+                      tempUnit(this.hass) +
+                      ` (n=${this.data.backtest.overall.n})`,
+                    "analytics.backtest_1h_mae",
+                    "",
+                    "analytics.info.backtest_1h_mae",
+                  )
+                : nothing
+            }
           </div>
           ${
             this._expandedStat && statItems.find((s) => s.id === this._expandedStat)

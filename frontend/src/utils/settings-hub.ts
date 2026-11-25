@@ -11,6 +11,7 @@ export type SettingsSectionId =
   | "control"
   | "presence"
   | "vacation"
+  | "price"
   | "valve"
   | "coil_dry"
   | "compressor"
@@ -59,6 +60,13 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = [
     titleKey: "vacation.title",
     descKey: "settings.intro.vacation",
     icon: "mdi:airplane",
+  },
+  {
+    id: "price",
+    category: "automation",
+    titleKey: "settings.price_title",
+    descKey: "settings.intro.price",
+    icon: "mdi:flash-outline",
   },
   {
     id: "compressor",
@@ -149,6 +157,7 @@ export interface SettingsSectionStatusInput {
   presenceEnabled: boolean;
   presencePersonsCount: number;
   vacationActive: boolean;
+  priceEntityConfigured: boolean;
   valveProtectionEnabled: boolean;
   coilDryEnabled: boolean;
   outdoorSensorConfigured: boolean;
@@ -182,6 +191,8 @@ export function getSettingsSectionTone(
         : "neutral";
     case "vacation":
       return input.vacationActive ? "accent" : "neutral";
+    case "price":
+      return input.priceEntityConfigured ? "ok" : "neutral";
     case "valve":
       return input.valveProtectionEnabled ? "ok" : "neutral";
     case "coil_dry":

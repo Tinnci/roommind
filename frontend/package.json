@@ -9,7 +9,7 @@
     "dev:room-detail": "bun --bun vite --host 127.0.0.1 --open /dev/room-detail-preview.html",
     "test": "bun test src/**/*.test.ts",
     "typecheck": "bun --bun tsgo --noEmit && bun --bun tsgo --noEmit -p tsconfig.test.json && bun --bun tsgo --noEmit -p tsconfig.tools.json",
-    "build": "bun run typecheck && bun --bun vite build",
+    "build": "bun run typecheck && bun --bun vite build && bun --bun vite build -c vite.card.config.ts && bun scripts/check-bundles.mjs",
     "preview": "bun --bun vite preview",
     "preview:regression": "bun scripts/preview-regression.ts",
     "lint": "bun --bun eslint src/ scripts/ vite.config.ts",

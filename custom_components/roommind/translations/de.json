@@ -39,6 +39,9 @@
     "binary_sensor": {
       "cover_paused": {
         "name": "{room} Rollosteuerung pausiert"
+      },
+      "air_quality": {
+        "name": "{room} Luftqualität"
       }
     },
     "switch": {

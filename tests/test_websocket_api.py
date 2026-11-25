@@ -165,6 +165,8 @@ async def test_list_rooms_empty(ws_hass, store, connection):
             "coil_dry_fan_mode": "low",
             "coil_dry_min_cooling_minutes": 10,
             "coil_dry_drain_minutes": 0,
+            "price_entity": "",
+            "price_status": None,
         },
     )
 

@@ -209,11 +209,13 @@ export class RsRoomEditDialogRouter extends LitElement {
           .ecoHeat=${draft.ecoHeat}
           .ecoCool=${draft.ecoCool}
           .preheatEnabled=${draft.preheatEnabled}
+          .priceShift=${draft.priceShift}
           @comfort-heat-changed=${this._forward("comfort-heat-changed")}
           @comfort-cool-changed=${this._forward("comfort-cool-changed")}
           @eco-heat-changed=${this._forward("eco-heat-changed")}
           @eco-cool-changed=${this._forward("eco-cool-changed")}
           @preheat-enabled-changed=${this._forward("preheat-enabled-changed")}
+          @price-shift-changed=${this._forward("price-shift-changed")}
         ></rs-targets-section>`;
       case "schedule":
         return html`<rs-schedule-settings
@@ -264,6 +266,13 @@ export class RsRoomEditDialogRouter extends LitElement {
           .occupancySensors=${draft.selectedOccupancySensors}
           .occupancyEcoEnabled=${draft.occupancyEcoEnabled}
           .occupancyEcoDelayMinutes=${draft.occupancyEcoDelayMinutes}
+          .co2Sensor=${draft.co2Sensor}
+          .co2Threshold=${draft.co2Threshold}
+          .vocSensor=${draft.vocSensor}
+          .vocThreshold=${draft.vocThreshold}
+          .pm25Sensors=${draft.selectedPm25Sensors}
+          .pm25Threshold=${draft.pm25Threshold}
+          .ventilationEntity=${draft.ventilationEntity}
           .windowSensors=${draft.selectedWindowSensors}
           .windowOpenDelay=${draft.windowOpenDelay}
           .windowCloseDelay=${draft.windowCloseDelay}

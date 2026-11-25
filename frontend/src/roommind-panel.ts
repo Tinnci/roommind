@@ -35,13 +35,14 @@ import { buildThermostatFleet } from "./utils/thermostat-fleet";
 import "./components/rs-settings";
 import "./components/rs-analytics";
 import "./components/rs-fleet-overview";
+import "./components/schedule/rs-schedule-overview";
 
 const BACK_PATH = "M20,11V13H8L13.5,18.5L12.08,19.92L4.16,12L12.08,4.08L13.5,5.5L8,11H20Z";
 
 const DELETE_PATH =
   "M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z";
 
-type TabId = "areas" | "analytics" | "settings";
+type TabId = "areas" | "schedules" | "analytics" | "settings";
 
 type AreaGroupTone = "attention" | "active" | "normal" | "setup";
 
@@ -847,6 +848,7 @@ export class RoomMindPanel extends LitElement {
 
     const tabLabels: Record<TabId, string> = {
       areas: localize("panel.tab.rooms", l),
+      schedules: localize("tabs.schedules", l),
       analytics: localize("tabs.analytics", l),
       settings: localize("panel.tab.settings", l),
     };
@@ -936,6 +938,11 @@ export class RoomMindPanel extends LitElement {
     switch (this._activeTab) {
       case "areas":
         return this._renderAreas();
+      case "schedules":
+        return html`<rs-schedule-overview
+          .hass=${this.hass}
+          .rooms=${this._rooms}
+        ></rs-schedule-overview>`;
       case "analytics":
         return html`<rs-analytics
           .hass=${this.hass}
@@ -2090,6 +2097,9 @@ export class RoomMindPanel extends LitElement {
       this._activeTab = "analytics";
       this._selectedAreaId = null;
       this._analyticsRoom = decodeURIComponent(path.slice(11));
+    } else if (path === "/schedules") {
+      this._activeTab = "schedules";
+      this._selectedAreaId = null;
     } else if (path === "/analytics") {
       this._activeTab = "analytics";
       this._selectedAreaId = null;

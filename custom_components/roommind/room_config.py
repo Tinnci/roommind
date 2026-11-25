@@ -9,6 +9,7 @@ import voluptuous as vol
 
 from .const import (
     CLIMATE_MODES,
+    DEFAULT_CO2_THRESHOLD,
     DEFAULT_COMFORT_COOL,
     DEFAULT_COMFORT_HEAT,
     DEFAULT_ECO_COOL,
@@ -17,6 +18,12 @@ from .const import (
     DEFAULT_HEAT_SOURCE_OUTDOOR_THRESHOLD,
     DEFAULT_HEAT_SOURCE_PRIMARY_DELTA,
     DEFAULT_OCCUPANCY_ECO_DELAY_MINUTES,
+    DEFAULT_PM25_THRESHOLD,
+    DEFAULT_VOC_THRESHOLD,
+    MAX_CO2_THRESHOLD,
+    MAX_PRICE_SHIFT_K,
+    MIN_CO2_THRESHOLD,
+    VENTILATION_DOMAINS,
 )
 from .utils.device_utils import (
     COIL_DRY_INHERIT,
@@ -104,6 +111,15 @@ ROOM_CONFIG_DEFAULTS: dict[str, object] = {
     "preheat_enabled": True,
     "occupancy_eco_enabled": False,
     "occupancy_eco_delay_minutes": DEFAULT_OCCUPANCY_ECO_DELAY_MINUTES,
+    "co2_sensor": "",
+    "co2_threshold": DEFAULT_CO2_THRESHOLD,
+    "voc_sensor": "",
+    "voc_threshold": DEFAULT_VOC_THRESHOLD,
+    "pm25_sensor": "",
+    "pm25_sensors": [],
+    "air_quality_pm25_threshold": DEFAULT_PM25_THRESHOLD,
+    "ventilation_entity": "",
+    "price_shift": 0.0,
 }
 
 
@@ -271,6 +287,19 @@ ROOM_CONFIG_SCHEMA: dict[vol.Marker, object] = {
     vol.Optional("preheat_enabled"): bool,
     vol.Optional("occupancy_eco_enabled"): bool,
     vol.Optional("occupancy_eco_delay_minutes"): vol.All(vol.Coerce(int), vol.Range(min=1, max=240)),
+    vol.Optional("co2_sensor"): str,
+    vol.Optional("co2_threshold"): vol.All(
+        vol.Coerce(int), vol.Range(min=MIN_CO2_THRESHOLD, max=MAX_CO2_THRESHOLD)
+    ),
+    vol.Optional("voc_sensor"): str,
+    vol.Optional("voc_threshold"): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0.001, max=1e6))),
+    vol.Optional("pm25_sensor"): str,
+    vol.Optional("pm25_sensors"): [str],
+    vol.Optional("air_quality_pm25_threshold"): vol.All(vol.Coerce(float), vol.Range(min=5.0, max=500.0)),
+    vol.Optional("ventilation_entity"): vol.Any(
+        "", vol.All(str, vol.Match(rf"^({'|'.join(VENTILATION_DOMAINS)})\.[a-z0-9_]+$"))
+    ),
+    vol.Optional("price_shift"): vol.All(vol.Coerce(float), vol.Range(min=0.0, max=MAX_PRICE_SHIFT_K)),
     vol.Optional("room_volume_m3"): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0))),
     vol.Optional("control_target"): vol.In(["air_temperature", "perceived_temperature"]),
     vol.Optional("quiet_hours"): vol.Any(
@@ -412,10 +441,25 @@ def normalize_room_config(room: dict) -> dict:
     return room
 
 
+def _normalize_pm25_sources(room: dict) -> None:
+    """Keep pm25_sensor and pm25_sensors synchronized."""
+    sensors: list[str] = []
+    for item in room.get("pm25_sensors", []) or []:
+        eid = item.get("entity_id") if isinstance(item, dict) else item
+        if isinstance(eid, str) and eid and eid not in sensors:
+            sensors.append(eid)
+    primary = room.get("pm25_sensor") or ""
+    if primary and primary not in sensors:
+        sensors.insert(0, primary)
+    room["pm25_sensors"] = sensors
+    room["pm25_sensor"] = sensors[0] if sensors else ""
+
+
 def normalize_room_sensor_sources(room: dict) -> None:
     """Keep primary temperature and humidity sources first and unique."""
     _normalize_sensor_sources(room, primary_key="temperature_sensor", sources_key="temperature_sensors")
     _normalize_sensor_sources(room, primary_key="humidity_sensor", sources_key="humidity_sensors")
+    _normalize_pm25_sources(room)
 
 
 def upsert_room_config(area_id: str, existing: dict | None, changes: dict) -> dict:
@@ -484,6 +528,8 @@ def _merge_room_config(existing: dict, changes: dict) -> dict:
             primary_key="humidity_sensor",
             sources_key="humidity_sensors",
         )
+    if "pm25_sensor" in changes or "pm25_sensors" in changes:
+        _normalize_pm25_sources(existing)
     return existing
 
 

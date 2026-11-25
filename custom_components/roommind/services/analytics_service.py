@@ -20,6 +20,8 @@ from ..control.mpc_controller import (
     check_acs_can_heat,
 )
 from ..utils.target_resolution import ControlTargetPlan, prepare_control_target_plan
+from .analytics_stats import compute_period_stats
+from .model_backtest import backtest
 
 if TYPE_CHECKING:
     from ..coordinator import RoomMindCoordinator
@@ -378,9 +380,25 @@ async def build_analytics_data(
             }
         )
 
+    backtest_figures: dict | None = None
+    source_points = detail if detail else history
+    if runtime and runtime.simulation_context is not None and source_points:
+        bt_res = await hass.async_add_executor_job(
+            backtest,
+            source_points,
+            runtime.simulation_context.model,
+            runtime.simulation_context.estimator.k_window,
+        )
+        backtest_figures = bt_res.figures()
+
+    climate_mode = room_config.get("climate_mode", "auto")
+    period_stats = compute_period_stats(source_points, climate_mode) if source_points else None
+
     return {
         "detail": detail,
         "history": history,
         "model": model_info,
         "forecast": forecast,
+        "backtest": backtest_figures,
+        "period_stats": period_stats,
     }

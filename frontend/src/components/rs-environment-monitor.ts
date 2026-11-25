@@ -594,6 +594,40 @@ export class RsEnvironmentMonitor extends LitElement {
                 }
               </span>
             </div>
+
+            ${
+              live?.co2 != null || live?.voc != null || live?.pm25 != null
+                ? html`
+                    <div class="summary-tile">
+                      <span class="summary-label">${localize("sensors.air_quality_title", l)}</span>
+                      <span
+                        class="summary-value"
+                        data-tone=${live?.air_quality_bad ? "warning" : "info"}
+                      >
+                        <ha-icon icon="mdi:air-filter"></ha-icon>
+                        <span>
+                          ${
+                            live?.pm25 != null
+                              ? `${live.pm25.toFixed(1)} µg/m³`
+                              : live?.co2 != null
+                                ? `${Math.round(live.co2)} ppm`
+                                : `${Math.round(live!.voc!)}`
+                          }
+                        </span>
+                      </span>
+                      <span class="summary-sub">
+                        ${[
+                          live?.co2 != null ? `CO₂ ${Math.round(live.co2)}` : "",
+                          live?.voc != null ? `VOC ${Math.round(live.voc)}` : "",
+                          live?.pm25 != null ? `PM2.5 ${live.pm25.toFixed(1)}` : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
+                    </div>
+                  `
+                : nothing
+            }
           </div>
 
           ${

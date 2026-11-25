@@ -6,6 +6,7 @@ import { localize } from "../utils/localize";
 import { openEntityInfo } from "../utils/events";
 import { tempUnit } from "../utils/temperature";
 import { inputStyles } from "../styles/input-styles";
+import "./shared/rs-entity-picker-field";
 
 type SensorKind = "temp" | "humidity" | "occupancy" | "window";
 
@@ -20,6 +21,13 @@ export class RsSensorSection extends LitElement {
   @property({ attribute: false }) public occupancySensors: Set<string> = new Set();
   @property({ type: Boolean }) public occupancyEcoEnabled = false;
   @property({ type: Number }) public occupancyEcoDelayMinutes = 15;
+  @property({ type: String }) public co2Sensor = "";
+  @property({ type: Number }) public co2Threshold = 1000;
+  @property({ type: String }) public vocSensor = "";
+  @property({ attribute: false }) public vocThreshold: number | null = 250;
+  @property({ attribute: false }) public pm25Sensors: Set<string> = new Set();
+  @property({ type: Number }) public pm25Threshold = 35;
+  @property({ type: String }) public ventilationEntity = "";
   @property({ attribute: false }) public windowSensors: Set<string> = new Set();
   @property({ type: Number }) public windowOpenDelay = 0;
   @property({ type: Number }) public windowCloseDelay = 0;
@@ -890,6 +898,7 @@ export class RsSensorSection extends LitElement {
         selectedCount: this.windowSensors.size,
         extras: this._renderWindowExtras(lang),
       })}
+      ${this._renderAirQualityBlock(lang)}
       ${this._renderGlobalAdd(lang)}
     `;
   }
@@ -1226,6 +1235,127 @@ export class RsSensorSection extends LitElement {
     if (age < 60) return `${Math.round(age)}s`;
     if (age < 3600) return `${Math.round(age / 60)}m`;
     return `${Math.round(age / 3600)}h`;
+  }
+
+  private _emitSensor(key: string, value: unknown) {
+    this.dispatchEvent(
+      new CustomEvent("sensor-changed", {
+        detail: { key, value },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  private _renderAirQualityBlock(lang: string) {
+    const pm25List = [...this.pm25Sensors];
+    return html`
+      <div class="sensor-block">
+        <div class="block-header">
+          <ha-icon icon="mdi:air-filter"></ha-icon>
+          <div class="block-title">${localize("sensors.air_quality_title", lang)}</div>
+        </div>
+        <div class="block-body" style="gap: 10px">
+          <div class="delay-fields" style="align-items: flex-end">
+            <rs-entity-picker-field
+              .hass=${this.hass}
+              .label=${localize("sensors.co2_sensor", lang)}
+              .value=${this.co2Sensor}
+              .includeDomains=${["sensor"]}
+              @value-changed=${(e: CustomEvent<{ value: string }>) =>
+                this._emitSensor("co2_sensor", e.detail.value ?? "")}
+            ></rs-entity-picker-field>
+            ${
+              this.co2Sensor
+                ? html`<ha-textfield
+                    type="number"
+                    min="800"
+                    max="5000"
+                    suffix="ppm"
+                    .label=${localize("sensors.co2_threshold", lang)}
+                    .value=${String(this.co2Threshold)}
+                    @change=${(e: Event) => {
+                      const v = parseInt((e.target as HTMLInputElement).value, 10);
+                      if (!isNaN(v) && v >= 800 && v <= 5000) this._emitSensor("co2_threshold", v);
+                    }}
+                  ></ha-textfield>`
+                : nothing
+            }
+          </div>
+
+          <div class="delay-fields" style="align-items: flex-end">
+            <rs-entity-picker-field
+              .hass=${this.hass}
+              .label=${localize("sensors.voc_sensor", lang)}
+              .value=${this.vocSensor}
+              .includeDomains=${["sensor"]}
+              @value-changed=${(e: CustomEvent<{ value: string }>) =>
+                this._emitSensor("voc_sensor", e.detail.value ?? "")}
+            ></rs-entity-picker-field>
+            ${
+              this.vocSensor
+                ? html`<ha-textfield
+                    type="number"
+                    min="1"
+                    max="10000"
+                    .label=${localize("sensors.voc_threshold", lang)}
+                    .value=${this.vocThreshold === null ? "" : String(this.vocThreshold)}
+                    @change=${(e: Event) => {
+                      const raw = (e.target as HTMLInputElement).value.trim();
+                      if (!raw) {
+                        this._emitSensor("voc_threshold", null);
+                      } else {
+                        const v = parseFloat(raw);
+                        if (Number.isFinite(v) && v > 0) this._emitSensor("voc_threshold", v);
+                      }
+                    }}
+                  ></ha-textfield>`
+                : nothing
+            }
+          </div>
+
+          <div class="delay-fields" style="align-items: flex-end">
+            <rs-entity-picker-field
+              .hass=${this.hass}
+              .label=${localize("sensors.pm25_sensor", lang)}
+              .value=${pm25List[0] ?? ""}
+              .includeDomains=${["sensor"]}
+              @value-changed=${(e: CustomEvent<{ value: string }>) => {
+                const v = e.detail.value ?? "";
+                this._emitSensor("pm25_sensors", v ? [v] : []);
+              }}
+            ></rs-entity-picker-field>
+            ${
+              pm25List.length > 0
+                ? html`<ha-textfield
+                    type="number"
+                    min="5"
+                    max="500"
+                    suffix="µg/m³"
+                    .label=${localize("sensors.pm25_threshold", lang)}
+                    .value=${String(this.pm25Threshold)}
+                    @change=${(e: Event) => {
+                      const v = parseFloat((e.target as HTMLInputElement).value);
+                      if (Number.isFinite(v) && v >= 5 && v <= 500) {
+                        this._emitSensor("air_quality_pm25_threshold", v);
+                      }
+                    }}
+                  ></ha-textfield>`
+                : nothing
+            }
+          </div>
+
+          <rs-entity-picker-field
+            .hass=${this.hass}
+            .label=${localize("sensors.ventilation_entity", lang)}
+            .value=${this.ventilationEntity}
+            .includeDomains=${["fan", "switch", "input_boolean"]}
+            @value-changed=${(e: CustomEvent<{ value: string }>) =>
+              this._emitSensor("ventilation_entity", e.detail.value ?? "")}
+          ></rs-entity-picker-field>
+        </div>
+      </div>
+    `;
   }
 
   private _renderOccupancyExtras(lang: string) {

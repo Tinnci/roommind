@@ -732,6 +732,7 @@ export class RsRoomDetail extends LitElement {
           @eco-heat-changed=${this._onEcoHeatChanged}
           @eco-cool-changed=${this._onEcoCoolChanged}
           @preheat-enabled-changed=${this._onPreheatEnabledChanged}
+          @price-shift-changed=${this._onPriceShiftChanged}
           @device-changed=${this._onDeviceChanged}
           @setback-offset-changed=${this._onSetbackOffsetChanged}
           @follow-thermostat-dial-changed=${this._onFollowThermostatDialChanged}
@@ -874,6 +875,11 @@ export class RsRoomDetail extends LitElement {
     this._autoSave();
   }
 
+  private _onPriceShiftChanged(e: CustomEvent<{ value: number }>) {
+    this._patchDraft({ priceShift: e.detail.value });
+    this._autoSave();
+  }
+
   private _onAirflowDevicesChanged(e: CustomEvent<{ devices: AirflowDeviceConfig[] }>) {
     this._airflowDevices = e.detail.devices;
     this._autoSave();
@@ -937,6 +943,41 @@ export class RsRoomDetail extends LitElement {
     }
     if (key === "occupancy_eco_delay_minutes") {
       this._patchDraft({ occupancyEcoDelayMinutes: Number(value) });
+      this._autoSave();
+      return;
+    }
+    if (key === "co2_sensor") {
+      this._patchDraft({ co2Sensor: String(value ?? "") });
+      this._autoSave();
+      return;
+    }
+    if (key === "co2_threshold") {
+      this._patchDraft({ co2Threshold: Number(value) });
+      this._autoSave();
+      return;
+    }
+    if (key === "voc_sensor") {
+      this._patchDraft({ vocSensor: String(value ?? "") });
+      this._autoSave();
+      return;
+    }
+    if (key === "voc_threshold") {
+      this._patchDraft({ vocThreshold: value === null ? null : Number(value) });
+      this._autoSave();
+      return;
+    }
+    if (key === "pm25_sensors") {
+      this._patchDraft({ selectedPm25Sensors: new Set(value as string[]) });
+      this._autoSave();
+      return;
+    }
+    if (key === "air_quality_pm25_threshold") {
+      this._patchDraft({ pm25Threshold: Number(value) });
+      this._autoSave();
+      return;
+    }
+    if (key === "ventilation_entity") {
+      this._patchDraft({ ventilationEntity: String(value ?? "") });
       this._autoSave();
       return;
     }

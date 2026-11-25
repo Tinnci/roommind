@@ -9,7 +9,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .coordinator import EntityPlatform, RoomMindCoordinator
+from .coordinator import EntityPlatform, RoomMindCoordinator, has_air_quality_sensor
 from .utils.device_info import room_device_info
 from .utils.entity_translation import room_translation_placeholders
 
@@ -18,8 +18,16 @@ def create_room_binary_sensors(
     coordinator: RoomMindCoordinator,
     area_id: str,
 ) -> list[BinarySensorEntity]:
-    """Create binary sensor entities for a room."""
+    """Create binary sensor entities for a room with covers."""
     return [RoomMindCoverPausedSensor(coordinator, area_id)]
+
+
+def create_room_air_quality_sensors(
+    coordinator: RoomMindCoordinator,
+    area_id: str,
+) -> list[BinarySensorEntity]:
+    """Create air quality binary sensor for a room with AQ sensors."""
+    return [RoomMindAirQualitySensor(coordinator, area_id)]
 
 
 async def async_setup_entry(
@@ -37,10 +45,18 @@ async def async_setup_entry(
         create_room_binary_sensors,
         [area_id for area_id, room in rooms.items() if room.get("covers")],
     )
+    coordinator.register_entity_platform(
+        EntityPlatform.AIR_QUALITY_BINARY_SENSOR,
+        async_add_entities,
+        create_room_air_quality_sensors,
+        [area_id for area_id, room in rooms.items() if has_air_quality_sensor(room)],
+    )
     entities: list[BinarySensorEntity] = []
     for area_id, room in rooms.items():
         if room.get("covers"):
             entities.extend(create_room_binary_sensors(coordinator, area_id))
+        if has_air_quality_sensor(room):
+            entities.extend(create_room_air_quality_sensors(coordinator, area_id))
     if entities:
         async_add_entities(entities)
 
@@ -67,3 +83,45 @@ class RoomMindCoverPausedSensor(CoordinatorEntity, BinarySensorEntity):
             return False
         room = self.coordinator.data.get("rooms", {}).get(self._area_id)
         return bool(room.get("cover_auto_paused", False)) if room else False
+
+
+class RoomMindAirQualitySensor(CoordinatorEntity, BinarySensorEntity):
+    """On while the room's air is bad (CO2, VOC, or PM2.5 past threshold)."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "air_quality"
+    _attr_icon = "mdi:molecule-co2"
+
+    def __init__(self, coordinator: RoomMindCoordinator, area_id: str) -> None:
+        super().__init__(coordinator)
+        self._area_id = area_id
+        self._attr_unique_id = f"{DOMAIN}_{area_id}_air_quality"
+        self._attr_translation_placeholders = room_translation_placeholders(coordinator, area_id)
+        self._attr_device_info = room_device_info(coordinator, area_id)
+        self.entity_id = f"binary_sensor.{DOMAIN}_{area_id}_air_quality"
+
+    def _live(self) -> dict:
+        return ((self.coordinator.data or {}).get("rooms") or {}).get(self._area_id) or {}
+
+    @property
+    def available(self) -> bool:
+        """Unavailable while no air quality sensor delivers a reading."""
+        live = self._live()
+        return super().available and (
+            live.get("co2") is not None or live.get("voc") is not None or live.get("pm25") is not None
+        )
+
+    @property
+    def is_on(self) -> bool:
+        return bool(self._live().get("air_quality_bad", False))
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        live = self._live()
+        return {
+            "co2": live.get("co2"),
+            "voc": live.get("voc"),
+            "pm25": live.get("pm25"),
+            "reason": live.get("air_quality_reason"),
+            "ventilation_active": live.get("ventilation_active", False),
+        }

@@ -73,6 +73,14 @@ export interface RoomConfigDraft {
   preheatEnabled: boolean;
   occupancyEcoEnabled: boolean;
   occupancyEcoDelayMinutes: number;
+  co2Sensor: string;
+  co2Threshold: number;
+  vocSensor: string;
+  vocThreshold: number | null;
+  selectedPm25Sensors: Set<string>;
+  pm25Threshold: number;
+  ventilationEntity: string;
+  priceShift: number;
   heatSourceOrchestration: boolean;
   heatSourcePrimaryDelta: number;
   heatSourceOutdoorThreshold: number;
@@ -142,6 +150,14 @@ export function createEmptyRoomConfigDraft(): RoomConfigDraft {
     preheatEnabled: true,
     occupancyEcoEnabled: false,
     occupancyEcoDelayMinutes: 15,
+    co2Sensor: "",
+    co2Threshold: 1000,
+    vocSensor: "",
+    vocThreshold: 250,
+    selectedPm25Sensors: new Set(),
+    pm25Threshold: 35,
+    ventilationEntity: "",
+    priceShift: 0,
     heatSourceOrchestration: false,
     heatSourcePrimaryDelta: 1.5,
     heatSourceOutdoorThreshold: 5.0,
@@ -252,6 +268,20 @@ export function createRoomConfigDraft(config: RoomConfig | null): RoomConfigDraf
   draft.preheatEnabled = config.preheat_enabled ?? true;
   draft.occupancyEcoEnabled = config.occupancy_eco_enabled ?? false;
   draft.occupancyEcoDelayMinutes = config.occupancy_eco_delay_minutes ?? 15;
+  draft.co2Sensor = config.co2_sensor ?? "";
+  draft.co2Threshold = config.co2_threshold ?? 1000;
+  draft.vocSensor = config.voc_sensor ?? "";
+  draft.vocThreshold = config.voc_threshold === undefined ? 250 : config.voc_threshold;
+  draft.selectedPm25Sensors = new Set(
+    config.pm25_sensors?.length
+      ? config.pm25_sensors
+      : config.pm25_sensor
+        ? [config.pm25_sensor]
+        : [],
+  );
+  draft.pm25Threshold = config.air_quality_pm25_threshold ?? 35;
+  draft.ventilationEntity = config.ventilation_entity ?? "";
+  draft.priceShift = config.price_shift ?? 0;
   draft.heatSourceOrchestration = config.heat_source_orchestration ?? false;
   draft.heatSourcePrimaryDelta = config.heat_source_primary_delta ?? 1.5;
   draft.heatSourceOutdoorThreshold = config.heat_source_outdoor_threshold ?? 5.0;
@@ -570,6 +600,15 @@ export function buildRoomSavePayload(
     preheat_enabled: draft.preheatEnabled,
     occupancy_eco_enabled: draft.occupancyEcoEnabled,
     occupancy_eco_delay_minutes: draft.occupancyEcoDelayMinutes,
+    co2_sensor: draft.co2Sensor,
+    co2_threshold: draft.co2Threshold,
+    voc_sensor: draft.vocSensor,
+    voc_threshold: draft.vocThreshold,
+    pm25_sensor: [...draft.selectedPm25Sensors][0] ?? "",
+    pm25_sensors: [...draft.selectedPm25Sensors],
+    air_quality_pm25_threshold: draft.pm25Threshold,
+    ventilation_entity: draft.ventilationEntity,
+    price_shift: draft.priceShift,
     covers_auto_enabled: draft.coversAutoEnabled,
     covers_deploy_threshold: draft.coversDeployThreshold,
     covers_min_position: draft.coversMinPosition,

@@ -35,6 +35,7 @@ import "./settings/rs-settings-sensors";
 import "./settings/rs-settings-control";
 import "./settings/rs-settings-presence";
 import "./settings/rs-settings-vacation";
+import "./settings/rs-settings-price";
 import "./settings/rs-settings-valve";
 import "./settings/rs-settings-coil-dry";
 import "./settings/rs-settings-compressor";
@@ -72,6 +73,7 @@ export class RsSettings extends LitElement {
   @state() private _scheduleOffAction: "eco" | "off" = "eco";
   @state() private _valveProtectionEnabled = false;
   @state() private _valveProtectionInterval = 7;
+  @state() private _priceEntity = "";
   @state() private _coilDryEnabled = false;
   @state() private _coilDryMinutes = 20;
   @state() private _coilDryMode: "fan_only" | "dry" = "fan_only";
@@ -140,6 +142,7 @@ export class RsSettings extends LitElement {
       this._scheduleOffAction = s.schedule_off_action ?? "eco";
       this._valveProtectionEnabled = s.valve_protection_enabled ?? false;
       this._valveProtectionInterval = s.valve_protection_interval_days ?? 7;
+      this._priceEntity = s.price_entity ?? "";
       this._coilDryEnabled = s.coil_dry_enabled ?? false;
       this._coilDryMinutes = s.coil_dry_minutes ?? 20;
       this._coilDryMode = s.coil_dry_mode ?? "fan_only";
@@ -413,6 +416,12 @@ export class RsSettings extends LitElement {
           .vacationUntil=${this._vacationUntil}
           @setting-changed=${this._onSettingChanged}
         ></rs-settings-vacation>`;
+      case "price":
+        return html`<rs-settings-price
+          .hass=${this.hass}
+          .priceEntity=${this._priceEntity}
+          @setting-changed=${this._onSettingChanged}
+        ></rs-settings-price>`;
       case "valve":
         return html`<rs-settings-valve
           .hass=${this.hass}
@@ -486,6 +495,7 @@ export class RsSettings extends LitElement {
       presenceEnabled: this._presenceEnabled,
       presencePersonsCount: this._presencePersons.filter(Boolean).length,
       vacationActive: this._vacationActive,
+      priceEntityConfigured: Boolean(this._priceEntity),
       valveProtectionEnabled: this._valveProtectionEnabled,
       coilDryEnabled: this._coilDryEnabled,
       outdoorSensorConfigured: Boolean(this._outdoorTempSensor),
@@ -510,6 +520,8 @@ export class RsSettings extends LitElement {
         return this._presenceSummary(lang);
       case "vacation":
         return this._vacationSummary(lang);
+      case "price":
+        return this._priceSummary(lang);
       case "valve":
         return this._valveSummary(lang);
       case "coil_dry":
@@ -632,6 +644,12 @@ export class RsSettings extends LitElement {
     });
   }
 
+  private _priceSummary(lang: string): string {
+    return this._priceEntity
+      ? localize("settings.summary.on", lang)
+      : localize("settings.summary.off", lang);
+  }
+
   private _compressorSummary(lang: string): string {
     const groups = this._compressorGroups.filter((group) => group.members.length > 0).length;
     return groups > 0
@@ -745,6 +763,7 @@ export class RsSettings extends LitElement {
         schedule_off_action: this._scheduleOffAction,
         valve_protection_enabled: this._valveProtectionEnabled,
         valve_protection_interval_days: this._valveProtectionInterval,
+        price_entity: this._priceEntity,
         coil_dry_enabled: this._coilDryEnabled,
         coil_dry_minutes: this._coilDryMinutes,
         coil_dry_mode: this._coilDryMode,

@@ -39,6 +39,9 @@
     "binary_sensor": {
       "cover_paused": {
         "name": "{room} cover paused"
+      },
+      "air_quality": {
+        "name": "{room} air quality"
       }
     },
     "switch": {

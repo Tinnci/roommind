@@ -33,6 +33,7 @@ SETTINGS_SCHEMA: dict[vol.Marker, object] = {
     vol.Optional("weather_entity"): str,
     vol.Optional("outdoor_unavailable_notify"): bool,
     vol.Optional("climate_control_active"): bool,
+    vol.Optional("price_entity"): str,
     vol.Optional("learning_disabled_rooms"): [str],
     vol.Optional("hidden_rooms"): [str],
     vol.Optional("prediction_enabled"): bool,

@@ -201,6 +201,15 @@ def _build_rooms_list_payload(hass: HomeAssistant) -> dict:
                 "coil_dry_entities": live.get("coil_dry_entities", []),
                 "preheat": live.get("preheat"),
                 "occupancy_vacant": live.get("occupancy_vacant", False),
+                "co2": live.get("co2"),
+                "voc": live.get("voc"),
+                "pm25": live.get("pm25"),
+                "air_quality_bad": live.get("air_quality_bad", False),
+                "air_quality_reason": live.get("air_quality_reason"),
+                "ventilation_active": live.get("ventilation_active", False),
+                "price_level": live.get("price_level"),
+                "price_shift_heat": live.get("price_shift_heat", 0.0),
+                "price_shift_cool": live.get("price_shift_cool", 0.0),
                 "window_open": live.get("window_open", False),
                 **build_override_live(
                     room_config,
@@ -277,6 +286,8 @@ def _build_rooms_list_payload(hass: HomeAssistant) -> dict:
             "coil_dry_min_cooling_minutes", DEFAULT_COIL_DRY_MIN_COOLING_MINUTES
         ),
         "coil_dry_drain_minutes": settings.get("coil_dry_drain_minutes", DEFAULT_COIL_DRY_DRAIN_MINUTES),
+        "price_entity": settings.get("price_entity", ""),
+        "price_status": coordinator.price_status() if coordinator else None,
     }
 
 

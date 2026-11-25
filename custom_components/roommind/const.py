@@ -74,6 +74,22 @@ DEVICE_SETPOINT_GAP_SECONDS = 300
 SCHEDULE_UNREADABLE_HOLD_HOURS = 6
 DEFAULT_OCCUPANCY_ECO_DELAY_MINUTES = 15
 
+# Peak-valley electricity price shift limit (K)
+MIN_TARGET_TEMP = 5.0
+MAX_TARGET_TEMP = 35.0
+MAX_PRICE_SHIFT_K = 2.0
+
+# Air quality monitoring & ventilation
+DEFAULT_CO2_THRESHOLD = 1000
+MIN_CO2_THRESHOLD = 800
+MAX_CO2_THRESHOLD = 5000
+DEFAULT_VOC_THRESHOLD = 250.0
+DEFAULT_PM25_THRESHOLD = 35.0
+DEFAULT_PM25_CLEAR_THRESHOLD = 25.0
+AIR_QUALITY_CLEAR_FACTOR = 0.8
+VENTILATION_DOMAINS = ("fan", "switch", "input_boolean")
+VENTILATION_MIN_RUN_MINUTES = 15
+
 
 def make_roommind_context() -> Context:
     """Create a HA Context tagged as originating from RoomMind."""

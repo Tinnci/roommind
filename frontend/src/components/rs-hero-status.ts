@@ -911,6 +911,31 @@ export class RsHeroStatus extends LitElement {
                           : nothing
                       }
                       ${
+                        live?.air_quality_bad
+                          ? html`<span class="reason-pill" data-tone="warning">
+                              ${localize("hero.air_quality_bad", l, {
+                                reason: (live.air_quality_reason ?? "AQ").toUpperCase(),
+                              })}
+                            </span>`
+                          : nothing
+                      }
+                      ${
+                        live?.ventilation_active
+                          ? html`<span class="reason-pill" data-tone="info">
+                              ${localize("hero.ventilation_active", l)}
+                            </span>`
+                          : nothing
+                      }
+                      ${
+                        (live?.price_shift_heat ?? 0) !== 0 || (live?.price_shift_cool ?? 0) !== 0
+                          ? html`<span class="reason-pill" data-tone="accent">
+                              ${localize("hero.price_shift", l, {
+                                level: live?.price_level ?? "",
+                              })}
+                            </span>`
+                          : nothing
+                      }
+                      ${
                         this.config
                           ? html`
                               <button

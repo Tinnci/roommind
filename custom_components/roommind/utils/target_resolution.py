@@ -29,10 +29,12 @@ from .night_utils import (
     wrap_target_resolver_for_sleep_ramp,
 )
 from .presence_utils import is_presence_away, is_room_vacant
+from .price_utils import PriceSignal
 from .schedule_utils import (
     apply_mold_prevention_to_targets,
     get_active_schedule_entity,
     make_target_resolver,
+    price_shifted,
     read_schedule_blocks,
     resolve_targets_at_time,
     resolve_targets_from_schedule_data,
@@ -48,6 +50,9 @@ class TargetResolutionResult:
     clear_expired_override: bool = False
     clear_expired_vacation: bool = False
     occupancy_vacant: bool = False
+    price_level: str | None = None
+    price_shift_heat: float = 0.0
+    price_shift_cool: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +72,9 @@ class ControlTargetPlan:
     clear_expired_override: bool = False
     clear_expired_vacation: bool = False
     occupancy_vacant: bool = False
+    price_level: str | None = None
+    price_shift_heat: float = 0.0
+    price_shift_cool: float = 0.0
 
 
 def _cap_vacant(room: dict[str, Any], targets: TargetTemps) -> TargetTemps:
@@ -99,6 +107,7 @@ async def prepare_control_target_plan(
     now: float | None = None,
     tonight_override: str | None = None,
     sleep_device_heating: bool = False,
+    price_signal: PriceSignal | None = None,
 ) -> ControlTargetPlan:
     """Resolve effective current and future targets through one policy chain.
 
@@ -134,7 +143,16 @@ async def prepare_control_target_plan(
     )
 
     effective_mold_delta = mold_prevention_delta if mold_prevention_active else 0.0
-    targets = apply_mold_prevention_to_targets(base.targets, room, effective_mold_delta)
+    shifted_targets, (shift_heat, shift_cool) = price_shifted(
+        base.targets,
+        resolved_at,
+        room,
+        settings,
+        price_signal,
+        presence_away=presence_away,
+        room_vacant=occupancy_vacant,
+    )
+    targets = apply_mold_prevention_to_targets(shifted_targets, room, effective_mold_delta)
     resolver = make_target_resolver(
         schedule_blocks,
         room,
@@ -142,6 +160,8 @@ async def prepare_control_target_plan(
         presence_away=presence_away,
         mold_prevention_delta=effective_mold_delta,
         block_temp_converter=converter,
+        room_vacant=occupancy_vacant,
+        price_signal=price_signal,
     )
 
     resolved_local_time = datetime.fromtimestamp(resolved_at, tz=dt_util.DEFAULT_TIME_ZONE)
@@ -181,6 +201,9 @@ async def prepare_control_target_plan(
         clear_expired_override=base.clear_expired_override,
         clear_expired_vacation=base.clear_expired_vacation,
         occupancy_vacant=occupancy_vacant,
+        price_level=price_signal.level_at(resolved_at) if price_signal is not None else None,
+        price_shift_heat=shift_heat,
+        price_shift_cool=shift_cool,
     )
 
 

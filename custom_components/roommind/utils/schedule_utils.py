@@ -21,6 +21,7 @@ from ..const import (
     SCHEDULE_UNREADABLE_HOLD_HOURS,
     TargetTemps,
 )
+from .price_utils import PriceSignal, apply_price_shift
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -312,6 +313,50 @@ async def read_schedule_blocks(
     return None
 
 
+def schedule_sets_target(
+    ts: float,
+    room: dict,
+    settings: dict,
+    *,
+    presence_away: bool,
+    room_vacant: bool,
+) -> bool:
+    """Return True when normal schedule/comfort/eco controls the room at ``ts``."""
+    if presence_away or room_vacant:
+        return False
+    vacation_until = settings.get("vacation_until")
+    if vacation_until is not None and settings.get("vacation_temp") is not None and ts < vacation_until:
+        return False
+    if room.get("override_temp") is None:
+        return True
+    override_until = room.get("override_until")
+    return override_until is not None and ts >= override_until
+
+
+def price_shifted(
+    targets: TargetTemps,
+    ts: float,
+    room: dict,
+    settings: dict,
+    price_signal: PriceSignal | None,
+    *,
+    presence_away: bool,
+    room_vacant: bool,
+) -> tuple[TargetTemps, tuple[float, float]]:
+    """Shift targets with electricity price and return (shifted, (delta_heat, delta_cool))."""
+    shift = float(room.get("price_shift") or 0.0)
+    if price_signal is None or shift <= 0 or room.get("is_outdoor"):
+        return targets, (0.0, 0.0)
+    if not schedule_sets_target(ts, room, settings, presence_away=presence_away, room_vacant=room_vacant):
+        return targets, (0.0, 0.0)
+    shifted = apply_price_shift(targets, price_signal.direction_at(ts), shift)
+
+    def delta(new: float | None, old: float | None) -> float:
+        return round(new - old, 3) if new is not None and old is not None else 0.0
+
+    return shifted, (delta(shifted.heat, targets.heat), delta(shifted.cool, targets.cool))
+
+
 def make_target_resolver(
     schedule_blocks: dict | None,
     room: dict,
@@ -320,6 +365,8 @@ def make_target_resolver(
     presence_away: bool = False,
     mold_prevention_delta: float = 0.0,
     block_temp_converter: Callable[[float], float] | None = None,
+    room_vacant: bool = False,
+    price_signal: PriceSignal | None = None,
 ) -> Callable[[float], TargetTemps]:
     """Create a sync target resolver function (schedule blocks pre-fetched).
 
@@ -361,6 +408,15 @@ def make_target_resolver(
             presence_away_action=presence_away_action,
             schedule_off_action=schedule_off_action,
             presence_clears_override=presence_clears_override,
+        )
+        targets, _ = price_shifted(
+            targets,
+            ts,
+            room,
+            settings,
+            price_signal,
+            presence_away=presence_away,
+            room_vacant=room_vacant,
         )
         return apply_mold_prevention_to_targets(
             targets,

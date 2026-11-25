@@ -39,6 +39,9 @@
     "binary_sensor": {
       "cover_paused": {
         "name": "{room} 窗帘控制已暂停"
+      },
+      "air_quality": {
+        "name": "{room} 空气质量"
       }
     },
     "switch": {

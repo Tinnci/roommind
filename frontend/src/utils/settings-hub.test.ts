@@ -7,13 +7,14 @@ import {
 } from "./settings-hub";
 
 describe("settings-hub", () => {
-  it("contains all 12 global settings sections across categories", () => {
-    expect(SETTINGS_SECTIONS).toHaveLength(12);
-    expect(filterSettingsSections("all")).toHaveLength(12);
+  it("contains all 13 global settings sections across categories", () => {
+    expect(SETTINGS_SECTIONS).toHaveLength(13);
+    expect(filterSettingsSections("all")).toHaveLength(13);
     expect(filterSettingsSections("automation").map((s) => s.id)).toEqual([
       "control",
       "presence",
       "vacation",
+      "price",
       "compressor",
     ]);
     expect(filterSettingsSections("hardware").map((s) => s.id)).toEqual([
@@ -42,6 +43,7 @@ describe("settings-hub", () => {
       presenceEnabled: true,
       presencePersonsCount: 2,
       vacationActive: false,
+      priceEntityConfigured: false,
       valveProtectionEnabled: true,
       coilDryEnabled: false,
       outdoorSensorConfigured: true,
