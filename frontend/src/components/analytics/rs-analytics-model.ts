@@ -301,10 +301,10 @@ export class RsAnalyticsModel extends LitElement {
       }
 
       ha-card {
-        border-radius: var(--roommind-radius-card, 12px);
+        border-radius: var(--roommind-radius-card, 14px);
         border: var(--roommind-border-subtle, 1px solid var(--divider-color));
         background: var(--roommind-surface, var(--card-background-color));
-        box-shadow: none;
+        box-shadow: var(--roommind-shadow-card, none);
       }
 
       .card-header {
@@ -471,8 +471,8 @@ export class RsAnalyticsModel extends LitElement {
       .model-stat {
         display: grid;
         gap: 6px;
-        padding: 10px 12px;
-        border-radius: var(--roommind-radius-control, 8px);
+        padding: 11px 13px;
+        border-radius: 10px;
         border: var(--roommind-border-faint, 1px solid var(--divider-color));
         background: var(--roommind-surface-subtle);
         text-align: left;

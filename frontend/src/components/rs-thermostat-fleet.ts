@@ -52,8 +52,9 @@ export class RsThermostatFleet extends LitElement {
     .fleet-card {
       background: var(--roommind-surface, var(--card-background-color));
       border: var(--roommind-border-subtle, 1px solid var(--divider-color));
-      border-radius: var(--roommind-radius-card, 12px);
-      padding: 12px 16px;
+      border-radius: var(--roommind-radius-card, 14px);
+      box-shadow: var(--roommind-shadow-card, none);
+      padding: 14px 16px;
     }
 
     .fleet-header {
@@ -124,8 +125,8 @@ export class RsThermostatFleet extends LitElement {
       display: flex;
       flex-direction: column;
       gap: 6px;
-      padding: 10px 12px;
-      border-radius: var(--roommind-radius-control, 8px);
+      padding: 11px 13px;
+      border-radius: 10px;
       background: var(--roommind-surface-subtle, rgba(0, 0, 0, 0.02));
       border: var(--roommind-border-faint, 1px solid rgba(0, 0, 0, 0.08));
       border-left: 3px solid var(--divider-color, rgba(0, 0, 0, 0.14));
@@ -133,12 +134,23 @@ export class RsThermostatFleet extends LitElement {
       transition:
         border-color 0.18s ease,
         background 0.18s ease,
+        box-shadow 0.18s ease,
         transform 0.18s ease;
     }
 
     .unit-card:hover {
-      border-color: rgba(var(--rgb-primary-color, 3, 169, 244), 0.35);
+      border-color: var(
+        --roommind-card-border-hover,
+        rgba(var(--rgb-primary-color, 3, 169, 244), 0.35)
+      );
+      box-shadow: var(--roommind-shadow-card, none);
       transform: translateY(-1px);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .unit-card:hover {
+        transform: none;
+      }
     }
 
     .unit-card:focus-visible {

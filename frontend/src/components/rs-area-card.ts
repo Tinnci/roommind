@@ -46,6 +46,7 @@ export class RsAreaCard extends LitElement {
 
       ha-card {
         --room-glow: transparent;
+        --room-stripe: transparent;
         cursor: pointer;
         touch-action: manipulation;
         transition:
@@ -58,28 +59,45 @@ export class RsAreaCard extends LitElement {
         box-sizing: border-box;
         border-radius: var(--roommind-radius-card);
         border: var(--roommind-border-subtle);
-        box-shadow: none;
+        box-shadow: var(--roommind-shadow-card, none);
         background:
           radial-gradient(ellipse at top right, var(--room-glow), transparent 70%),
           var(--roommind-surface);
       }
 
+      ha-card::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: var(--room-stripe);
+        pointer-events: none;
+      }
+
       ha-card[data-activity="heating"] {
         --room-glow: color-mix(in srgb, var(--roommind-warning-color) 10%, transparent);
+        --room-stripe: var(--roommind-warning-color);
       }
 
       ha-card[data-activity="cooling"],
       ha-card[data-activity="dry"] {
         --room-glow: color-mix(in srgb, var(--roommind-info-color) 10%, transparent);
+        --room-stripe: var(--roommind-info-color);
       }
 
       ha-card[data-activity="fan_only"] {
         --room-glow: color-mix(in srgb, var(--roommind-success-color) 9%, transparent);
+        --room-stripe: var(--roommind-success-color);
       }
 
       ha-card:hover {
-        border-color: rgba(var(--rgb-primary-color, 3, 169, 244), 0.34);
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        border-color: var(
+          --roommind-card-border-hover,
+          rgba(var(--rgb-primary-color, 3, 169, 244), 0.34)
+        );
+        box-shadow: var(--roommind-shadow-card-hover, 0 2px 10px rgba(0, 0, 0, 0.08));
         transform: translateY(-1px);
       }
 
@@ -92,61 +110,70 @@ export class RsAreaCard extends LitElement {
         outline-offset: 3px;
       }
 
-      .hide-btn {
-        --mdc-icon-button-size: 28px;
-        --mdc-icon-size: 16px;
+      .header-hide-btn,
+      .quick-hide-btn {
+        --mdc-icon-button-size: 26px;
+        --mdc-icon-size: 15px;
         color: var(--secondary-text-color);
-        opacity: 0;
-        transition: opacity var(--roommind-motion-duration) ease;
-        position: absolute;
-        top: 8px;
-        right: 8px;
+        opacity: 0.35;
+        transition:
+          opacity var(--roommind-motion-duration) ease,
+          color var(--roommind-motion-duration) ease;
+        flex: 0 0 auto;
       }
 
-      ha-card:hover .hide-btn,
-      ha-card:focus-within .hide-btn {
-        opacity: 0.4;
+      .header-hide-btn {
+        margin: -3px -6px 0 0;
       }
 
-      .hide-btn:hover {
+      ha-card:hover .header-hide-btn,
+      ha-card:hover .quick-hide-btn,
+      ha-card:focus-within .header-hide-btn,
+      ha-card:focus-within .quick-hide-btn {
+        opacity: 0.65;
+      }
+
+      .header-hide-btn:hover,
+      .quick-hide-btn:hover {
         opacity: 1 !important;
+        color: var(--primary-text-color);
       }
 
       .card-inner {
-        padding: 14px 16px 12px;
+        padding: 15px 16px 12px;
         display: flex;
         flex-direction: column;
         height: 100%;
         box-sizing: border-box;
       }
 
-      /* Header row: name + badges */
+      /* Header row: title stack + mode pill */
       .card-header {
         display: flex;
         align-items: flex-start;
         justify-content: space-between;
-        gap: 8px;
+        gap: 10px;
         min-width: 0;
       }
 
+      .title-stack {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+
       .area-name {
-        font-size: 16px;
-        font-weight: 600;
+        font-size: 15.5px;
+        font-weight: 650;
         color: var(--primary-text-color);
         margin: 0;
         min-width: 0;
         line-height: 1.25;
         overflow-wrap: anywhere;
         white-space: normal;
-      }
-
-      .header-pills {
-        display: flex;
-        align-items: center;
-        justify-content: flex-end;
-        flex-wrap: wrap;
-        gap: 5px;
-        flex: 0 1 auto;
       }
 
       .reason-pill {
@@ -257,42 +284,32 @@ export class RsAreaCard extends LitElement {
         color: var(--primary-text-color);
       }
 
-      .delta-line {
-        display: flex;
+      .delta-chip {
+        display: inline-flex;
         align-items: center;
-        gap: 6px;
-        min-width: 0;
-        min-height: 26px;
-        margin-top: 10px;
-        padding: 4px 9px;
-        border-radius: 8px;
-        font-size: 12px;
-        font-weight: 500;
-        line-height: 1.3;
-        background: var(--roommind-tile-surface);
+        gap: 4px;
+        margin-top: 4px;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1.25;
         color: var(--secondary-text-color);
-        box-sizing: border-box;
-        overflow-wrap: anywhere;
+        --mdc-icon-size: 13px;
       }
 
-      .delta-line ha-icon {
-        --mdc-icon-size: 15px;
+      .delta-chip ha-icon {
         flex: 0 0 auto;
       }
 
-      .delta-line.below {
+      .delta-chip.below {
         color: var(--roommind-warning-color);
-        background: var(--roommind-warning-tint);
       }
 
-      .delta-line.above {
+      .delta-chip.above {
         color: var(--roommind-info-color);
-        background: var(--roommind-info-tint);
       }
 
-      .delta-line.on-target {
+      .delta-chip.on-target {
         color: var(--roommind-success-color);
-        background: var(--roommind-success-tint);
       }
 
       /* Footer row: humidity + MPC status */
@@ -531,14 +548,57 @@ export class RsAreaCard extends LitElement {
         justify-content: space-between;
         gap: 8px;
         margin-top: auto;
-        padding-top: 8px;
+        padding-top: 9px;
         border-top: var(--roommind-border-faint, 1px solid rgba(0, 0, 0, 0.06));
       }
 
       .quick-actions-left {
         display: inline-flex;
         align-items: center;
+        gap: 6px;
+      }
+
+      .quick-actions-right {
+        display: inline-flex;
+        align-items: center;
         gap: 4px;
+      }
+
+      .stepper-group {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 8px;
+        border: var(--roommind-border-subtle);
+        background: var(--roommind-tile-surface, var(--secondary-background-color));
+        overflow: hidden;
+      }
+
+      .stepper-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 28px;
+        height: 26px;
+        padding: 0 6px;
+        border: none;
+        background: transparent;
+        color: var(--primary-text-color);
+        font-family: inherit;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+        transition:
+          background 0.12s ease,
+          color 0.12s ease;
+      }
+
+      .stepper-btn + .stepper-btn {
+        border-left: var(--roommind-border-faint, 1px solid rgba(0, 0, 0, 0.08));
+      }
+
+      .stepper-btn:hover {
+        background: var(--roommind-primary-muted, rgba(3, 169, 244, 0.1));
+        color: var(--primary-color);
       }
 
       .quick-btn {
@@ -547,9 +607,9 @@ export class RsAreaCard extends LitElement {
         justify-content: center;
         gap: 4px;
         min-width: 28px;
-        height: 26px;
-        padding: 0 7px;
-        border-radius: 7px;
+        height: 28px;
+        padding: 0 8px;
+        border-radius: 8px;
         border: var(--roommind-border-subtle);
         background: var(--roommind-tile-surface, var(--secondary-background-color));
         color: var(--primary-text-color);
@@ -705,6 +765,8 @@ export class RsAreaCard extends LitElement {
     const isConfigured = this.config !== null && hasClimateSelected && !isOutdoor;
     const live = this.config?.live;
     const mode = getDisplayMode(live, this.config);
+    const reason =
+      isConfigured && live ? resolveRoomReason(this.config, this.climateControlActive) : null;
 
     return html`
       <ha-card
@@ -717,15 +779,6 @@ export class RsAreaCard extends LitElement {
           if (event.target === event.currentTarget && event.key === "Enter") this._onCardClick();
         }}
       >
-        ${
-          !this.reordering
-            ? html`<ha-icon-button
-                class="hide-btn"
-                .path=${mdiEyeOff}
-                @click=${this._onHideClick}
-              ></ha-icon-button>`
-            : nothing
-        }
         ${
           this.reordering
             ? html`<div class="reorder-overlay">
@@ -750,38 +803,41 @@ export class RsAreaCard extends LitElement {
         }
         <div class="card-inner">
           <div class="card-header">
-            <h3 class="area-name">${this.config?.display_name || this.area.name}</h3>
+            <div class="title-stack">
+              <h3 class="area-name">${this.config?.display_name || this.area.name}</h3>
+              ${
+                reason
+                  ? html`<span class="reason-pill" data-tone=${reason.tone}>
+                      ${localize(reason.key, this.hass.language)}
+                    </span>`
+                  : nothing
+              }
+            </div>
             ${
               isConfigured && live
-                ? (() => {
-                    const reason = resolveRoomReason(this.config, this.climateControlActive);
-                    return html`
-                      <div class="header-pills">
-                        ${
-                          reason
-                            ? html`<span class="reason-pill" data-tone=${reason.tone}>
-                                ${localize(reason.key, this.hass.language)}
-                              </span>`
-                            : nothing
-                        }
-                        <span class="mode-pill ${getModeClass(mode)}">
-                          <span class="mode-dot"></span>
-                          ${
-                            mode === null
-                              ? localize("hero.output_unknown", this.hass.language)
-                              : formatMode(mode, this.hass.language)
-                          }
-                        </span>
-                      </div>
-                    `;
-                  })()
-                : nothing
+                ? html`
+                    <span class="mode-pill ${getModeClass(mode)}">
+                      <span class="mode-dot"></span>
+                      ${
+                        mode === null
+                          ? localize("hero.output_unknown", this.hass.language)
+                          : formatMode(mode, this.hass.language)
+                      }
+                    </span>
+                  `
+                : !this.reordering
+                  ? html`<ha-icon-button
+                      class="header-hide-btn"
+                      .path=${mdiEyeOff}
+                      @click=${this._onHideClick}
+                    ></ha-icon-button>`
+                  : nothing
             }
           </div>
 
           ${
             isConfigured
-              ? this._renderConfigured()
+              ? this._renderConfigured(reason?.key ?? null)
               : this.config?.live &&
                   (this.config.live.current_temp !== null ||
                     this.config.live.current_humidity !== null)
@@ -793,7 +849,7 @@ export class RsAreaCard extends LitElement {
     `;
   }
 
-  private _renderConfigured() {
+  private _renderConfigured(reasonKey: string | null) {
     const live = this.config?.live;
 
     if (!live) {
@@ -801,6 +857,13 @@ export class RsAreaCard extends LitElement {
     }
 
     const showMpcIcon = this.controlMode === "mpc";
+    const showOverride = live.override_active && !reasonKey?.startsWith("reason.override_");
+    const showWindow = live.window_open && reasonKey !== "reason.window_open";
+    const showAway = live.presence_away && reasonKey !== "reason.presence_away";
+    const showMoldRisk =
+      live.mold_risk_level && live.mold_risk_level !== "ok" && reasonKey !== "reason.mold_risk";
+    const showMoldPrevention =
+      live.mold_prevention_active && reasonKey !== "reason.mold_prevention";
 
     return html`
       <div class="metrics-row">
@@ -826,10 +889,9 @@ export class RsAreaCard extends LitElement {
         </div>
         <div class="metric-block target-info">
           <span class="metric-label">${localize("card.target", this.hass.language)}</span>
-          ${this._renderTargetInfo(live)}
+          ${this._renderTargetInfo(live)} ${this._renderDeltaChip(live)}
         </div>
       </div>
-      ${this._renderDeltaLine(live)}
       <rs-thermal-band .hass=${this.hass} .config=${this.config} compact></rs-thermal-band>
       ${this._renderUnitStrip()}
       <div class="card-footer">
@@ -851,7 +913,7 @@ export class RsAreaCard extends LitElement {
         </span>
         <span class="badge-row">
           ${
-            live.override_active
+            showOverride
               ? html`<span class="status-badge override">
                   <ha-icon
                     icon=${
@@ -869,7 +931,7 @@ export class RsAreaCard extends LitElement {
               : nothing
           }
           ${
-            live.window_open
+            showWindow
               ? html`<span class="status-badge window">
                   <ha-icon icon="mdi:window-open-variant"></ha-icon>
                   ${localize("card.window_open", this.hass.language)}
@@ -877,7 +939,7 @@ export class RsAreaCard extends LitElement {
               : nothing
           }
           ${
-            live.presence_away
+            showAway
               ? html`<span class="status-badge away">
                   <ha-icon icon="mdi:home-off-outline"></ha-icon>
                   ${localize("card.presence_away", this.hass.language)}
@@ -885,7 +947,7 @@ export class RsAreaCard extends LitElement {
               : nothing
           }
           ${
-            live.mold_risk_level && live.mold_risk_level !== "ok"
+            showMoldRisk
               ? html`<span class="mold-badge ${live.mold_risk_level}">
                   <ha-icon icon="mdi:water-alert"></ha-icon>
                   ${
@@ -897,7 +959,7 @@ export class RsAreaCard extends LitElement {
               : nothing
           }
           ${
-            live.mold_prevention_active
+            showMoldPrevention
               ? html`<span class="mold-badge prevention">
                   <ha-icon icon="mdi:shield-check"></ha-icon>
                   ${localize("card.mold_prevention", this.hass.language, {
@@ -921,13 +983,6 @@ export class RsAreaCard extends LitElement {
           }
         </span>
       </div>
-      ${
-        !this.climateControlActive || this.config?.climate_control_enabled === false
-          ? html`<div class="uncontrolled-hint">
-              ${localize("card.not_controlled", this.hass.language)}
-            </div>`
-          : nothing
-      }
       ${!this.reordering ? this._renderQuickActions(live) : nothing}
     `;
   }
@@ -980,24 +1035,26 @@ export class RsAreaCard extends LitElement {
           ${
             canNudge
               ? html`
-                  <button
-                    type="button"
-                    class="quick-btn"
-                    aria-label=${localize("overview.action.decrease_target", l)}
-                    title=${localize("overview.action.decrease_target", l)}
-                    @click=${(e: Event) => this._onNudgeTarget(e, -1)}
-                  >
-                    −
-                  </button>
-                  <button
-                    type="button"
-                    class="quick-btn"
-                    aria-label=${localize("overview.action.increase_target", l)}
-                    title=${localize("overview.action.increase_target", l)}
-                    @click=${(e: Event) => this._onNudgeTarget(e, 1)}
-                  >
-                    +
-                  </button>
+                  <div class="stepper-group">
+                    <button
+                      type="button"
+                      class="stepper-btn"
+                      aria-label=${localize("overview.action.decrease_target", l)}
+                      title=${localize("overview.action.decrease_target", l)}
+                      @click=${(e: Event) => this._onNudgeTarget(e, -1)}
+                    >
+                      −
+                    </button>
+                    <button
+                      type="button"
+                      class="stepper-btn"
+                      aria-label=${localize("overview.action.increase_target", l)}
+                      title=${localize("overview.action.increase_target", l)}
+                      @click=${(e: Event) => this._onNudgeTarget(e, 1)}
+                    >
+                      +
+                    </button>
+                  </div>
                 `
               : nothing
           }
@@ -1017,15 +1074,22 @@ export class RsAreaCard extends LitElement {
             <ha-icon icon=${isPaused ? "mdi:play" : "mdi:pause"}></ha-icon>
           </button>
         </div>
-        <button
-          type="button"
-          class="quick-btn"
-          aria-label=${localize("overview.action.open_analytics", l)}
-          title=${localize("overview.action.open_analytics", l)}
-          @click=${this._onOpenAnalytics}
-        >
-          <ha-icon icon="mdi:chart-line"></ha-icon>
-        </button>
+        <div class="quick-actions-right">
+          <button
+            type="button"
+            class="quick-btn"
+            aria-label=${localize("overview.action.open_analytics", l)}
+            title=${localize("overview.action.open_analytics", l)}
+            @click=${this._onOpenAnalytics}
+          >
+            <ha-icon icon="mdi:chart-line"></ha-icon>
+          </button>
+          <ha-icon-button
+            class="quick-hide-btn"
+            .path=${mdiEyeOff}
+            @click=${this._onHideClick}
+          ></ha-icon-button>
+        </div>
       </div>
     `;
   }
@@ -1094,12 +1158,12 @@ export class RsAreaCard extends LitElement {
     `;
   }
 
-  private _renderDeltaLine(live: NonNullable<RoomConfig["live"]>) {
+  private _renderDeltaChip(live: NonNullable<RoomConfig["live"]>) {
     const delta = getComfortDelta(live, this.config?.climate_mode ?? "auto");
     if (delta === null) return nothing;
     const absDelta = Math.abs(toDisplayDelta(delta, this.hass));
     if (absDelta < 0.2) {
-      return html`<div class="delta-line on-target">
+      return html`<div class="delta-chip on-target">
         <ha-icon icon="mdi:check-circle-outline"></ha-icon>
         ${localize("card.delta_on_target", this.hass.language)}
       </div>`;
@@ -1107,7 +1171,7 @@ export class RsAreaCard extends LitElement {
 
     const key = delta > 0 ? "card.delta_above" : "card.delta_below";
     const icon = delta > 0 ? "mdi:thermometer-chevron-down" : "mdi:thermometer-chevron-up";
-    return html`<div class="delta-line ${delta > 0 ? "above" : "below"}">
+    return html`<div class="delta-chip ${delta > 0 ? "above" : "below"}">
       <ha-icon .icon=${icon}></ha-icon>
       ${localize(key, this.hass.language, {
         delta: absDelta.toFixed(1),

@@ -435,9 +435,10 @@ export class RsAnalyticsToolbar extends LitElement {
       .toolbar-card {
         display: grid;
         gap: 10px;
-        padding: 12px 14px;
-        border-radius: var(--roommind-radius-card, 12px);
+        padding: 12px 16px;
+        border-radius: var(--roommind-radius-card, 14px);
         border: var(--roommind-border-subtle, 1px solid var(--divider-color));
+        box-shadow: var(--roommind-shadow-card, none);
         background: var(--roommind-surface, var(--card-background-color));
       }
 

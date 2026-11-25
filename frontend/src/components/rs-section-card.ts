@@ -24,11 +24,11 @@ export class RsSectionCard extends LitElement {
       ha-card {
         overflow: hidden;
         min-width: 0;
-        border-radius: var(--roommind-radius-card, 8px);
+        border-radius: var(--roommind-radius-card, 14px);
         border: var(--roommind-border-subtle, 1px solid var(--divider-color, rgba(0, 0, 0, 0.08)));
-        background: var(--roommind-panel-surface);
+        background: var(--roommind-surface);
         color: var(--primary-text-color);
-        box-shadow: none;
+        box-shadow: var(--roommind-shadow-card, none);
       }
 
       .section-header {
@@ -36,23 +36,33 @@ export class RsSectionCard extends LitElement {
         align-items: center;
         gap: 10px;
         min-height: var(--roommind-header-min-height, 38px);
-        padding: 10px 14px;
-        background: var(--roommind-panel-surface);
+        padding: 11px 16px;
+        background: var(--roommind-surface);
         border-bottom: var(
           --roommind-border-faint,
           1px solid var(--divider-color, rgba(0, 0, 0, 0.06))
         );
       }
 
-      .section-icon {
-        --mdc-icon-size: 18px;
-        opacity: 0.7;
+      .section-icon-wrap {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        background: var(--roommind-primary-muted);
+        color: var(--primary-color);
         flex: 0 0 auto;
+      }
+
+      .section-icon {
+        --mdc-icon-size: 17px;
       }
 
       .section-title {
         font-size: 14px;
-        font-weight: 600;
+        font-weight: 650;
         color: var(--primary-text-color);
         margin: 0;
         flex: 1;
@@ -83,8 +93,8 @@ export class RsSectionCard extends LitElement {
       }
 
       .section-body {
-        padding: 10px 14px 12px;
-        background: var(--roommind-panel-surface);
+        padding: 12px 16px 14px;
+        background: var(--roommind-surface);
       }
     `,
   ];
@@ -93,7 +103,9 @@ export class RsSectionCard extends LitElement {
     return html`
       <ha-card>
         <div class="section-header">
-          <ha-icon class="section-icon" icon=${this.icon}></ha-icon>
+          <span class="section-icon-wrap">
+            <ha-icon class="section-icon" icon=${this.icon}></ha-icon>
+          </span>
           <h3 class="section-title">${this.heading}</h3>
           ${
             this.badge

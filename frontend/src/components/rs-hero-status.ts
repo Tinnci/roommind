@@ -36,28 +36,42 @@ export class RsHeroStatus extends LitElement {
 
       ha-card {
         --hero-glow: transparent;
-        padding: 14px 18px;
+        --hero-stripe: transparent;
+        padding: 15px 18px 14px;
         position: relative;
         overflow: hidden;
         border-radius: var(--roommind-radius-card);
         border: var(--roommind-border-subtle);
-        box-shadow: none;
+        box-shadow: var(--roommind-shadow-card, none);
         background:
           radial-gradient(ellipse at top right, var(--hero-glow), transparent 70%),
           var(--roommind-surface);
       }
 
+      ha-card::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: var(--hero-stripe);
+      }
+
       ha-card[data-activity="heating"] {
         --hero-glow: color-mix(in srgb, var(--roommind-warning-color) 12%, transparent);
+        --hero-stripe: var(--roommind-warning-color);
       }
 
       ha-card[data-activity="cooling"],
       ha-card[data-activity="dry"] {
         --hero-glow: color-mix(in srgb, var(--roommind-info-color) 12%, transparent);
+        --hero-stripe: var(--roommind-info-color);
       }
 
       ha-card[data-activity="fan_only"] {
         --hero-glow: color-mix(in srgb, var(--roommind-success-color) 10%, transparent);
+        --hero-stripe: var(--roommind-success-color);
       }
 
       .hero-main-row {

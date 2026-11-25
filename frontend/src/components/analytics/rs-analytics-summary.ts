@@ -204,8 +204,8 @@ export class RsAnalyticsSummary extends LitElement {
 
     .kpi-card {
       min-width: 0;
-      padding: 10px 12px;
-      border-radius: var(--roommind-radius-control, 8px);
+      padding: 11px 13px;
+      border-radius: 10px;
       border: var(--roommind-border-faint, 1px solid var(--divider-color));
       background: var(--roommind-surface-subtle);
       display: grid;

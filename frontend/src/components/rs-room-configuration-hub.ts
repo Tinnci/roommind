@@ -182,22 +182,25 @@ export class RsRoomConfigurationHub extends LitElement {
 
     .config-group {
       display: grid;
-      grid-template-columns: 26px minmax(0, 1fr) 16px;
+      grid-template-columns: 28px minmax(0, 1fr) 16px;
       align-items: center;
       gap: 10px;
       width: 100%;
       min-width: 0;
-      min-height: 54px;
+      min-height: 56px;
       box-sizing: border-box;
-      border: 1px solid transparent;
-      border-radius: var(--roommind-radius-control, 8px);
-      padding: 8px 10px;
+      border: var(--roommind-border-faint);
+      border-radius: 10px;
+      padding: 9px 11px;
       background: var(--roommind-surface-subtle);
       color: var(--primary-text-color);
       font: inherit;
       text-align: left;
       cursor: pointer;
-      transition: background var(--roommind-motion-duration) ease;
+      transition:
+        background var(--roommind-motion-duration) ease,
+        border-color var(--roommind-motion-duration) ease,
+        transform var(--roommind-motion-duration) var(--roommind-motion-easing);
     }
 
     .config-group.partial {
@@ -210,6 +213,14 @@ export class RsRoomConfigurationHub extends LitElement {
 
     .config-group:hover {
       background: var(--roommind-surface-hover);
+      border-color: var(--roommind-card-border-hover);
+      transform: translateY(-1px);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .config-group:hover {
+        transform: none;
+      }
     }
 
     .config-group:focus-visible {
@@ -231,10 +242,37 @@ export class RsRoomConfigurationHub extends LitElement {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 26px;
-      height: 26px;
-      border-radius: 6px;
+      width: 28px;
+      height: 28px;
+      border-radius: 7px;
       background: var(--roommind-surface-muted);
+    }
+
+    .complete .config-icon {
+      background: var(--roommind-success-tint);
+      color: var(--roommind-success-color, #4caf50);
+    }
+
+    .complete .config-icon ha-icon {
+      color: var(--roommind-success-color, #4caf50);
+    }
+
+    .partial .config-icon {
+      background: var(--roommind-warning-tint);
+      color: var(--roommind-warning-color, #ff9800);
+    }
+
+    .partial .config-icon ha-icon {
+      color: var(--roommind-warning-color, #ff9800);
+    }
+
+    .missing .config-icon {
+      background: var(--roommind-error-tint);
+      color: var(--roommind-error-color, #f44336);
+    }
+
+    .missing .config-icon ha-icon {
+      color: var(--roommind-error-color, #f44336);
     }
 
     .config-icon ha-icon,

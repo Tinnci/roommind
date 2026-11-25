@@ -261,8 +261,8 @@ export class RoomMindPanel extends LitElement {
 
       .area-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr));
-        gap: 14px;
+        grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+        gap: 12px;
       }
 
       .room-section {
@@ -338,12 +338,12 @@ export class RoomMindPanel extends LitElement {
       }
 
       .overview-panel {
-        margin-bottom: 18px;
-        padding: 14px;
-        border-radius: 8px;
+        margin-bottom: 16px;
+        padding: 14px 16px;
+        border-radius: var(--roommind-radius-card, 14px);
         border: var(--roommind-border-subtle);
         background: var(--roommind-surface);
-        box-shadow: none;
+        box-shadow: var(--roommind-shadow-card, none);
       }
 
       .overview-top {
@@ -493,27 +493,6 @@ export class RoomMindPanel extends LitElement {
         color: var(--roommind-warning-color);
       }
 
-      .overview-metrics {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
-        gap: 8px;
-        margin-top: 14px;
-      }
-
-      .stat {
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        gap: 3px;
-        min-width: 0;
-        min-height: 58px;
-        padding: 8px 10px;
-        border-radius: 8px;
-        background: var(--roommind-tile-surface);
-        border: var(--roommind-border-faint);
-        box-sizing: border-box;
-      }
-
       .hidden-rooms-toggle {
         --mdc-icon-button-size: 36px;
         --mdc-icon-size: 20px;
@@ -521,12 +500,12 @@ export class RoomMindPanel extends LitElement {
       }
 
       .hidden-rooms-panel {
-        margin-bottom: 18px;
+        margin-bottom: 16px;
         padding: 12px 16px;
-        border-radius: 8px;
+        border-radius: var(--roommind-radius-card, 14px);
         border: var(--roommind-border-subtle);
         background: var(--roommind-surface-subtle);
-        box-shadow: none;
+        box-shadow: var(--roommind-shadow-card, none);
       }
 
       .hidden-rooms-header {
@@ -546,38 +525,6 @@ export class RoomMindPanel extends LitElement {
       .hidden-room-name {
         font-size: 14px;
         color: var(--primary-text-color);
-      }
-
-      .stat-value {
-        font-size: 22px;
-        font-weight: 600;
-        color: var(--primary-text-color);
-        --mdc-icon-size: 22px;
-        line-height: 1.1;
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
-      }
-
-      .stat-value.heating {
-        color: var(--roommind-warning-color);
-      }
-
-      .stat-value.cooling {
-        color: var(--roommind-info-color);
-      }
-
-      .stat-value.warning {
-        color: var(--roommind-error-color);
-      }
-
-      .stat-label {
-        font-size: 12px;
-        color: var(--secondary-text-color);
-        letter-spacing: 0;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
       }
 
       .floor-heading {
@@ -616,10 +563,6 @@ export class RoomMindPanel extends LitElement {
 
         .stats-actions {
           align-self: flex-start;
-        }
-
-        .overview-metrics {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
         }
       }
     `,
@@ -854,8 +797,6 @@ export class RoomMindPanel extends LitElement {
     );
     const {
       activeCount,
-      heatingCount,
-      coolingCount,
       externalActiveCount,
       unknownCount,
       effectiveOverrideCount,
@@ -1016,36 +957,17 @@ export class RoomMindPanel extends LitElement {
                     }
                   </span>
                 </div>
-                <div class="overview-metrics">
-                  <div class="stat">
-                    <span class="stat-value">${configuredCount}</span>
-                    <span class="stat-label">${localize("panel.stat.rooms", l)}</span>
-                  </div>
-                  <div class="stat">
-                    <span class="stat-value">${activeCount}</span>
-                    <span class="stat-label">${localize("panel.stat.active", l)}</span>
-                  </div>
-                  <div class="stat">
-                    <span class="stat-value heating">${heatingCount}</span>
-                    <span class="stat-label">${localize("panel.stat.heating", l)}</span>
-                  </div>
-                  <div class="stat">
-                    <span class="stat-value cooling">${coolingCount}</span>
-                    <span class="stat-label">${localize("panel.stat.cooling", l)}</span>
-                  </div>
-                  ${
-                    unknownCount > 0
-                      ? html`<div class="stat">
-                          <span class="stat-value">${unknownCount}</span>
-                          <span class="stat-label">${localize("panel.stat.unknown", l)}</span>
-                        </div>`
-                      : nothing
-                  }
-                  <div class="stat">
-                    <span class="stat-value warning">${moldCount}</span>
-                    <span class="stat-label">${localize("panel.stat.mold", l)}</span>
-                  </div>
-                </div>
+                ${
+                  configuredCount > 0
+                    ? html`<rs-fleet-overview
+                        embedded
+                        .language=${l}
+                        .stats=${fleetStats}
+                        .filter=${this._fleetFilter}
+                        @fleet-filter-changed=${this._onFleetFilterChanged}
+                      ></rs-fleet-overview>`
+                    : nothing
+                }
               </ha-card>
             `
           : nothing
@@ -1071,12 +993,6 @@ export class RoomMindPanel extends LitElement {
             `
           : nothing
       }
-      <rs-fleet-overview
-        .language=${l}
-        .stats=${fleetStats}
-        .filter=${this._fleetFilter}
-        @fleet-filter-changed=${this._onFleetFilterChanged}
-      ></rs-fleet-overview>
       ${
         filteredAreaInfos.length === 0 && this._fleetFilter !== "all"
           ? html`<div class="placeholder"><p>${localize("overview.filter.empty", l)}</p></div>`

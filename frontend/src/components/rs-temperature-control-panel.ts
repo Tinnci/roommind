@@ -51,17 +51,17 @@ export class RsTemperatureControlPanel extends LitElement {
 
       ha-card {
         overflow: hidden;
-        border-radius: var(--roommind-radius-card, 8px);
+        border-radius: var(--roommind-radius-card, 14px);
         border: var(--roommind-border-subtle);
         background: var(--roommind-surface);
         color: var(--primary-text-color);
-        box-shadow: var(--roommind-shadow-soft);
+        box-shadow: var(--roommind-shadow-card, none);
       }
 
       .control-card {
         display: grid;
         gap: 10px;
-        padding: 12px 16px;
+        padding: 14px 16px;
       }
 
       .control-card.paused {

@@ -210,8 +210,9 @@ export class RsAnalytics extends LitElement {
         padding: 72px 16px;
         text-align: center;
         color: var(--secondary-text-color);
-        border-radius: var(--roommind-radius-card, 12px);
+        border-radius: var(--roommind-radius-card, 14px);
         border: var(--roommind-border-subtle);
+        box-shadow: var(--roommind-shadow-card, none);
         background: var(--roommind-surface);
       }
 
@@ -228,8 +229,9 @@ export class RsAnalytics extends LitElement {
         justify-content: center;
         gap: 10px;
         padding: 72px 16px;
-        border-radius: var(--roommind-radius-card, 12px);
+        border-radius: var(--roommind-radius-card, 14px);
         border: var(--roommind-border-subtle);
+        box-shadow: var(--roommind-shadow-card, none);
         background: var(--roommind-surface);
         color: var(--secondary-text-color);
         font-size: 13.5px;

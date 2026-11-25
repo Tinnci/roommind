@@ -28,8 +28,11 @@ export class RsThermalBand extends LitElement {
     }
 
     :host([compact]) .band-card {
-      margin-top: 10px;
-      padding: 8px 10px;
+      margin-top: 8px;
+      padding: 2px 0 0;
+      border: none;
+      border-radius: 0;
+      background: transparent;
     }
 
     .band-header {

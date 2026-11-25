@@ -8,6 +8,7 @@ export class RsFleetOverview extends LitElement {
   @property({ type: String }) public language = "en";
   @property({ attribute: false }) public stats!: FleetOverviewStats;
   @property({ type: String }) public filter: FleetFilter = "all";
+  @property({ type: Boolean, reflect: true }) public embedded = false;
 
   static override styles = css`
     :host {
@@ -17,12 +18,24 @@ export class RsFleetOverview extends LitElement {
     .overview-bar {
       background: var(--roommind-surface, var(--card-background-color));
       border: var(--roommind-border-subtle, 1px solid var(--divider-color));
-      border-radius: var(--roommind-radius-card, 12px);
-      padding: 10px 14px;
+      border-radius: var(--roommind-radius-card, 14px);
+      box-shadow: var(--roommind-shadow-card, none);
+      padding: 12px 16px;
       margin-bottom: 14px;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 10px;
+    }
+
+    :host([embedded]) .overview-bar {
+      margin-top: 12px;
+      margin-bottom: 0;
+      padding: 12px 0 0;
+      border: none;
+      border-top: var(--roommind-border-faint, 1px solid var(--divider-color));
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
     }
 
     .stats-row {

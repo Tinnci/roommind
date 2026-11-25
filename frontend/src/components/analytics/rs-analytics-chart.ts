@@ -286,10 +286,10 @@ export class RsAnalyticsChart extends LitElement {
       }
 
       ha-card {
-        border-radius: var(--roommind-radius-card, 12px);
+        border-radius: var(--roommind-radius-card, 14px);
         border: var(--roommind-border-subtle, 1px solid var(--divider-color));
         background: var(--roommind-surface, var(--card-background-color));
-        box-shadow: none;
+        box-shadow: var(--roommind-shadow-card, none);
         overflow: hidden;
       }
 

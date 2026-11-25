@@ -7,9 +7,9 @@ export const roommindThemeStyles = css`
     --mdc-shape-medium: var(--roommind-radius-control);
     --md-filled-text-field-container-shape: var(--roommind-radius-control);
     --md-outlined-text-field-container-shape: var(--roommind-radius-control);
-    --roommind-radius-card: 12px;
-    --roommind-radius-control: 8px;
-    --roommind-radius-small: 6px;
+    --roommind-radius-card: 14px;
+    --roommind-radius-control: 9px;
+    --roommind-radius-small: 7px;
     --roommind-motion-duration: 180ms;
     --roommind-motion-easing: cubic-bezier(0.2, 0.8, 0.2, 1);
     --roommind-surface: var(
@@ -59,6 +59,13 @@ export const roommindThemeStyles = css`
     --roommind-primary-border: color-mix(in srgb, var(--primary-color, #03a9f4) 38%, transparent);
     --roommind-border-subtle: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
     --roommind-border-faint: 1px solid var(--divider-color, rgba(0, 0, 0, 0.06));
+    --roommind-card-border-hover: color-mix(
+      in srgb,
+      var(--primary-color, #03a9f4) 42%,
+      var(--divider-color, rgba(0, 0, 0, 0.1))
+    );
+    --roommind-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.025);
+    --roommind-shadow-card-hover: 0 6px 18px rgba(0, 0, 0, 0.08), 0 1px 4px rgba(0, 0, 0, 0.04);
     --roommind-shadow-soft: 0 2px 12px rgba(0, 0, 0, 0.035);
     --roommind-shadow-dialog: 0 24px 48px rgba(0, 0, 0, 0.32);
     --roommind-header-min-height: 38px;

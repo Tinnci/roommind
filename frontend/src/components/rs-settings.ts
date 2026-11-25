@@ -757,21 +757,26 @@ export class RsSettings extends LitElement {
         display: flex;
         align-items: center;
         gap: 10px;
-        padding: 10px 12px;
-        border-radius: 12px;
+        padding: 12px 14px;
+        border-radius: var(--roommind-radius-card, 14px);
         border: var(--roommind-border-subtle);
+        box-shadow: var(--roommind-shadow-card, none);
         background: var(--roommind-surface);
         color: var(--primary-text-color);
         font-family: inherit;
         text-align: left;
         cursor: pointer;
         transition:
-          border-color 0.15s ease,
-          background 0.15s ease;
+          border-color var(--roommind-motion-duration) ease,
+          box-shadow var(--roommind-motion-duration) ease,
+          transform var(--roommind-motion-duration) var(--roommind-motion-easing),
+          background var(--roommind-motion-duration) ease;
       }
 
       .quick-tile:hover {
-        border-color: rgba(var(--rgb-primary-color, 3, 169, 244), 0.45);
+        border-color: var(--roommind-card-border-hover);
+        box-shadow: var(--roommind-shadow-card-hover, none);
+        transform: translateY(-1px);
       }
 
       .quick-tile.is-on {
@@ -905,23 +910,31 @@ export class RsSettings extends LitElement {
         flex-direction: column;
         align-items: stretch;
         text-align: left;
-        padding: 14px 16px;
-        border-radius: var(--roommind-radius-card, 12px);
+        padding: 15px 16px;
+        border-radius: var(--roommind-radius-card, 14px);
         border: var(--roommind-border-subtle);
+        box-shadow: var(--roommind-shadow-card, none);
         background: var(--roommind-surface);
         color: var(--primary-text-color);
         font-family: inherit;
         cursor: pointer;
         transition:
-          border-color 0.15s ease,
-          box-shadow 0.15s ease,
-          transform 0.15s ease;
+          border-color var(--roommind-motion-duration) ease,
+          box-shadow var(--roommind-motion-duration) ease,
+          transform var(--roommind-motion-duration) var(--roommind-motion-easing);
       }
 
       .hub-card:hover {
-        border-color: rgba(var(--rgb-primary-color, 3, 169, 244), 0.45);
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+        border-color: var(--roommind-card-border-hover);
+        box-shadow: var(--roommind-shadow-card-hover, none);
         transform: translateY(-1px);
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .quick-tile:hover,
+        .hub-card:hover {
+          transform: none;
+        }
       }
 
       .hub-card-top {
@@ -1065,9 +1078,9 @@ export class RsSettings extends LitElement {
 
       .editor-card {
         padding: 18px 20px;
-        border-radius: var(--roommind-radius-card, 12px);
+        border-radius: var(--roommind-radius-card, 14px);
         border: var(--roommind-border-subtle);
-        box-shadow: none;
+        box-shadow: var(--roommind-shadow-card, none);
         background: var(--roommind-surface);
       }
 
