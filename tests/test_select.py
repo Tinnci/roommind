@@ -57,7 +57,7 @@ async def test_select_setup_entry_registers_platform():
     coordinator = MagicMock()
     coordinator.hass = MagicMock()
     store = MagicMock()
-    store.get_rooms.return_value = {"living_room": {}, "bedroom": {}}
+    store.get_rooms.return_value = {"living_room": {"thermostats": ["climate.living"]}, "bedroom": {}}
 
     entry = MagicMock()
     entry.entry_id = "entry1"
@@ -71,7 +71,7 @@ async def test_select_setup_entry_registers_platform():
         EntityPlatform.CLIMATE_MODE_SELECT,
         add_entities,
         create_room_selects,
-        {"living_room": {}, "bedroom": {}},
+        ["living_room"],
     )
     add_entities.assert_called_once()
-    assert len(add_entities.call_args[0][0]) == 2
+    assert len(add_entities.call_args[0][0]) == 1

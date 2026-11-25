@@ -108,8 +108,8 @@ async def test_async_setup_entry_creates_entities_for_rooms_with_covers():
 
     store = MagicMock()
     store.get_rooms.return_value = {
-        "living_room": {"covers": ["cover.blinds"]},
-        "bedroom": {},  # no covers
+        "living_room": {"covers": ["cover.blinds"], "thermostats": ["climate.living"]},
+        "bedroom": {},  # monitor-only: no covers and no climate devices
     }
 
     entry = MagicMock()
@@ -126,7 +126,7 @@ async def test_async_setup_entry_creates_entities_for_rooms_with_covers():
         EntityPlatform.CLIMATE_CONTROL_SWITCH,
         async_add_entities,
         create_room_climate_control_switches,
-        store.get_rooms.return_value,
+        ["living_room"],
     )
     coordinator.register_entity_platform.assert_any_call(
         EntityPlatform.COVER_SWITCH,
@@ -136,19 +136,19 @@ async def test_async_setup_entry_creates_entities_for_rooms_with_covers():
     )
     async_add_entities.assert_called_once()
     entities = async_add_entities.call_args[0][0]
-    assert len(entities) == 5
+    assert len(entities) == 4
     assert isinstance(entities[0], RoomMindVacationSwitch)
     assert isinstance(entities[1], RoomMindGlobalClimateControlSwitch)
     climate_switches = [e for e in entities if isinstance(e, RoomMindClimateControlSwitch)]
     cover_switches = [e for e in entities if isinstance(e, RoomMindCoverAutoSwitch)]
-    assert len(climate_switches) == 2
+    assert len(climate_switches) == 1
     assert {switch._attr_translation_key for switch in climate_switches} == {"climate_control"}
     assert len(cover_switches) == 1
 
 
 @pytest.mark.asyncio
 async def test_async_setup_entry_no_covers_still_creates_global_switches():
-    """async_setup_entry always creates global switches even without covers."""
+    """async_setup_entry always creates global switches and skips room control switches for monitor-only."""
     coordinator = MagicMock()
 
     store = MagicMock()
@@ -166,10 +166,9 @@ async def test_async_setup_entry_no_covers_still_creates_global_switches():
 
     async_add_entities.assert_called_once()
     entities = async_add_entities.call_args[0][0]
-    assert len(entities) == 3
+    assert len(entities) == 2
     assert isinstance(entities[0], RoomMindVacationSwitch)
     assert isinstance(entities[1], RoomMindGlobalClimateControlSwitch)
-    assert isinstance(entities[2], RoomMindClimateControlSwitch)
 
 
 @pytest.fixture

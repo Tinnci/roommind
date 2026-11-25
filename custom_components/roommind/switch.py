@@ -12,7 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, VACATION_SENTINEL_UNTIL
-from .coordinator import EntityPlatform, RoomMindCoordinator
+from .coordinator import EntityPlatform, RoomMindCoordinator, has_climate_control_devices
 from .utils.device_info import hub_device_info, room_device_info
 from .utils.entity_translation import room_translation_placeholders
 
@@ -48,11 +48,12 @@ async def async_setup_entry(
     ]
 
     rooms = store.get_rooms()
+    controlled_area_ids = [area_id for area_id, room in rooms.items() if has_climate_control_devices(room)]
     coordinator.register_entity_platform(
         EntityPlatform.CLIMATE_CONTROL_SWITCH,
         async_add_entities,
         create_room_climate_control_switches,
-        rooms,
+        controlled_area_ids,
     )
     coordinator.register_entity_platform(
         EntityPlatform.COVER_SWITCH,
@@ -60,8 +61,9 @@ async def async_setup_entry(
         create_room_cover_switches,
         [area_id for area_id, room in rooms.items() if room.get("covers")],
     )
-    for area_id, room in rooms.items():
+    for area_id in controlled_area_ids:
         entities.extend(create_room_climate_control_switches(coordinator, area_id))
+    for area_id, room in rooms.items():
         if room.get("covers"):
             entities.extend(create_room_cover_switches(coordinator, area_id))
 

@@ -47,7 +47,11 @@ class TestCoverageGaps:
             _entity_factory,
         )
 
-        room = {"area_id": "bedroom_abc", "covers": ["cover.blind1"]}
+        room = {
+            "area_id": "bedroom_abc",
+            "devices": [{"entity_id": "climate.trv1", "type": "trv", "role": "auto"}],
+            "covers": ["cover.blind1"],
+        }
         await coordinator.async_room_added(room)
 
         assert mock_add_switch.call_count == 2
@@ -89,7 +93,11 @@ class TestCoverageGaps:
             _entity_factory,
         )
 
-        room = {"area_id": "bedroom_abc", "covers": ["cover.blind1"]}
+        room = {
+            "area_id": "bedroom_abc",
+            "devices": [{"entity_id": "climate.trv1", "type": "trv", "role": "auto"}],
+            "covers": ["cover.blind1"],
+        }
         await coordinator.async_room_added(room)
         await coordinator.async_room_added(room)
 
@@ -120,7 +128,10 @@ class TestCoverageGaps:
             _entity_factory,
         )
 
-        room = {"area_id": "bedroom_abc"}
+        room = {
+            "area_id": "bedroom_abc",
+            "devices": [{"entity_id": "climate.trv1", "type": "trv", "role": "auto"}],
+        }
         await coordinator.async_room_added(room)
 
         mock_add_switch.assert_called_once()

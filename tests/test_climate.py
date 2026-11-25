@@ -265,13 +265,13 @@ async def test_async_setup_entry_creates_entities_for_all_rooms():
         EntityPlatform.CLIMATE,
         async_add_entities,
         create_room_climates,
-        store.get_rooms.return_value,
+        ["living_room"],
     )
     async_add_entities.assert_called_once()
     entities = async_add_entities.call_args[0][0]
-    assert len(entities) == 4
-    assert sum(isinstance(e, RoomMindComfortClimate) for e in entities) == 2
-    assert sum(isinstance(e, RoomMindOverrideClimate) for e in entities) == 2
+    assert len(entities) == 2
+    assert sum(isinstance(e, RoomMindComfortClimate) for e in entities) == 1
+    assert sum(isinstance(e, RoomMindOverrideClimate) for e in entities) == 1
 
 
 @pytest.mark.asyncio

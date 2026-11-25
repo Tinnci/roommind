@@ -42,6 +42,11 @@ def test_suggest_area_entities_classifies_direct_and_device_inherited_entities(m
         "climate.living_trv": _make_entry("climate.living_trv", device_id="dev_trv"),
         "sensor.living_temp": _make_entry("sensor.living_temp", area_id="living", original_device_class="temperature"),
         "sensor.living_rh": _make_entry("sensor.living_rh", area_id="living", device_class="humidity"),
+        "sensor.living_co2": _make_entry("sensor.living_co2", area_id="living", device_class="carbon_dioxide"),
+        "sensor.living_voc": _make_entry(
+            "sensor.living_voc", area_id="living", device_class="volatile_organic_compounds"
+        ),
+        "sensor.living_pm25": _make_entry("sensor.living_pm25", area_id="living", device_class="pm25"),
         "binary_sensor.living_window": _make_entry(
             "binary_sensor.living_window", area_id="living", device_class="window"
         ),
@@ -79,6 +84,9 @@ def test_suggest_area_entities_classifies_direct_and_device_inherited_entities(m
     ]
     assert suggestion["temperature_sensors"] == ["sensor.living_temp"]
     assert suggestion["humidity_sensors"] == ["sensor.living_rh"]
+    assert suggestion["co2_sensor"] == "sensor.living_co2"
+    assert suggestion["voc_sensor"] == "sensor.living_voc"
+    assert suggestion["pm25_sensors"] == ["sensor.living_pm25"]
     assert suggestion["window_sensors"] == ["binary_sensor.living_window"]
     assert suggestion["occupancy_sensors"] == ["binary_sensor.living_motion"]
     assert suggestion["covers"] == ["cover.living_blinds"]

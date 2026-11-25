@@ -140,6 +140,7 @@ class EntityPlatform(StrEnum):
     """RoomMind entity groups tracked for dynamic room registration."""
 
     SENSOR = "sensor"
+    MONITOR_SENSOR = "monitor_sensor"
     CLIMATE = "climate"
     CLIMATE_MODE_SELECT = "climate_mode_select"
     CLIMATE_CONTROL_SWITCH = "climate_control_switch"
@@ -163,6 +164,14 @@ def has_air_quality_sensor(room: dict) -> bool:
     return (
         bool(room.get("co2_sensor") or room.get("voc_sensor") or room.get("pm25_sensor") or room.get("pm25_sensors"))
         and not room.get("is_outdoor", False)
+    )
+
+
+def has_climate_control_devices(room: dict) -> bool:
+    """Return True if an indoor room has at least one active climate control device."""
+    return bool(
+        not room.get("is_outdoor", False)
+        and (room.get("devices") or room.get("thermostats") or room.get("acs"))
     )
 
 
@@ -2999,15 +3008,51 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 )
             )
 
+    def _remove_stale_control_entities(self, area_id: str) -> None:
+        """Remove control-only HA entities when a room becomes monitor-only or outdoor."""
+        from homeassistant.helpers import entity_registry as er
+
+        for platform in (
+            EntityPlatform.SENSOR,
+            EntityPlatform.CLIMATE,
+            EntityPlatform.CLIMATE_MODE_SELECT,
+            EntityPlatform.CLIMATE_CONTROL_SWITCH,
+        ):
+            self._entity_platforms[platform].area_ids.discard(area_id)
+
+        try:
+            registry = er.async_get(self.hass)
+        except Exception:  # noqa: BLE001
+            return
+        if not hasattr(registry, "entities") or not hasattr(registry, "async_remove"):
+            return
+
+        control_unique_ids = {
+            f"{DOMAIN}_{area_id}{suffix}"
+            for suffix in ("_target_temp", "_mode", "_override", "_comfort", "_climate_control", "_climate_mode")
+        }
+        to_remove = [
+            entry.entity_id
+            for entry in list(registry.entities.values())
+            if isinstance(getattr(entry, "unique_id", None), str) and entry.unique_id in control_unique_ids
+        ]
+        for entity_id in to_remove:
+            with contextlib.suppress(Exception):
+                registry.async_remove(entity_id)
+
     async def async_room_added(self, room: dict) -> None:
         """Create entity platform entities for a newly added/updated room and refresh data."""
         area_id = room["area_id"]
         has_covers = bool(room.get("covers"))
 
-        self._add_entity_platform_room(EntityPlatform.SENSOR, area_id)
-        self._add_entity_platform_room(EntityPlatform.CLIMATE, area_id)
-        self._add_entity_platform_room(EntityPlatform.CLIMATE_MODE_SELECT, area_id)
-        self._add_entity_platform_room(EntityPlatform.CLIMATE_CONTROL_SWITCH, area_id)
+        self._add_entity_platform_room(EntityPlatform.MONITOR_SENSOR, area_id)
+        if has_climate_control_devices(room):
+            self._add_entity_platform_room(EntityPlatform.SENSOR, area_id)
+            self._add_entity_platform_room(EntityPlatform.CLIMATE, area_id)
+            self._add_entity_platform_room(EntityPlatform.CLIMATE_MODE_SELECT, area_id)
+            self._add_entity_platform_room(EntityPlatform.CLIMATE_CONTROL_SWITCH, area_id)
+        else:
+            self._remove_stale_control_entities(area_id)
 
         # Cover entities: only create when covers are configured.
         # Do not remove them on save. cleanup_orphaned_entities() handles that
@@ -3079,7 +3124,8 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         registry = er.async_get(self.hass)
 
         # Known valid suffixes for each condition
-        always_valid = ("_target_temp", "_mode", "_override", "_comfort", "_climate_control", "_climate_mode")
+        monitor_always_valid = ("_temperature", "_humidity", "_dew_point", "_mold_risk")
+        control_only = ("_target_temp", "_mode", "_override", "_comfort", "_climate_control", "_climate_mode")
         cover_only = ("_cover_auto", "_cover_paused")
         aq_only = ("_air_quality",)
         # Global entities (not per-room) that should never be cleaned up
@@ -3110,7 +3156,9 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             suffix = parts.removeprefix(f"{matched_area}")
             room = rooms[matched_area]
 
-            if suffix in always_valid:
+            if suffix in monitor_always_valid:
+                continue
+            if suffix in control_only and has_climate_control_devices(room):
                 continue
             if suffix in cover_only and room.get("covers"):
                 continue

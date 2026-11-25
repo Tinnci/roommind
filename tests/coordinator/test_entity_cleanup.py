@@ -21,7 +21,12 @@ class TestCoverageGaps:
         coordinator = _create_coordinator(hass, mock_config_entry)
 
         store = MagicMock()
-        store.get_rooms.return_value = {"living_room": {"covers": ["cover.x"]}}
+        store.get_rooms.return_value = {
+            "living_room": {
+                "devices": [{"entity_id": "climate.trv1", "type": "trv", "role": "auto"}],
+                "covers": ["cover.x"],
+            }
+        }
         hass.data = {DOMAIN: {"store": store}}
 
         # Simulate entity registry entries
@@ -88,8 +93,10 @@ class TestCoverageGaps:
         coordinator = _create_coordinator(hass, mock_config_entry)
 
         store = MagicMock()
-        # Room exists but has no covers
-        store.get_rooms.return_value = {"living_room": {}}
+        # Room has climate device but no covers
+        store.get_rooms.return_value = {
+            "living_room": {"devices": [{"entity_id": "climate.trv1", "type": "trv", "role": "auto"}]}
+        }
         hass.data = {DOMAIN: {"store": store}}
 
         entry_cover_auto = MagicMock()
@@ -130,7 +137,12 @@ class TestCoverageGaps:
         coordinator = _create_coordinator(hass, mock_config_entry)
 
         store = MagicMock()
-        store.get_rooms.return_value = {"living_room": {"covers": ["cover.x"]}}
+        store.get_rooms.return_value = {
+            "living_room": {
+                "devices": [{"entity_id": "climate.trv1", "type": "trv", "role": "auto"}],
+                "covers": ["cover.x"],
+            }
+        }
         hass.data = {DOMAIN: {"store": store}}
 
         entry_valid = MagicMock()
@@ -176,6 +188,50 @@ class TestCoverageGaps:
             coordinator.cleanup_orphaned_entities()
 
         mock_registry.async_remove.assert_not_called()
+
+    def test_cleanup_orphaned_entities_removes_control_entities_for_monitor_only_room(
+        self, hass, mock_config_entry
+    ):
+        """Monitor-only rooms keep monitor sensors and drop control-only entities."""
+        from custom_components.roommind.const import DOMAIN
+
+        coordinator = _create_coordinator(hass, mock_config_entry)
+        store = MagicMock()
+        store.get_rooms.return_value = {"ke_ting": {"devices": []}}
+        hass.data = {DOMAIN: {"store": store}}
+
+        entries = []
+        for uid, eid in (
+            (f"{DOMAIN}_ke_ting_temperature", "sensor.roommind_ke_ting_temperature"),
+            (f"{DOMAIN}_ke_ting_humidity", "sensor.roommind_ke_ting_humidity"),
+            (f"{DOMAIN}_ke_ting_dew_point", "sensor.roommind_ke_ting_dew_point"),
+            (f"{DOMAIN}_ke_ting_mold_risk", "sensor.roommind_ke_ting_mold_risk"),
+            (f"{DOMAIN}_ke_ting_override", "climate.roommind_ke_ting_override"),
+            (f"{DOMAIN}_ke_ting_comfort", "climate.roommind_ke_ting_comfort"),
+            (f"{DOMAIN}_ke_ting_target_temp", "sensor.roommind_ke_ting_target_temp"),
+            (f"{DOMAIN}_ke_ting_mode", "sensor.roommind_ke_ting_mode"),
+            (f"{DOMAIN}_ke_ting_climate_control", "switch.roommind_ke_ting_climate_control"),
+            (f"{DOMAIN}_ke_ting_climate_mode", "select.roommind_ke_ting_climate_mode"),
+        ):
+            e = MagicMock()
+            e.unique_id = uid
+            e.entity_id = eid
+            entries.append(e)
+
+        mock_registry = MagicMock()
+        mock_registry.entities.values.return_value = entries
+        with patch("homeassistant.helpers.entity_registry.async_get", return_value=mock_registry):
+            coordinator.cleanup_orphaned_entities()
+
+        removed = {c.args[0] for c in mock_registry.async_remove.call_args_list}
+        assert removed == {
+            "climate.roommind_ke_ting_override",
+            "climate.roommind_ke_ting_comfort",
+            "sensor.roommind_ke_ting_target_temp",
+            "sensor.roommind_ke_ting_mode",
+            "switch.roommind_ke_ting_climate_control",
+            "select.roommind_ke_ting_climate_mode",
+        }
 
     @pytest.mark.asyncio
     async def test_room_removed_cleans_history_store(self, hass, mock_config_entry):

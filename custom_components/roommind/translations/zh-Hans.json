@@ -34,6 +34,23 @@
       },
       "mode": {
         "name": "{room} 运行反馈"
+      },
+      "temperature": {
+        "name": "{room} 温度"
+      },
+      "humidity": {
+        "name": "{room} 湿度"
+      },
+      "dew_point": {
+        "name": "{room} 露点"
+      },
+      "mold_risk": {
+        "name": "{room} 发霉风险",
+        "state": {
+          "ok": "正常",
+          "warning": "警告",
+          "critical": "高风险"
+        }
       }
     },
     "binary_sensor": {

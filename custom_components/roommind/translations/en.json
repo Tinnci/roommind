@@ -34,6 +34,23 @@
       },
       "mode": {
         "name": "{room} observed activity"
+      },
+      "temperature": {
+        "name": "{room} temperature"
+      },
+      "humidity": {
+        "name": "{room} humidity"
+      },
+      "dew_point": {
+        "name": "{room} dew point"
+      },
+      "mold_risk": {
+        "name": "{room} mold risk",
+        "state": {
+          "ok": "OK",
+          "warning": "Warning",
+          "critical": "Critical"
+        }
       }
     },
     "binary_sensor": {

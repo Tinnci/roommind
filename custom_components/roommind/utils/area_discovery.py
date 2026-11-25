@@ -13,6 +13,7 @@ from ..const import DOMAIN
 _AC_MODES = frozenset({"cool", "dry"})
 _WINDOW_CLASSES = frozenset({"window", "door", "opening"})
 _OCCUPANCY_CLASSES = frozenset({"occupancy", "motion", "presence"})
+_VOC_CLASSES = frozenset({"volatile_organic_compounds", "volatile_organic_compounds_parts"})
 
 
 def _is_own_entity(entry: er.RegistryEntry) -> bool:
@@ -55,6 +56,9 @@ def suggest_area_entities(hass: HomeAssistant, area_id: str) -> dict[str, Any]:
     devices: list[dict[str, str]] = []
     temperature_sensors: list[str] = []
     humidity_sensors: list[str] = []
+    co2_sensor = ""
+    voc_sensor = ""
+    pm25_sensors: list[str] = []
     window_sensors: list[str] = []
     occupancy_sensors: list[str] = []
     covers: list[str] = []
@@ -88,6 +92,12 @@ def suggest_area_entities(hass: HomeAssistant, area_id: str) -> dict[str, Any]:
                 temperature_sensors.append(eid)
             elif dc == "humidity":
                 humidity_sensors.append(eid)
+            elif dc == "carbon_dioxide" and not co2_sensor:
+                co2_sensor = eid
+            elif dc in _VOC_CLASSES and not voc_sensor:
+                voc_sensor = eid
+            elif dc == "pm25":
+                pm25_sensors.append(eid)
         elif domain == "binary_sensor":
             dc = _device_class(hass, entry)
             if dc in _WINDOW_CLASSES:
@@ -111,6 +121,9 @@ def suggest_area_entities(hass: HomeAssistant, area_id: str) -> dict[str, Any]:
         "devices": devices,
         "temperature_sensors": temperature_sensors,
         "humidity_sensors": humidity_sensors,
+        "co2_sensor": co2_sensor,
+        "voc_sensor": voc_sensor,
+        "pm25_sensors": pm25_sensors,
         "window_sensors": window_sensors,
         "occupancy_sensors": occupancy_sensors,
         "covers": covers,

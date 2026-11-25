@@ -232,7 +232,10 @@ class TestRoomMindCoordinator:
             create_room_sensors,
         )
 
-        room = {"area_id": "bedroom_abc12345"}
+        room = {
+            "area_id": "bedroom_abc12345",
+            "devices": [{"entity_id": "climate.trv1", "type": "trv", "role": "auto"}],
+        }
         await coordinator.async_room_added(room)
 
         # async_add_entities should be called with 3 entities
@@ -279,7 +282,10 @@ class TestRoomMindCoordinator:
             create_room_sensors,
         )
 
-        room = {"area_id": "bedroom_abc12345"}
+        room = {
+            "area_id": "bedroom_abc12345",
+            "devices": [{"entity_id": "climate.trv1", "type": "trv", "role": "auto"}],
+        }
         await coordinator.async_room_added(room)
         await coordinator.async_room_added(room)  # simulates a room update
 
@@ -298,11 +304,49 @@ class TestRoomMindCoordinator:
             create_room_sensors,
         )
 
-        room = {"area_id": "bedroom_abc12345"}
+        room = {
+            "area_id": "bedroom_abc12345",
+            "devices": [{"entity_id": "climate.trv1", "type": "trv", "role": "auto"}],
+        }
         await coordinator.async_room_added(room)
         await coordinator.async_room_added(room)  # simulates a room update
 
         assert coordinator.async_request_refresh.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_async_room_added_monitor_only_creates_monitor_sensors_and_removes_control_entities(
+        self, hass, mock_config_entry
+    ):
+        """Monitor-only rooms register MONITOR_SENSOR and strip stale control entities."""
+        from custom_components.roommind.const import DOMAIN
+        from custom_components.roommind.sensor import create_room_monitor_sensors
+
+        coordinator = _create_coordinator(hass, mock_config_entry)
+        coordinator.async_request_refresh = AsyncMock()
+        mock_add_monitor = MagicMock()
+        mock_add_sensor = MagicMock()
+        coordinator.register_entity_platform(EntityPlatform.SENSOR, mock_add_sensor, create_room_sensors)
+        coordinator.register_entity_platform(
+            EntityPlatform.MONITOR_SENSOR, mock_add_monitor, create_room_monitor_sensors
+        )
+
+        stale_override = MagicMock()
+        stale_override.unique_id = f"{DOMAIN}_ke_ting_override"
+        stale_override.entity_id = "climate.roommind_ke_ting_override"
+        keep_temp = MagicMock()
+        keep_temp.unique_id = f"{DOMAIN}_ke_ting_temperature"
+        keep_temp.entity_id = "sensor.roommind_ke_ting_temperature"
+
+        mock_registry = MagicMock()
+        mock_registry.entities.values.return_value = [stale_override, keep_temp]
+
+        with patch("homeassistant.helpers.entity_registry.async_get", return_value=mock_registry):
+            await coordinator.async_room_added({"area_id": "ke_ting", "devices": []})
+
+        mock_add_monitor.assert_called_once()
+        assert len(mock_add_monitor.call_args[0][0]) == 4
+        mock_add_sensor.assert_not_called()
+        mock_registry.async_remove.assert_called_once_with("climate.roommind_ke_ting_override")
 
     @pytest.mark.asyncio
     async def test_async_room_removed_triggers_refresh(self, hass, mock_config_entry):

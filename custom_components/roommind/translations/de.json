@@ -34,6 +34,23 @@
       },
       "mode": {
         "name": "{room} beobachtete Aktivität"
+      },
+      "temperature": {
+        "name": "{room} Temperatur"
+      },
+      "humidity": {
+        "name": "{room} Luftfeuchtigkeit"
+      },
+      "dew_point": {
+        "name": "{room} Taupunkt"
+      },
+      "mold_risk": {
+        "name": "{room} Schimmelrisiko",
+        "state": {
+          "ok": "OK",
+          "warning": "Warnung",
+          "critical": "Kritisch"
+        }
       }
     },
     "binary_sensor": {

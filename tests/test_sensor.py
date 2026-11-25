@@ -9,9 +9,14 @@ import pytest
 from custom_components.roommind.const import DOMAIN
 from custom_components.roommind.coordinator import EntityPlatform
 from custom_components.roommind.sensor import (
+    RoomMindDewPointSensor,
+    RoomMindHumiditySensor,
     RoomMindModeSensor,
+    RoomMindMoldRiskSensor,
     RoomMindTargetTemperatureSensor,
+    RoomMindTemperatureSensor,
     async_setup_entry,
+    create_room_monitor_sensors,
     create_room_sensors,
 )
 
@@ -38,16 +43,22 @@ async def test_setup_entry_creates_entities(hass, mock_config_entry, store):
 
     await async_setup_entry(hass, mock_config_entry, add_entities)
 
-    coordinator.register_entity_platform.assert_called_once()
-    platform, callback, factory, area_ids = coordinator.register_entity_platform.call_args.args
-    assert platform is EntityPlatform.SENSOR
-    assert callback is add_entities
-    assert factory is create_room_sensors
-    assert list(area_ids) == ["room_a"]
-    # 2 entities per room (target_temp + mode)
+    assert coordinator.register_entity_platform.call_count == 2
+    assert coordinator.register_entity_platform.call_args_list[0].args == (
+        EntityPlatform.SENSOR,
+        add_entities,
+        create_room_sensors,
+        ["room_a"],
+    )
+    platform_m, callback_m, factory_m, rooms_m = coordinator.register_entity_platform.call_args_list[1].args
+    assert platform_m is EntityPlatform.MONITOR_SENSOR
+    assert callback_m is add_entities
+    assert factory_m is create_room_monitor_sensors
+    assert list(rooms_m) == ["room_a"]
+    # 2 control sensors + 4 monitor sensors
     add_entities.assert_called_once()
     entities = add_entities.call_args[0][0]
-    assert len(entities) == 2
+    assert len(entities) == 6
 
 
 @pytest.mark.asyncio
@@ -64,8 +75,8 @@ async def test_setup_entry_no_rooms(hass, mock_config_entry, store):
 
     await async_setup_entry(hass, mock_config_entry, add_entities)
 
-    coordinator.register_entity_platform.assert_called_once()
-    platform, callback, factory, area_ids = coordinator.register_entity_platform.call_args.args
+    assert coordinator.register_entity_platform.call_count == 2
+    platform, callback, factory, area_ids = coordinator.register_entity_platform.call_args_list[0].args
     assert platform is EntityPlatform.SENSOR
     assert callback is add_entities
     assert factory is create_room_sensors
@@ -90,7 +101,52 @@ async def test_setup_entry_multiple_rooms(hass, mock_config_entry, store):
     await async_setup_entry(hass, mock_config_entry, add_entities)
 
     entities = add_entities.call_args[0][0]
-    assert len(entities) == 4  # 2 per room
+    assert len(entities) == 12  # 2 control + 4 monitor per room
+
+
+@pytest.mark.asyncio
+async def test_setup_entry_monitor_only_room_skips_control_sensors(hass, mock_config_entry, store):
+    """Monitor-only rooms get only passive monitoring sensors, not target_temp or mode."""
+    await store.async_load()
+    await store.async_save_room("living", {"temperature_sensor": "sensor.living_t"})
+
+    coordinator = _make_coordinator()
+    hass.data[DOMAIN] = {
+        mock_config_entry.entry_id: coordinator,
+        "store": store,
+    }
+    add_entities = MagicMock()
+
+    await async_setup_entry(hass, mock_config_entry, add_entities)
+
+    assert coordinator.register_entity_platform.call_args_list[0].args[3] == []
+    entities = add_entities.call_args[0][0]
+    assert len(entities) == 4
+    assert isinstance(entities[0], RoomMindTemperatureSensor)
+    assert isinstance(entities[1], RoomMindHumiditySensor)
+    assert isinstance(entities[2], RoomMindDewPointSensor)
+    assert isinstance(entities[3], RoomMindMoldRiskSensor)
+
+
+def test_monitor_sensors_values_and_dew_point():
+    """Monitor sensors expose fused temp, humidity, computed dew point, and mold risk."""
+    coordinator = _make_coordinator(
+        {
+            "living": {
+                "current_temp": 22.0,
+                "current_humidity": 55.0,
+                "mold_risk_level": "warning",
+            }
+        }
+    )
+    temp_s, hum_s, dp_s, mold_s = create_room_monitor_sensors(coordinator, "living")
+    assert temp_s.native_value == 22.0
+    assert hum_s.native_value == 55.0
+    assert dp_s.native_value == 12.5
+    assert mold_s.native_value == "warning"
+
+    coordinator.data["rooms"]["living"]["current_humidity"] = 0.0
+    assert dp_s.native_value is None
 
 
 def test_create_room_entities():
