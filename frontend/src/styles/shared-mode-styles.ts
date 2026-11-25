@@ -21,6 +21,12 @@ export const modeStyles = css`
     border-radius: 50%;
   }
 
+  .mode-pill.mode-unverified-output .mode-dot {
+    background: transparent !important;
+    border: 1.5px solid currentColor;
+    box-sizing: border-box;
+  }
+
   .mode-heating {
     color: var(--warning-color, #ff9800);
     background: var(--roommind-warning-tint);

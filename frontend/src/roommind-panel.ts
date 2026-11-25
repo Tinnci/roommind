@@ -6,6 +6,7 @@ import {
   getDisplayMode,
   getEntitiesForArea,
   isRoomMindEntity,
+  resolveRoomModePresentation,
 } from "./utils/room-state";
 import { loadHaElements } from "./load-ha-elements";
 import { localize } from "./utils/localize";
@@ -13,7 +14,11 @@ import { getEmptyUnconfiguredAreaIds, hideRoomIds, unhideRoomIds } from "./utils
 import { roommindThemeStyles } from "./styles/theme-styles";
 import { formatTemp, tempStep, tempUnit, toCelsius, toDisplay } from "./utils/temperature";
 import { DEFAULT_CONTROL_MODE, DEFAULT_SETBACK_OFFSET } from "./utils/constants";
-import { isRoomControlEffective, summarizeRoomOverview } from "./utils/room-overview-status";
+import {
+  hasClimateDevice,
+  isRoomControlEffective,
+  summarizeRoomOverview,
+} from "./utils/room-overview-status";
 import { hasConfiguredSensors } from "./utils/environment-monitor";
 import {
   applyBaselineTargetChange,
@@ -1013,10 +1018,34 @@ export class RoomMindPanel extends LitElement {
     const {
       activeCount,
       externalActiveCount,
-      unknownCount,
       effectiveOverrideCount,
       pausedOverrideCount,
     } = overviewStatus;
+    let modeOnlyActiveCount = 0;
+    let trueUnknownCount = 0;
+    for (const info of areaInfos) {
+      const cfg = info.config;
+      if (!cfg || cfg.is_outdoor || !hasClimateDevice(cfg)) continue;
+      const modeInfo = resolveRoomModePresentation(cfg.live, cfg);
+      if (
+        modeInfo.source === "mode_only" &&
+        isRoomControlEffective(cfg, this._climateControlActive) &&
+        (modeInfo.mode === "heating" ||
+          modeInfo.mode === "cooling" ||
+          modeInfo.mode === "dry" ||
+          modeInfo.mode === "fan_only")
+      ) {
+        modeOnlyActiveCount += 1;
+      } else if (
+        modeInfo.source === "offline" ||
+        modeInfo.source === "waiting" ||
+        modeInfo.source === "assumed" ||
+        modeInfo.source === "conflict"
+      ) {
+        trueUnknownCount += 1;
+      }
+    }
+    const effectiveActiveCount = activeCount + modeOnlyActiveCount;
     const windowOpenCount = areaInfos.filter((i) => i.config?.live?.window_open).length;
     const awayCount = areaInfos.filter((i) => i.config?.live?.presence_away).length;
     const moldCount = areaInfos.filter(
@@ -1027,27 +1056,27 @@ export class RoomMindPanel extends LitElement {
     const overviewTitle =
       moldCount > 0 || windowOpenCount > 0
         ? localize("panel.overview.attention", l, { count: moldCount + windowOpenCount })
-        : activeCount > 0
-          ? localize("panel.overview.active", l, { count: activeCount })
+        : effectiveActiveCount > 0
+          ? localize("panel.overview.active", l, { count: effectiveActiveCount })
           : externalActiveCount > 0
             ? localize("panel.overview.external", l, { count: externalActiveCount })
-            : unknownCount > 0
-              ? localize("panel.overview.unknown", l, { count: unknownCount })
+            : trueUnknownCount > 0
+              ? localize("panel.overview.unknown", l, { count: trueUnknownCount })
               : localize("panel.overview.stable", l);
     const overviewIconClass =
       moldCount > 0 || windowOpenCount > 0
         ? "warning"
-        : activeCount > 0
+        : effectiveActiveCount > 0
           ? "active"
-          : externalActiveCount > 0 || unknownCount > 0
+          : externalActiveCount > 0 || trueUnknownCount > 0
             ? "monitoring"
             : "";
     const overviewIcon =
       moldCount > 0 || windowOpenCount > 0
         ? "mdi:alert-circle-outline"
-        : activeCount > 0
+        : effectiveActiveCount > 0
           ? "mdi:thermostat"
-          : externalActiveCount > 0 || unknownCount > 0
+          : externalActiveCount > 0 || trueUnknownCount > 0
             ? "mdi:eye-outline"
             : "mdi:check-circle-outline";
     return html`
@@ -1420,7 +1449,7 @@ export class RoomMindPanel extends LitElement {
 
   private _areaPriorityGroupId(info: AreaInfo): AreaGroup["id"] {
     const live = info.config?.live;
-    const mode = getDisplayMode(live, info.config);
+    const mode = resolveRoomModePresentation(live, info.config).mode;
     const hasClimateSelected =
       (info.config?.devices?.length ?? 0) > 0 ||
       (info.config?.thermostats?.length ?? 0) > 0 ||

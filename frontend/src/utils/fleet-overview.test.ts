@@ -217,4 +217,65 @@ describe("fleet-overview", () => {
     expect(matchesFleetFilter(hallway, "attention", hass, true)).toBe(true);
     expect(matchesFleetFilter(living, "monitored", hass, true)).toBe(false);
   });
+
+  it("counts and filters confirmed mode-only heating rooms accurately", () => {
+    const modeOnlyHeat = makeAreaInfo(
+      "bedroom_2",
+      makeRoom({
+        area_id: "bedroom_2",
+        devices: [{ entity_id: "climate.ac_no_action", type: "ac", role: "auto" }],
+        live: {
+          current_temp: 19,
+          current_humidity: 48,
+          target_temp: 21,
+          heat_target: 21,
+          cool_target: 24,
+          mode: "idle",
+          observed_mode: null,
+          observation_status: "unknown",
+          heating_power: 0,
+          device_setpoint: 28,
+          override_active: false,
+          override_type: null,
+          override_temp: null,
+          override_until: null,
+          override_suppressed: false,
+          active_schedule_index: -1,
+          window_open: false,
+          confidence: 0.9,
+          mpc_active: true,
+          presence_away: false,
+          mold_risk_level: "ok",
+          mold_surface_rh: null,
+          mold_prevention_active: false,
+          mold_prevention_delta: 0,
+          blind_position: null,
+          cover_auto_paused: false,
+          cover_forced_reason: "",
+          active_cover_schedule_index: -1,
+          active_heat_sources: null,
+          learning_paused_reason: null,
+          device_observations: [
+            {
+              entity_id: "climate.ac_no_action",
+              available: true,
+              assumed_state: false,
+              hvac_mode: "heat",
+              temperature: 28,
+              target_temp_low: null,
+              target_temp_high: null,
+            },
+          ],
+        },
+      }),
+    );
+
+    const stats = summarizeFleetOverview([modeOnlyHeat], hass, true);
+    expect(stats.heatingRooms).toBe(1);
+    expect(stats.activeRooms).toBe(1);
+    expect(stats.offIdleRooms).toBe(0);
+    expect(matchesFleetFilter(modeOnlyHeat, "heating", hass, true)).toBe(true);
+    expect(matchesFleetFilter(modeOnlyHeat, "active", hass, true)).toBe(true);
+    expect(matchesFleetFilter(modeOnlyHeat, "off", hass, true)).toBe(false);
+  });
 });

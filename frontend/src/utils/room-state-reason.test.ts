@@ -135,4 +135,76 @@ describe("resolveRoomReason", () => {
       "reason.holding_target",
     );
   });
+
+  it("shows schedule/target reason for confirmed mode-only units and flags offline devices", () => {
+    const unknownBase = {
+      current_temp: 20,
+      current_humidity: 45,
+      target_temp: 21,
+      heat_target: 21,
+      cool_target: 24,
+      mode: "idle" as const,
+      observation_status: "unknown" as const,
+      observed_mode: null,
+      heating_power: 0,
+      device_setpoint: 28,
+      override_active: false,
+      override_type: null,
+      override_temp: null,
+      override_until: null,
+      override_suppressed: false,
+      active_schedule_index: -1,
+      window_open: false,
+      confidence: 0.9,
+      mpc_active: true,
+      presence_away: false,
+      mold_risk_level: "ok" as const,
+      mold_surface_rh: null,
+      mold_prevention_active: false,
+      mold_prevention_delta: 0,
+      blind_position: null,
+      cover_auto_paused: false,
+      cover_forced_reason: "",
+      active_cover_schedule_index: -1,
+      active_heat_sources: null,
+      learning_paused_reason: null,
+    };
+
+    const modeOnlyRoom = makeRoom({
+      schedules: [],
+      live: {
+        ...unknownBase,
+        device_observations: [
+          {
+            entity_id: "climate.ac",
+            available: true,
+            assumed_state: false,
+            hvac_mode: "heat",
+            temperature: 28,
+            target_temp_low: null,
+            target_temp_high: null,
+          },
+        ],
+      },
+    });
+    expect(resolveRoomReason(modeOnlyRoom, true)?.key).toBe("reason.holding_target");
+
+    const offlineRoom = makeRoom({
+      live: {
+        ...unknownBase,
+        device_observations: [
+          {
+            entity_id: "climate.ac",
+            available: false,
+            assumed_state: false,
+            hvac_mode: null,
+            temperature: null,
+            target_temp_low: null,
+            target_temp_high: null,
+          },
+        ],
+      },
+    });
+    expect(resolveRoomReason(offlineRoom, true)?.key).toBe("reason.device_offline");
+  });
 });

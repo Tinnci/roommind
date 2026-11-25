@@ -4,6 +4,7 @@ import {
   getObservedMode,
   isRoomMindEntity,
   isTemperatureCached,
+  resolveRoomModePresentation,
 } from "./room-state";
 
 describe("room observation presentation", () => {
@@ -55,5 +56,137 @@ describe("room observation presentation", () => {
     expect(isTemperatureCached({ current_temp: 24, current_temp_raw: 24 })).toBe(false);
     expect(isTemperatureCached({ current_temp: null, current_temp_raw: null })).toBe(false);
     expect(isTemperatureCached({ current_temp: 24 })).toBe(false);
+  });
+
+  test("distinguishes confirmed mode-only devices from offline, assumed, conflict, and waiting", () => {
+    expect(
+      resolveRoomModePresentation({ mode: "heating", observation_status: "observed" }),
+    ).toEqual({ mode: "heating", source: "observed", labelKey: "mode.heating" });
+
+    expect(
+      resolveRoomModePresentation({
+        mode: "idle",
+        observation_status: "unknown",
+        device_observations: [
+          {
+            entity_id: "climate.ac_2",
+            available: true,
+            assumed_state: false,
+            hvac_mode: "heat",
+            temperature: 28,
+            target_temp_low: null,
+            target_temp_high: null,
+          },
+        ],
+      }),
+    ).toEqual({
+      mode: "heating",
+      source: "mode_only",
+      labelKey: "mode.heating_mode",
+      hintKey: "hero.mode_only_hint",
+    });
+
+    expect(
+      resolveRoomModePresentation({
+        mode: "idle",
+        observation_status: "unknown",
+        device_observations: [
+          {
+            entity_id: "climate.ac_2",
+            available: true,
+            assumed_state: false,
+            hvac_mode: "cool",
+            temperature: 24,
+            target_temp_low: null,
+            target_temp_high: null,
+          },
+        ],
+      }),
+    ).toMatchObject({ mode: "cooling", source: "mode_only", labelKey: "mode.cooling_mode" });
+
+    expect(
+      resolveRoomModePresentation({
+        mode: "idle",
+        observation_status: "unknown",
+        device_observations: [
+          {
+            entity_id: "climate.ac_2",
+            available: true,
+            assumed_state: false,
+            hvac_mode: "auto",
+            temperature: 22,
+            target_temp_low: null,
+            target_temp_high: null,
+          },
+        ],
+      }),
+    ).toMatchObject({ mode: "idle", source: "mode_only", labelKey: "mode.auto_mode" });
+
+    expect(
+      resolveRoomModePresentation({
+        mode: "idle",
+        observation_status: "unknown",
+        device_observations: [
+          {
+            entity_id: "climate.ac_1",
+            available: true,
+            assumed_state: false,
+            hvac_mode: "heat",
+            temperature: 25,
+            target_temp_low: null,
+            target_temp_high: null,
+          },
+          {
+            entity_id: "climate.ac_2",
+            available: true,
+            assumed_state: false,
+            hvac_mode: "cool",
+            temperature: 22,
+            target_temp_low: null,
+            target_temp_high: null,
+          },
+        ],
+      }),
+    ).toMatchObject({ mode: null, source: "conflict", labelKey: "hero.output_conflict" });
+
+    expect(
+      resolveRoomModePresentation({
+        mode: "idle",
+        observation_status: "unknown",
+        device_observations: [
+          {
+            entity_id: "climate.ac_2",
+            available: false,
+            assumed_state: false,
+            hvac_mode: null,
+            temperature: null,
+            target_temp_low: null,
+            target_temp_high: null,
+          },
+        ],
+      }),
+    ).toMatchObject({ mode: null, source: "offline", labelKey: "hero.device_offline" });
+
+    expect(
+      resolveRoomModePresentation({
+        mode: "idle",
+        observation_status: "unknown",
+        device_observations: [
+          {
+            entity_id: "climate.ir_ac",
+            available: true,
+            assumed_state: true,
+            hvac_mode: "heat",
+            temperature: 25,
+            target_temp_low: null,
+            target_temp_high: null,
+          },
+        ],
+      }),
+    ).toMatchObject({ mode: null, source: "assumed", labelKey: "hero.assumed_state" });
+
+    expect(
+      resolveRoomModePresentation({ mode: "idle", observation_status: "unknown" }),
+    ).toMatchObject({ mode: null, source: "waiting", labelKey: "hero.output_unknown" });
   });
 });

@@ -148,6 +148,21 @@ export function getModeClass(mode: DisplayMode | null | undefined): string {
   }
 }
 
+export type RoomModeSource =
+  | "observed"
+  | "mode_only"
+  | "offline"
+  | "assumed"
+  | "conflict"
+  | "waiting";
+
+export interface RoomModePresentation {
+  mode: DisplayMode | null;
+  source: RoomModeSource;
+  labelKey: TranslationKey;
+  hintKey?: TranslationKey;
+}
+
 const modeKeys: Record<DisplayMode, TranslationKey> = {
   heating: "mode.heating",
   cooling: "mode.cooling",
@@ -162,4 +177,110 @@ const modeKeys: Record<DisplayMode, TranslationKey> = {
  */
 export function formatMode(mode: DisplayMode, language: string): string {
   return localize(modeKeys[mode], language);
+}
+
+/**
+ * Distinguish confirmed mode-only devices (e.g. TCL ACs without hvac_action
+ * telemetry) from offline, assumed-state, or conflicting devices in UI labels
+ * without altering strict backend thermal observation semantics.
+ */
+export function resolveRoomModePresentation(
+  live:
+    | Pick<
+        RoomLiveData,
+        "mode" | "observed_mode" | "observation_status" | "commanded_mode" | "device_observations"
+      >
+    | undefined,
+  config?: Pick<RoomConfig, "climate_mode"> | null,
+): RoomModePresentation {
+  const displayMode = getDisplayMode(live, config);
+  if (displayMode !== null) {
+    return {
+      mode: displayMode,
+      source: "observed",
+      labelKey: modeKeys[displayMode],
+    };
+  }
+
+  const observations = live?.device_observations ?? [];
+  const confirmed = observations.filter(
+    (obs) => obs.available && !obs.assumed_state && Boolean(obs.hvac_mode),
+  );
+  if (confirmed.length > 0) {
+    const modes = new Set(confirmed.map((obs) => String(obs.hvac_mode).toLowerCase()));
+    const hasHeat = modes.has("heat");
+    const hasCool = modes.has("cool");
+    if (hasHeat && hasCool) {
+      return {
+        mode: null,
+        source: "conflict",
+        labelKey: "hero.output_conflict",
+        hintKey: "hero.output_conflict_hint",
+      };
+    }
+    if (hasHeat) {
+      return {
+        mode: "heating",
+        source: "mode_only",
+        labelKey: "mode.heating_mode",
+        hintKey: "hero.mode_only_hint",
+      };
+    }
+    if (hasCool) {
+      return {
+        mode: "cooling",
+        source: "mode_only",
+        labelKey: "mode.cooling_mode",
+        hintKey: "hero.mode_only_hint",
+      };
+    }
+    if (modes.has("dry")) {
+      return {
+        mode: "dry",
+        source: "mode_only",
+        labelKey: "mode.dry",
+        hintKey: "hero.mode_only_hint",
+      };
+    }
+    if (modes.has("fan_only")) {
+      return {
+        mode: "fan_only",
+        source: "mode_only",
+        labelKey: "mode.fan_only",
+      };
+    }
+    if (modes.has("auto") || modes.has("heat_cool")) {
+      return {
+        mode: "idle",
+        source: "mode_only",
+        labelKey: "mode.auto_mode",
+        hintKey: "hero.mode_only_hint",
+      };
+    }
+  }
+
+  if (observations.length > 0 && observations.every((obs) => !obs.available)) {
+    return {
+      mode: null,
+      source: "offline",
+      labelKey: "hero.device_offline",
+      hintKey: "hero.device_offline_hint",
+    };
+  }
+
+  if (observations.some((obs) => obs.assumed_state)) {
+    return {
+      mode: null,
+      source: "assumed",
+      labelKey: "hero.assumed_state",
+      hintKey: "hero.assumed_state_hint",
+    };
+  }
+
+  return {
+    mode: null,
+    source: "waiting",
+    labelKey: "hero.output_unknown",
+    hintKey: "hero.output_unknown_hint",
+  };
 }

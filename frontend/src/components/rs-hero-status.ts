@@ -1,7 +1,11 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { HomeAssistant, HassArea, RoomConfig } from "../types";
-import { getDisplayMode, getModeClass, formatMode, isTemperatureCached } from "../utils/room-state";
+import {
+  getModeClass,
+  isTemperatureCached,
+  resolveRoomModePresentation,
+} from "../utils/room-state";
 import { modeStyles } from "../styles/shared-mode-styles";
 import { localize } from "../utils/localize";
 import { formatTemp, tempUnit, toDisplayDelta } from "../utils/temperature";
@@ -724,7 +728,7 @@ export class RsHeroStatus extends LitElement {
   override render() {
     const l = this.hass?.language ?? "en";
     const live = this.config?.live;
-    const mode = getDisplayMode(live, this.config);
+    const modeInfo = resolveRoomModePresentation(live, this.config);
     const hasClimate = this.config ? hasClimateDevice(this.config) : false;
     const isMonitorOnly = !this.isOutdoor && this.config !== null && !hasClimate;
     const inv =
@@ -746,7 +750,7 @@ export class RsHeroStatus extends LitElement {
     return html`
       <ha-card
         data-activity=${
-          isMonitorOnly || hasUnconfiguredPreview ? "monitoring" : (mode ?? "unknown")
+          isMonitorOnly || hasUnconfiguredPreview ? "monitoring" : (modeInfo.mode ?? "unknown")
         }
       >
         ${
@@ -810,13 +814,14 @@ export class RsHeroStatus extends LitElement {
                             `
                           : live
                             ? html`
-                                <span class="mode-pill ${getModeClass(mode)}">
+                                <span
+                                  class="mode-pill ${getModeClass(modeInfo.mode)} ${
+                                    modeInfo.source === "mode_only" ? "mode-unverified-output" : ""
+                                  }"
+                                  title=${modeInfo.hintKey ? localize(modeInfo.hintKey, l) : ""}
+                                >
                                   <span class="mode-dot"></span>
-                                  ${
-                                    mode === null
-                                      ? localize("hero.output_unknown", l)
-                                      : formatMode(mode, l)
-                                  }
+                                  ${localize(modeInfo.labelKey, l)}
                                 </span>
                               `
                             : nothing
@@ -935,6 +940,11 @@ export class RsHeroStatus extends LitElement {
                       : this.config.temperature_sensor
                         ? localize("room.control_mode.full_control_info", l)
                         : localize("room.control_mode.managed_info", l)
+                  }
+                  ${
+                    !isMonitorOnly && modeInfo.source === "mode_only" && modeInfo.hintKey
+                      ? html`<div style="margin-top: 6px;">${localize(modeInfo.hintKey, l)}</div>`
+                      : nothing
                   }
                 </div>
               `

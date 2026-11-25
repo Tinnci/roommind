@@ -3,10 +3,9 @@ import { customElement, property } from "lit/decorators.js";
 import type { CompressorGroup, HomeAssistant, HassArea, RoomConfig } from "../types";
 import {
   getComfortDelta,
-  getDisplayMode,
   getModeClass,
-  formatMode,
   isTemperatureCached,
+  resolveRoomModePresentation,
 } from "../utils/room-state";
 import { modeStyles } from "../styles/shared-mode-styles";
 import { localize } from "../utils/localize";
@@ -822,7 +821,7 @@ export class RsAreaCard extends LitElement {
     const isConfigured = this.config !== null && hasClimateSelected && !isOutdoor;
     const isMonitorOnly = this.config !== null && !hasClimateSelected && !isOutdoor;
     const live = this.config?.live;
-    const mode = getDisplayMode(live, this.config);
+    const modeInfo = resolveRoomModePresentation(live, this.config);
     const reason =
       isConfigured && live
         ? resolveRoomReason(this.config, this.climateControlActive)
@@ -837,7 +836,7 @@ export class RsAreaCard extends LitElement {
     return html`
       <ha-card
         data-activity=${
-          isConfigured ? (mode ?? "unknown") : isMonitorOnly ? "monitoring" : "none"
+          isConfigured ? (modeInfo.mode ?? "unknown") : isMonitorOnly ? "monitoring" : "none"
         }
         role="link"
         tabindex=${this.reordering ? -1 : 0}
@@ -884,13 +883,14 @@ export class RsAreaCard extends LitElement {
             ${
               isConfigured && live
                 ? html`
-                    <span class="mode-pill ${getModeClass(mode)}">
+                    <span
+                      class="mode-pill ${getModeClass(modeInfo.mode)} ${
+                        modeInfo.source === "mode_only" ? "mode-unverified-output" : ""
+                      }"
+                      title=${modeInfo.hintKey ? localize(modeInfo.hintKey, this.hass.language) : ""}
+                    >
                       <span class="mode-dot"></span>
-                      ${
-                        mode === null
-                          ? localize("hero.output_unknown", this.hass.language)
-                          : formatMode(mode, this.hass.language)
-                      }
+                      ${localize(modeInfo.labelKey, this.hass.language)}
                     </span>
                   `
                 : isMonitorOnly

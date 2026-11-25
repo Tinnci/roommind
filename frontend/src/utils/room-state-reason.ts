@@ -4,6 +4,7 @@
 import type { RoomConfig } from "../types";
 import type { TranslationKey } from "./localize";
 import { hasClimateDevice } from "./room-overview-status";
+import { resolveRoomModePresentation } from "./room-state";
 
 export type RoomReasonTone = "warning" | "accent" | "info" | "neutral";
 
@@ -65,7 +66,16 @@ export function resolveRoomReason(
     return { key: "reason.mode_off", tone: "neutral" };
   }
   if (live?.observation_status === "unknown" && hasClimateDevice(config)) {
-    return { key: "reason.device_unverified", tone: "warning" };
+    const modeInfo = resolveRoomModePresentation(live, config);
+    if (modeInfo.source === "offline") {
+      return { key: "reason.device_offline", tone: "warning" };
+    }
+    if (modeInfo.source === "conflict") {
+      return { key: "reason.mode_conflict", tone: "warning" };
+    }
+    if (modeInfo.source !== "mode_only") {
+      return { key: "reason.device_unverified", tone: "warning" };
+    }
   }
   if (!hasClimateDevice(config)) {
     return null;

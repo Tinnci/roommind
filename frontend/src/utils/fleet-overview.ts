@@ -3,7 +3,7 @@
  */
 import type { AreaInfo, CompressorGroup, HomeAssistant } from "../types";
 import { hasClimateDevice, isMonitorOnlyRoom, isRoomControlEffective } from "./room-overview-status";
-import { getDisplayMode } from "./room-state";
+import { resolveRoomModePresentation } from "./room-state";
 import { buildThermostatFleet } from "./thermostat-fleet";
 
 export type FleetFilter =
@@ -60,7 +60,7 @@ export function matchesFleetFilter(
   }
   if (!hasClimateDevice(config)) return false;
 
-  const displayMode = getDisplayMode(config.live, config);
+  const displayMode = resolveRoomModePresentation(config.live, config).mode;
   const controlEffective = isRoomControlEffective(config, climateControlActive);
   const fleet = buildThermostatFleet(config, hass, compressorGroups);
 
@@ -122,7 +122,7 @@ export function summarizeFleetOverview(
 
     if (fleet.total >= 2) multiUnitRooms += 1;
 
-    const displayMode = getDisplayMode(config.live, config);
+    const displayMode = resolveRoomModePresentation(config.live, config).mode;
     const controlEffective = isRoomControlEffective(config, climateControlActive);
 
     if (displayMode === "cooling" || displayMode === "dry") coolingDryingRooms += 1;
