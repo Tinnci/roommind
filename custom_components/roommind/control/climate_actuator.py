@@ -738,6 +738,29 @@ async def _async_idle_fan_only(
     return mode_result, fan_result
 
 
+def match_fan_mode(state: Any, desired: str) -> str | None:
+    """Match *desired* against advertised ``fan_modes`` ignoring case/separators."""
+    raw = (state.attributes.get("fan_modes") or []) if state else []
+    if not isinstance(raw, list | tuple):
+        return None
+    modes: list[str] = list(raw)
+    if desired in modes:
+        return desired
+
+    def fold(value: Any) -> str:
+        return str(value).casefold()
+
+    def norm(value: Any) -> str:
+        return "".join(ch for ch in fold(value) if ch.isalnum())
+
+    for key in (fold, norm):
+        wanted = key(desired)
+        matched = next((mode for mode in modes if key(mode) == wanted), None)
+        if matched is not None:
+            return matched
+    return None
+
+
 async def async_idle_device(
     hass: HomeAssistant,
     entity_id: str,
@@ -747,6 +770,7 @@ async def async_idle_device(
     targets: TargetTemps | None = None,
     setback_offset: float = DEFAULT_IDLE_SETBACK_OFFSET,
     observations: EntitySnapshots | None = None,
+    force_off: bool = False,
 ) -> DeviceOperations:
     """Submit configured idle work and return each required operation's evidence."""
     idle_action, idle_fan_mode = get_idle_action(devices, entity_id)
@@ -757,6 +781,15 @@ async def async_idle_device(
         if targets is not None and targets.heat is not None
         else None
     )
+    if force_off:
+        return await async_turn_off_climate(
+            hass,
+            entity_id,
+            area_id=area_id,
+            fallback_setpoint=fallback_temp,
+            protect_valve=protect_valve,
+            observations=observations,
+        )
     if idle_action == IDLE_ACTION_LOW:
         return await _async_idle_low(
             hass, entity_id, area_id=area_id, fallback_temp=fallback_temp, observations=observations

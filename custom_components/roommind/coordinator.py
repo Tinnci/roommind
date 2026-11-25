@@ -44,6 +44,7 @@ from .const import (
     OBSERVED_SUMMARY_RETENTION_DAYS,
     OUTDOOR_UNAVAILABLE_NOTIFICATION_ID,
     OUTDOOR_UNAVAILABLE_NOTIFY_CYCLES,
+    OVERRIDE_CUSTOM,
     RAW_OBSERVATION_PRUNE_CYCLES,
     RAW_OBSERVATION_RETENTION_DAYS,
     THERMAL_EPISODE_MAX_GAP_SECONDS,
@@ -77,6 +78,7 @@ from .control.thermal_model import (
     RoomModelSimulationContext,
     TemperatureObservation,
 )
+from .managers.ac_coil_dry_manager import AcCoilDryManager
 from .managers.airflow_control_manager import AirflowControlManager, AirflowRuntimeContext
 from .managers.compressor_group_manager import (
     CompressorCommandOutcome,
@@ -86,6 +88,7 @@ from .managers.compressor_group_manager import (
     resolve_master_action,
 )
 from .managers.cover_orchestrator import CoverOrchestrator, CoverResult
+from .managers.device_setpoint_tracker import DeviceSetpointTracker
 from .managers.ekf_training_manager import EkfTrainingManager
 from .managers.environmental_factor_manager import (
     AIRFLOW_ROLE_VENTILATION,
@@ -119,6 +122,7 @@ from .utils.i18n import get_translation
 from .utils.notification_payloads import build_outdoor_unavailable_payload
 from .utils.observation_store import ObservationStore
 from .utils.schedule_utils import (
+    override_hold_until,
     resolve_schedule_index,
 )
 from .utils.sensor_utils import read_sensor_value, sensor_observation_age, sensor_observation_timestamp
@@ -329,6 +333,10 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._ac_overdrive = ACOverdriveManager()
         self._inverter_regime = InverterRegimeManager()
         self._prev_slope_sample: dict[str, tuple[float, float]] = {}
+        self._coil_dry_manager = AcCoilDryManager(hass)
+        self.device_setpoints: DeviceSetpointTracker = hass.data.setdefault(DOMAIN, {}).setdefault(
+            "device_setpoints", DeviceSetpointTracker(time.monotonic)
+        )
         self._tracked_entity_areas: dict[str, set[str]] = {}
         self._remove_state_listeners: Callable[[], None] | None = None
         self._pending_obs_areas: set[str] = set()
@@ -728,6 +736,14 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             persist_actuation=thermal_state_saved,
         )
 
+        stored_rooms = store.get_rooms()
+        device_map = build_rooms_devices_map(stored_rooms)
+        self.device_setpoints.prune(set(device_map))
+        self._coil_dry_manager.prune(set(device_map))
+        if self._coil_dry_manager.state_dirty:
+            await store.async_save_settings({"coil_dry_state": self._coil_dry_manager.get_state()})
+            self._coil_dry_manager.state_dirty = False
+
         room_states = {area_id: self._reconcile_room_evidence(room) for area_id, room in room_states.items()}
         self.rooms = room_states
         return {"rooms": room_states}
@@ -763,6 +779,7 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     self._sensor_fusion = SensorFusionManager.from_dict(thermal_data.get("sensor_biases", {}))
                     self._ac_overdrive = ACOverdriveManager.from_dict(thermal_data.get("ac_overdrive", {}))
             self._valve_manager.load_actuation_data(settings.get("valve_last_actuation", {}))
+            self._coil_dry_manager.load_state(settings.get("coil_dry_state", {}))
             self._model_loaded = True
 
         if self._history_store is None:
@@ -1586,6 +1603,93 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             shading_factor=self._cover_orchestrator.read_positions(area_id, room).shading_factor,
         )
 
+    def _setpoint_tolerances(self, state: Any) -> tuple[float, float]:
+        """Return (min_change_tolerance, echo_rounding_tolerance) in the device unit."""
+        step = state.attributes.get("target_temp_step")
+        try:
+            step = float(step) if step is not None else None
+        except (TypeError, ValueError):
+            step = None
+        if step and step > 0:
+            return step / 2, step / 2
+        default = 1.0 if ha_temp_unit_str(self.hass) == "°F" else 0.5
+        return default / 2, default
+
+    @staticmethod
+    def _setpoint_side(attr: str, state: Any, device_type: str, climate_mode: str) -> str | None:
+        if attr == "target_temp_low":
+            return "heat"
+        if attr == "target_temp_high":
+            return "cool"
+        if device_type == "trv" or state.state == "heat":
+            return "heat"
+        if state.state in ("cool", "dry"):
+            return "cool"
+        action = state.attributes.get("hvac_action")
+        if state.state in ("heat_cool", "auto") and action in ("heating", "preheating"):
+            return "heat"
+        if state.state in ("heat_cool", "auto") and action == "cooling":
+            return "cool"
+        if climate_mode == CLIMATE_MODE_HEAT_ONLY:
+            return "heat"
+        if climate_mode == CLIMATE_MODE_COOL_ONLY:
+            return "cool"
+        return None
+
+    async def _async_adopt_device_setpoints(self, room: dict, settings: dict) -> dict:
+        """Promote manual remote/dial setpoint changes into a temporary override when enabled."""
+        area_id = room.get("area_id", "unknown")
+        climate_mode = room.get("climate_mode", "auto")
+        devices = room.get("devices", []) or []
+        chosen: dict[str, tuple[float, float]] = {}
+        changed_on: list[str] = []
+        for device in devices:
+            if not isinstance(device, dict):
+                continue
+            eid = device.get("entity_id", "")
+            if not eid:
+                continue
+            state = self.hass.states.get(eid)
+            if state is None or state.state in ("unavailable", "unknown"):
+                self.device_setpoints.forget_readings(eid)
+                continue
+            changes = self.device_setpoints.observe(
+                eid, state.state, state.attributes, *self._setpoint_tolerances(state)
+            )
+            for attr, (before, after) in changes.items():
+                side = self._setpoint_side(attr, state, device.get("type", ""), climate_mode)
+                if side is None:
+                    continue
+                size = abs(after - before)
+                if size > chosen.get(side, (0.0, 0.0))[0]:
+                    chosen[side] = (size, ha_temp_to_celsius(self.hass, after, entity_id=eid))
+                changed_on.append(eid)
+        if not chosen or not room.get("follow_thermostat_dial", False):
+            return room
+        if not (settings.get("climate_control_active", True) and room.get("climate_control_enabled", True)):
+            return room
+        preferred_side = (
+            "cool"
+            if climate_mode == CLIMATE_MODE_COOL_ONLY
+            else "heat"
+            if climate_mode == CLIMATE_MODE_HEAT_ONLY
+            else max(chosen, key=lambda k: chosen[k][0])
+        )
+        new_temp = chosen.get(preferred_side, next(iter(chosen.values())))[1]
+        override = {
+            "override_temp": round(new_temp, 1),
+            "override_until": override_hold_until(self.hass, room),
+            "override_type": OVERRIDE_CUSTOM,
+        }
+        _LOGGER.info(
+            "Room '%s': external setpoint change on %s, adopting override %.1f°C",
+            area_id,
+            ", ".join(sorted(set(changed_on))),
+            override["override_temp"],
+        )
+        await self.hass.data[DOMAIN]["store"].async_update_room(area_id, override)
+        return {**room, **override}
+
     async def _async_process_room(
         self,
         room: dict,
@@ -1596,6 +1700,8 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     ) -> dict:
         """Process a single room: read sensor, evaluate schedule, apply control."""
         area_id = room.get("area_id", "unknown")
+        if not room.get("is_outdoor", False):
+            room = await self._async_adopt_device_setpoints(room, settings)
 
         if observation is None:
             observation = self._read_control_observation(room, area_id)
@@ -1954,6 +2060,19 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         compressor_forced_on = set(compressor_constraint_result.compressor_forced_on)
         compressor_forced_off = set(compressor_constraint_result.compressor_forced_off)
 
+        coil_dry = await self._coil_dry_manager.async_process_room(
+            area_id=area_id,
+            room=room,
+            settings=settings,
+            mode=mode,
+            commandable=climate_active,
+            compressor_forced_on=compressor_forced_on,
+            compressor_forced_off=compressor_forced_off,
+            exclude_eids=cycling_eids,
+            force_off=force_off,
+            can_activate=self._compressor_manager.check_can_activate,
+        )
+
         # --- Residual heat transition tracking ---
         # After compressor constraints change the mode to IDLE.
         if climate_active and system_type:
@@ -1984,7 +2103,7 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     targets,
                     power_fraction=power_fraction,
                     current_temp=current_temp,
-                    exclude_eids=cycling_eids,
+                    exclude_eids=cycling_eids | coil_dry.controlled_eids,
                     heating_boost_target=device_snapshot.heating_boost_target,
                     ac_heating_boost_target=device_snapshot.ac_heating_boost_target,
                     cooling_boost_target=device_snapshot.cooling_boost_target,
@@ -2035,7 +2154,10 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     excluded=frozenset(cycling_eids),
                     forced_on=frozenset(compressor_forced_on),
                     forced_off=frozenset(compressor_forced_off),
-                    applied_active=frozenset(applied_report.active_eids) if applied_report is not None else frozenset(),
+                    applied_active=(
+                        (frozenset(applied_report.active_eids) if applied_report is not None else frozenset())
+                        | frozenset(coil_dry.compressor_active_eids)
+                    ),
                     applied_inactive=(
                         frozenset(applied_report.inactive_eids) if applied_report is not None else frozenset()
                     ),
@@ -2127,7 +2249,10 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             mode=mode,
             window_open=window_open,
             q_residual=q_residual,
-            pause_learning=bool(sleep_device_status and sleep_device_status.get("mite_removal_active")),
+            pause_learning=(
+                bool(sleep_device_status and sleep_device_status.get("mite_removal_active"))
+                or coil_dry.skip_ekf_training
+            ),
             soft_load=soft_load,
         )
         self._last_room_pf_mix[area_id] = (display_pf, airflow.q_fan_mix)
@@ -2209,6 +2334,12 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         room_state["ac_overdrive_status"] = controller.last_overdrive_status
         room_state["inverter_regime"] = regime_decision.as_dict() if regime_decision is not None else None
         room_state["thermal_load_status"] = soft_load.as_dict() if soft_load is not None else None
+        room_state["coil_dry_active"] = bool(coil_dry.active)
+        room_state["coil_dry_phase"] = coil_dry.phase
+        room_state["coil_dry_until"] = coil_dry.until
+        room_state["coil_dry_entities"] = sorted(coil_dry.controlled_eids)
+        room_state["preheat"] = controller.preheat if controller.preheat and controller.preheat.get("mode") == mode else None
+        room_state["occupancy_vacant"] = target_plan.occupancy_vacant
         return room_state
 
     def _update_temp_slope(self, area_id: str, temp_c: float | None) -> float | None:
@@ -2702,6 +2833,7 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_valid_temps.pop(area_id, None)
         self._ekf_training.remove_room(area_id)
         self._inverter_regime.reset_room(area_id)
+        self._coil_dry_manager.remove_room(area_id)
         self._prev_slope_sample.pop(area_id, None)
         self._pending_predictions.pop(area_id, None)
         self._residual_tracker.remove_room(area_id)

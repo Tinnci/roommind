@@ -74,6 +74,10 @@ export class RoomMindPanel extends LitElement {
   @state() private _climateControlActive = true;
   @state() private _presenceEnabled = false;
   @state() private _valveProtectionEnabled = false;
+  @state() private _coilDryEnabled = false;
+  @state() private _coilDryMinutes = 20;
+  @state() private _coilDryMode: "fan_only" | "dry" = "fan_only";
+  @state() private _coilDryFanMode = "low";
   @state() private _setbackOffset = DEFAULT_SETBACK_OFFSET;
   @state() private _anyoneHome = true;
   @state() private _presencePersons: string[] = [];
@@ -961,6 +965,10 @@ export class RoomMindPanel extends LitElement {
             .presencePersons=${this._presencePersons}
             .climateControlActive=${this._climateControlActive}
             .valveProtectionEnabled=${this._valveProtectionEnabled}
+            .coilDryEnabled=${this._coilDryEnabled}
+            .coilDryMinutes=${this._coilDryMinutes}
+            .coilDryMode=${this._coilDryMode}
+            .coilDryFanMode=${this._coilDryFanMode}
             .globalSetbackOffset=${this._setbackOffset}
             .compressorGroups=${this._compressorGroups}
             @back-clicked=${this._onBackFromDetail}
@@ -1608,6 +1616,10 @@ export class RoomMindPanel extends LitElement {
     valve_protection_enabled?: boolean;
     setback_offset?: number;
     compressor_groups?: CompressorGroup[];
+    coil_dry_enabled?: boolean;
+    coil_dry_minutes?: number;
+    coil_dry_mode?: "fan_only" | "dry";
+    coil_dry_fan_mode?: string;
   }) {
     this._rooms = result.rooms;
     this._compressorGroups = result.compressor_groups ?? [];
@@ -1621,6 +1633,10 @@ export class RoomMindPanel extends LitElement {
     this._climateControlActive = result.climate_control_active ?? true;
     this._presenceEnabled = result.presence_enabled ?? false;
     this._valveProtectionEnabled = result.valve_protection_enabled ?? false;
+    this._coilDryEnabled = result.coil_dry_enabled ?? false;
+    this._coilDryMinutes = result.coil_dry_minutes ?? 20;
+    this._coilDryMode = result.coil_dry_mode ?? "fan_only";
+    this._coilDryFanMode = result.coil_dry_fan_mode ?? "low";
     this._setbackOffset = result.setback_offset ?? DEFAULT_SETBACK_OFFSET;
     this._anyoneHome = result.anyone_home ?? true;
     this._presencePersons = result.presence_persons ?? [];

@@ -866,6 +866,51 @@ export class RsHeroStatus extends LitElement {
                           : nothing
                       }
                       ${
+                        live?.coil_dry_active
+                          ? html`<span
+                              class="reason-pill"
+                              data-tone="info"
+                              title=${localize("hero.coil_dry_info", l)}
+                            >
+                              ${localize(
+                                live.coil_dry_phase === "drain" ? "hero.coil_dry_drain" : "hero.coil_dry",
+                                l,
+                                {
+                                  time: `${
+                                    live.coil_dry_until
+                                      ? Math.max(1, Math.ceil((live.coil_dry_until - Date.now() / 1000) / 60))
+                                      : 1
+                                  } min`,
+                                },
+                              )}
+                            </span>`
+                          : nothing
+                      }
+                      ${
+                        live?.occupancy_vacant
+                          ? html`<span
+                              class="reason-pill"
+                              data-tone="neutral"
+                              title=${localize("hero.occupancy_vacant_info", l)}
+                            >
+                              ${localize("hero.occupancy_vacant", l)}
+                            </span>`
+                          : nothing
+                      }
+                      ${
+                        live?.preheat
+                          ? html`<span
+                              class="reason-pill"
+                              data-tone="accent"
+                              title=${localize("hero.preheat_info", l)}
+                            >
+                              ${localize("hero.preheat", l, {
+                                temp: `${formatTemp(live.preheat.target, this.hass)}${tempUnit(this.hass)}`,
+                              })}
+                            </span>`
+                          : nothing
+                      }
+                      ${
                         this.config
                           ? html`
                               <button

@@ -16,8 +16,13 @@ from .const import (
     DEFAULT_HEAT_SOURCE_AC_MIN_OUTDOOR,
     DEFAULT_HEAT_SOURCE_OUTDOOR_THRESHOLD,
     DEFAULT_HEAT_SOURCE_PRIMARY_DELTA,
+    DEFAULT_OCCUPANCY_ECO_DELAY_MINUTES,
 )
 from .utils.device_utils import (
+    COIL_DRY_INHERIT,
+    COIL_DRY_MODES,
+    COIL_DRY_ON,
+    COIL_DRY_OVERRIDES,
     DEFAULT_IDLE_SETBACK_OFFSET,
     MAX_IDLE_SETBACK_OFFSET,
     MIN_IDLE_SETBACK_OFFSET,
@@ -95,6 +100,10 @@ ROOM_CONFIG_DEFAULTS: dict[str, object] = {
     "heat_source_ac_min_outdoor": DEFAULT_HEAT_SOURCE_AC_MIN_OUTDOOR,
     "climate_control_enabled": True,
     "fan_speed_mode": "auto",
+    "follow_thermostat_dial": False,
+    "preheat_enabled": True,
+    "occupancy_eco_enabled": False,
+    "occupancy_eco_delay_minutes": DEFAULT_OCCUPANCY_ECO_DELAY_MINUTES,
 }
 
 
@@ -102,6 +111,8 @@ def validate_device_idle_action(device: dict) -> dict:
     """Enforce type-specific device idle-action constraints."""
     if device.get("type") == "ac" and device.get("idle_action") == "low":
         raise vol.Invalid("idle_action='low' is only supported for TRVs (type='trv')")
+    if device.get("type") == "trv" and device.get("coil_dry") == COIL_DRY_ON:
+        raise vol.Invalid("coil_dry='on' is only supported for ACs (type='ac')")
     return device
 
 
@@ -147,6 +158,10 @@ ROOM_CONFIG_SCHEMA: dict[vol.Marker, object] = {
                 vol.Optional("max_setpoint_offset_c"): vol.Any(
                     None, vol.All(vol.Coerce(float), vol.Range(min=0, max=10))
                 ),
+                vol.Optional("coil_dry", default=COIL_DRY_INHERIT): vol.In(COIL_DRY_OVERRIDES),
+                vol.Optional("coil_dry_minutes", default=0): vol.All(vol.Coerce(int), vol.Range(min=0, max=60)),
+                vol.Optional("coil_dry_mode", default=""): vol.In(["", *COIL_DRY_MODES]),
+                vol.Optional("coil_dry_fan_mode", default=""): str,
             },
             validate_device_idle_action,
         )
@@ -252,6 +267,10 @@ ROOM_CONFIG_SCHEMA: dict[vol.Marker, object] = {
     vol.Optional("heat_source_ac_min_outdoor"): vol.All(vol.Coerce(float), vol.Range(min=-30, max=5)),
     vol.Optional("climate_control_enabled"): bool,
     vol.Optional("fan_speed_mode"): str,
+    vol.Optional("follow_thermostat_dial"): bool,
+    vol.Optional("preheat_enabled"): bool,
+    vol.Optional("occupancy_eco_enabled"): bool,
+    vol.Optional("occupancy_eco_delay_minutes"): vol.All(vol.Coerce(int), vol.Range(min=1, max=240)),
     vol.Optional("room_volume_m3"): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0))),
     vol.Optional("control_target"): vol.In(["air_temperature", "perceived_temperature"]),
     vol.Optional("quiet_hours"): vol.Any(

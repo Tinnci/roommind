@@ -69,6 +69,10 @@ export interface RoomConfigDraft {
   valveProtectionExclude: Set<string>;
   climateControlEnabled: boolean;
   fanSpeedMode: string;
+  followThermostatDial: boolean;
+  preheatEnabled: boolean;
+  occupancyEcoEnabled: boolean;
+  occupancyEcoDelayMinutes: number;
   heatSourceOrchestration: boolean;
   heatSourcePrimaryDelta: number;
   heatSourceOutdoorThreshold: number;
@@ -134,6 +138,10 @@ export function createEmptyRoomConfigDraft(): RoomConfigDraft {
     valveProtectionExclude: new Set(),
     climateControlEnabled: true,
     fanSpeedMode: "auto",
+    followThermostatDial: false,
+    preheatEnabled: true,
+    occupancyEcoEnabled: false,
+    occupancyEcoDelayMinutes: 15,
     heatSourceOrchestration: false,
     heatSourcePrimaryDelta: 1.5,
     heatSourceOutdoorThreshold: 5.0,
@@ -240,6 +248,10 @@ export function createRoomConfigDraft(config: RoomConfig | null): RoomConfigDraf
   draft.valveProtectionExclude = new Set(config.valve_protection_exclude ?? []);
   draft.climateControlEnabled = config.climate_control_enabled ?? true;
   draft.fanSpeedMode = config.fan_speed_mode ?? "auto";
+  draft.followThermostatDial = config.follow_thermostat_dial ?? false;
+  draft.preheatEnabled = config.preheat_enabled ?? true;
+  draft.occupancyEcoEnabled = config.occupancy_eco_enabled ?? false;
+  draft.occupancyEcoDelayMinutes = config.occupancy_eco_delay_minutes ?? 15;
   draft.heatSourceOrchestration = config.heat_source_orchestration ?? false;
   draft.heatSourcePrimaryDelta = config.heat_source_primary_delta ?? 1.5;
   draft.heatSourceOutdoorThreshold = config.heat_source_outdoor_threshold ?? 5.0;
@@ -554,6 +566,10 @@ export function buildRoomSavePayload(
     covers: [...draft.selectedCovers],
     climate_control_enabled: draft.climateControlEnabled,
     fan_speed_mode: draft.fanSpeedMode,
+    follow_thermostat_dial: draft.followThermostatDial,
+    preheat_enabled: draft.preheatEnabled,
+    occupancy_eco_enabled: draft.occupancyEcoEnabled,
+    occupancy_eco_delay_minutes: draft.occupancyEcoDelayMinutes,
     covers_auto_enabled: draft.coversAutoEnabled,
     covers_deploy_threshold: draft.coversDeployThreshold,
     covers_min_position: draft.coversMinPosition,

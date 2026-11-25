@@ -69,14 +69,32 @@ describe("room config draft", () => {
     const draft = createRoomConfigDraft({
       ...baseConfig,
       rapid_recovery_enabled: false,
+      follow_thermostat_dial: true,
+      preheat_enabled: false,
+      occupancy_eco_enabled: true,
+      occupancy_eco_delay_minutes: 30,
       devices: [
         { entity_id: "climate.radiator", type: "trv", role: "auto", max_setpoint_offset_c: 0 },
+        {
+          entity_id: "climate.ac",
+          type: "ac",
+          role: "auto",
+          coil_dry: "on",
+          coil_dry_minutes: 15,
+          coil_dry_mode: "fan_only",
+          coil_dry_fan_mode: "high",
+        },
       ],
     });
     const payload = buildRoomSavePayload("living_room", draft);
     expect(payload.rapid_recovery_enabled).toBe(false);
+    expect(payload.follow_thermostat_dial).toBe(true);
+    expect(payload.preheat_enabled).toBe(false);
+    expect(payload.occupancy_eco_enabled).toBe(true);
+    expect(payload.occupancy_eco_delay_minutes).toBe(30);
     expect(payload.devices).toEqual(draft.devices);
     expect(draft.devices[0]?.max_setpoint_offset_c).toBe(0);
+    expect(draft.devices[1]?.coil_dry).toBe("on");
   });
   test("creates a draft from legacy thermostat and AC lists when devices are absent", () => {
     const draft = createRoomConfigDraft(baseConfig);

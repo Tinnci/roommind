@@ -28,7 +28,7 @@ from .night_utils import (
     resolve_sleep_phase,
     wrap_target_resolver_for_sleep_ramp,
 )
-from .presence_utils import is_presence_away
+from .presence_utils import is_presence_away, is_room_vacant
 from .schedule_utils import (
     apply_mold_prevention_to_targets,
     get_active_schedule_entity,
@@ -47,6 +47,7 @@ class TargetResolutionResult:
     targets: TargetTemps
     clear_expired_override: bool = False
     clear_expired_vacation: bool = False
+    occupancy_vacant: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +66,17 @@ class ControlTargetPlan:
     coupled_offset_active: bool = False
     clear_expired_override: bool = False
     clear_expired_vacation: bool = False
+    occupancy_vacant: bool = False
+
+
+def _cap_vacant(room: dict[str, Any], targets: TargetTemps) -> TargetTemps:
+    """Cap schedule/comfort targets at Eco when an occupancy-eco room is vacant."""
+    eco_heat = room.get("eco_heat", room.get("eco_temp", DEFAULT_ECO_HEAT))
+    eco_cool = room.get("eco_cool", DEFAULT_ECO_COOL)
+    return TargetTemps(
+        heat=min(targets.heat, eco_heat) if targets.heat is not None else None,
+        cool=max(targets.cool, eco_cool) if targets.cool is not None else None,
+    )
 
 
 def _is_sleep_trigger_active(hass: HomeAssistant, entity_id: str | None) -> bool:
@@ -102,6 +114,7 @@ async def prepare_control_target_plan(
     )
     resolved_at = time.time() if now is None else now
     presence_away = not room.get("ignore_presence", False) and is_presence_away(hass, room, settings)
+    occupancy_vacant = is_room_vacant(hass, room, resolved_at)
     state = hass.states.get(schedule_entity_id) if schedule_entity_id else None
 
     def converter(value: float) -> float:
@@ -117,6 +130,7 @@ async def prepare_control_target_plan(
         schedule_attributes=dict(state.attributes) if state is not None else None,
         schedule_blocks=schedule_blocks,
         block_temp_converter=converter,
+        room_vacant=occupancy_vacant,
     )
 
     effective_mold_delta = mold_prevention_delta if mold_prevention_active else 0.0
@@ -166,6 +180,7 @@ async def prepare_control_target_plan(
         coupled_offset_active=coupled_offset_active,
         clear_expired_override=base.clear_expired_override,
         clear_expired_vacation=base.clear_expired_vacation,
+        occupancy_vacant=occupancy_vacant,
     )
 
 
@@ -180,6 +195,7 @@ def resolve_room_targets(
     schedule_attributes: dict[str, Any] | None = None,
     schedule_blocks: dict[str, Any] | None = None,
     block_temp_converter: Callable[[float], float] | None = None,
+    room_vacant: bool = False,
 ) -> TargetResolutionResult:
     """Resolve room heat/cool targets and report expired-state cleanup intents."""
     comfort_heat = room.get("comfort_heat", room.get("comfort_temp", DEFAULT_COMFORT_HEAT))
@@ -227,12 +243,20 @@ def resolve_room_targets(
 
     if not schedule_entity_id:
         targets = resolve_with_blocks(None)
-        return TargetResolutionResult(targets, clear_expired_override, clear_expired_vacation)
+        if room_vacant:
+            targets = _cap_vacant(room, targets)
+        return TargetResolutionResult(
+            targets, clear_expired_override, clear_expired_vacation, occupancy_vacant=room_vacant
+        )
 
     state_unavailable = schedule_state is None or schedule_state in ("unavailable", "unknown")
     if state_unavailable:
         targets = resolve_with_blocks(schedule_blocks) if schedule_blocks is not None else resolve_with_blocks(None)
-        return TargetResolutionResult(targets, clear_expired_override, clear_expired_vacation)
+        if room_vacant:
+            targets = _cap_vacant(room, targets)
+        return TargetResolutionResult(
+            targets, clear_expired_override, clear_expired_vacation, occupancy_vacant=room_vacant
+        )
 
     if schedule_state == SCHEDULE_STATE_ON:
         if schedule_blocks is not None:
@@ -244,7 +268,11 @@ def resolve_room_targets(
                 comfort_cool,
                 block_temp_converter,
             )
-        return TargetResolutionResult(targets, clear_expired_override, clear_expired_vacation)
+        if room_vacant:
+            targets = _cap_vacant(room, targets)
+        return TargetResolutionResult(
+            targets, clear_expired_override, clear_expired_vacation, occupancy_vacant=room_vacant
+        )
 
     if settings.get("schedule_off_action", "eco") == "off":
         targets = TargetTemps(heat=None, cool=None)

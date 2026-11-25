@@ -37,6 +37,13 @@ from .settings_config import (
     validate_settings_changes,
 )
 from .utils.area_discovery import suggest_area_entities
+from .utils.device_utils import (
+    COIL_DRY_MODE_FAN_ONLY,
+    DEFAULT_COIL_DRY_DRAIN_MINUTES,
+    DEFAULT_COIL_DRY_FAN_MODE,
+    DEFAULT_COIL_DRY_MIN_COOLING_MINUTES,
+    DEFAULT_COIL_DRY_MINUTES,
+)
 from .utils.schedule_utils import read_schedule_blocks
 from .utils.sleep_device import (
     format_ab_gears,
@@ -186,6 +193,14 @@ def _build_rooms_list_payload(hass: HomeAssistant) -> dict:
                 "device_actuation_status": live.get("device_actuation_status", []),
                 "device_observations": live.get("device_observations", []),
                 "ac_overdrive_status": live.get("ac_overdrive_status", []),
+                "inverter_regime": live.get("inverter_regime"),
+                "thermal_load_status": live.get("thermal_load_status"),
+                "coil_dry_active": live.get("coil_dry_active", False),
+                "coil_dry_phase": live.get("coil_dry_phase"),
+                "coil_dry_until": live.get("coil_dry_until"),
+                "coil_dry_entities": live.get("coil_dry_entities", []),
+                "preheat": live.get("preheat"),
+                "occupancy_vacant": live.get("occupancy_vacant", False),
                 "window_open": live.get("window_open", False),
                 **build_override_live(
                     room_config,
@@ -254,6 +269,14 @@ def _build_rooms_list_payload(hass: HomeAssistant) -> dict:
         "valve_protection_enabled": settings.get("valve_protection_enabled", False),
         "compressor_groups": settings.get("compressor_groups", []),
         "setback_offset": resolve_setback_offset({}, settings),
+        "coil_dry_enabled": settings.get("coil_dry_enabled", False),
+        "coil_dry_minutes": settings.get("coil_dry_minutes", DEFAULT_COIL_DRY_MINUTES),
+        "coil_dry_mode": settings.get("coil_dry_mode", COIL_DRY_MODE_FAN_ONLY),
+        "coil_dry_fan_mode": settings.get("coil_dry_fan_mode", DEFAULT_COIL_DRY_FAN_MODE),
+        "coil_dry_min_cooling_minutes": settings.get(
+            "coil_dry_min_cooling_minutes", DEFAULT_COIL_DRY_MIN_COOLING_MINUTES
+        ),
+        "coil_dry_drain_minutes": settings.get("coil_dry_drain_minutes", DEFAULT_COIL_DRY_DRAIN_MINUTES),
     }
 
 

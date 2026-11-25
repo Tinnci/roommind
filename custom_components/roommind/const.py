@@ -64,6 +64,16 @@ OFF_CONFIRM_SECONDS = 300
 OFF_RESEND_INTERVAL_SECONDS = 600
 OFF_RESEND_MAX = 3
 
+# Follow-the-thermostat / remote setpoint detection
+DEVICE_SETPOINT_SETTLE_SECONDS = 300
+DEVICE_SETPOINT_MODE_REPORT_SECONDS = 60
+DEVICE_SETPOINT_ECHO_SECONDS = 900
+DEVICE_SETPOINT_GAP_SECONDS = 300
+
+# Schedule / occupancy eco defaults
+SCHEDULE_UNREADABLE_HOLD_HOURS = 6
+DEFAULT_OCCUPANCY_ECO_DELAY_MINUTES = 15
+
 
 def make_roommind_context() -> Context:
     """Create a HA Context tagged as originating from RoomMind."""

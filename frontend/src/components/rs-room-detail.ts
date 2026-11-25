@@ -57,6 +57,10 @@ export class RsRoomDetail extends LitElement {
 
   @property({ type: Boolean }) public valveProtectionEnabled = false;
   @property({ type: Number }) public globalSetbackOffset = DEFAULT_SETBACK_OFFSET;
+  @property({ type: Boolean }) public coilDryEnabled = false;
+  @property({ type: Number }) public coilDryMinutes = 20;
+  @property({ type: String }) public coilDryMode: "fan_only" | "dry" = "fan_only";
+  @property({ type: String }) public coilDryFanMode = "low";
 
   @state() private _draft: RoomConfigDraft = createEmptyRoomConfigDraft();
   @state() private _error = "";
@@ -716,6 +720,10 @@ export class RsRoomDetail extends LitElement {
           .presencePersons=${this.presencePersons}
           .valveProtectionEnabled=${this.valveProtectionEnabled}
           .globalSetbackOffset=${this.globalSetbackOffset}
+          .coilDryEnabled=${this.coilDryEnabled}
+          .coilDryMinutes=${this.coilDryMinutes}
+          .coilDryMode=${this.coilDryMode}
+          .coilDryFanMode=${this.coilDryFanMode}
           @edit-closed=${this._closeEdit}
           @schedules-changed=${this._onSchedulesChanged}
           @schedule-selector-changed=${this._onScheduleSelectorChanged}
@@ -723,8 +731,10 @@ export class RsRoomDetail extends LitElement {
           @comfort-cool-changed=${this._onComfortCoolChanged}
           @eco-heat-changed=${this._onEcoHeatChanged}
           @eco-cool-changed=${this._onEcoCoolChanged}
+          @preheat-enabled-changed=${this._onPreheatEnabledChanged}
           @device-changed=${this._onDeviceChanged}
           @setback-offset-changed=${this._onSetbackOffsetChanged}
+          @follow-thermostat-dial-changed=${this._onFollowThermostatDialChanged}
           @valve-protection-exclude-toggle=${this._onValveProtectionExcludeToggle}
           @sensor-changed=${this._onSensorChanged}
           @airflow-devices-changed=${this._onAirflowDevicesChanged}
@@ -854,6 +864,16 @@ export class RsRoomDetail extends LitElement {
     this._autoSave();
   }
 
+  private _onFollowThermostatDialChanged(e: CustomEvent<{ value: boolean }>) {
+    this._patchDraft({ followThermostatDial: e.detail.value });
+    this._autoSave();
+  }
+
+  private _onPreheatEnabledChanged(e: CustomEvent<{ value: boolean }>) {
+    this._patchDraft({ preheatEnabled: e.detail.value });
+    this._autoSave();
+  }
+
   private _onAirflowDevicesChanged(e: CustomEvent<{ devices: AirflowDeviceConfig[] }>) {
     this._airflowDevices = e.detail.devices;
     this._autoSave();
@@ -906,8 +926,20 @@ export class RsRoomDetail extends LitElement {
     this._autoSave();
   }
 
-  private _onSensorChanged(e: CustomEvent<{ key: string; value: string | string[] | number }>) {
+  private _onSensorChanged(
+    e: CustomEvent<{ key: string; value: string | string[] | number | boolean }>,
+  ) {
     const { key, value } = e.detail;
+    if (key === "occupancy_eco_enabled") {
+      this._patchDraft({ occupancyEcoEnabled: Boolean(value) });
+      this._autoSave();
+      return;
+    }
+    if (key === "occupancy_eco_delay_minutes") {
+      this._patchDraft({ occupancyEcoDelayMinutes: Number(value) });
+      this._autoSave();
+      return;
+    }
     const next = applySensorConfigChange(
       {
         selectedTempSensor: this._selectedTempSensor,
@@ -920,7 +952,7 @@ export class RsRoomDetail extends LitElement {
         windowCloseDelay: this._windowCloseDelay,
       },
       key as SensorConfigChangeKey,
-      value,
+      value as string | string[] | number,
     );
     this._selectedTempSensor = next.selectedTempSensor;
     this._selectedTempSensors = next.selectedTempSensors;

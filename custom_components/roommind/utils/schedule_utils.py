@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -17,6 +18,7 @@ from ..const import (
     DEFAULT_COMFORT_HEAT,
     DEFAULT_ECO_COOL,
     DEFAULT_ECO_HEAT,
+    SCHEDULE_UNREADABLE_HOLD_HOURS,
     TargetTemps,
 )
 
@@ -229,6 +231,31 @@ def get_active_schedule_entity(
     if 0 <= idx < len(schedules):
         return schedules[idx].get("entity_id", "") or None
     return None
+
+
+def _next_event(state: Any) -> float | None:
+    raw = state.attributes.get("next_event") if state else None
+    if isinstance(raw, str):
+        raw = dt_util.parse_datetime(raw)
+    if not isinstance(raw, datetime):
+        return None
+    return raw.timestamp()
+
+
+def override_hold_until(hass: HomeAssistant, room: dict, now: float | None = None) -> float | None:
+    """Return timestamp when a follow-the-dial override expires (next schedule transition)."""
+    entity_id = get_active_schedule_entity(hass, room)
+    if not entity_id:
+        return None
+    now = time.time() if now is None else now
+    state = hass.states.get(entity_id)
+    if state is not None and state.state not in ("unavailable", "unknown"):
+        nxt = _next_event(state)
+        if nxt is None and not state.attributes.get("next_event"):
+            return None
+        if nxt is not None and nxt > now:
+            return nxt
+    return now + SCHEDULE_UNREADABLE_HOLD_HOURS * 3600
 
 
 async def read_schedule_blocks(

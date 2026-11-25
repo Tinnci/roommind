@@ -11,6 +11,7 @@ from .const import (
     DEFAULT_CONFLICT_RESOLUTION,
 )
 from .room_config import validate_setback_offset
+from .utils.device_utils import COIL_DRY_MODES
 
 _NOTIFICATION_TARGET_SCHEMA = {
     vol.Required("entity_id"): str,
@@ -56,6 +57,12 @@ SETTINGS_SCHEMA: dict[vol.Marker, object] = {
     vol.Optional("mold_prevention_notify_targets"): [_NOTIFICATION_TARGET_SCHEMA],
     vol.Optional("room_order"): [str],
     vol.Optional("group_by_floor"): bool,
+    vol.Optional("coil_dry_enabled"): bool,
+    vol.Optional("coil_dry_minutes"): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
+    vol.Optional("coil_dry_mode"): vol.In(COIL_DRY_MODES),
+    vol.Optional("coil_dry_fan_mode"): str,
+    vol.Optional("coil_dry_min_cooling_minutes"): vol.All(vol.Coerce(int), vol.Range(min=1, max=240)),
+    vol.Optional("coil_dry_drain_minutes"): vol.All(vol.Coerce(int), vol.Range(min=0, max=15)),
     vol.Optional("compressor_groups"): [
         {
             vol.Required("id"): str,

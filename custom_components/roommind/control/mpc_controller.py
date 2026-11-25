@@ -61,6 +61,7 @@ from .climate_actuator import (  # noqa: F401 -- Preserve previous helper import
     async_turn_off_climate,
     clear_command_cache,
     last_command_snapshot,
+    match_fan_mode,
     remember_temperature_dispatch,
     resolve_hvac_mode,
     setpoint_delay_reason,
@@ -374,6 +375,7 @@ class MPCController:
         self.last_airflow_mix_level = 0.0
         self.last_airflow_vent_level = 0.0
         self._idle_targets: TargetTemps | None = None
+        self.preheat: dict[str, Any] | None = None
 
         s = settings or {}
         self._settings = s
@@ -522,7 +524,7 @@ class MPCController:
         # Build dual target series with schedule lookahead for pre-heating/pre-cooling.
         # None values (from "off" action) are replaced with current_temp so the
         # optimizer sees "no deviation needed = idle optimal".
-        if self._target_resolver is not None:
+        if self._target_resolver is not None and self.room_config.get("preheat_enabled", True):
             now = time.time()
             dt_seconds = PLAN_DT_MINUTES * 60
             raw_targets = [self._target_resolver(now + i * dt_seconds) for i in range(horizon_blocks)]
@@ -660,6 +662,20 @@ class MPCController:
             elif not self._within_min_run(MODE_COOLING):
                 action = MODE_IDLE
                 power_fraction = 0.0
+
+        self.preheat = None
+        if action == MODE_HEATING and near_heat:
+            max_upcoming = max(near_heat)
+            if (targets.heat is None and current_temp < max_upcoming) or (
+                targets.heat is not None and max_upcoming > targets.heat and current_temp >= targets.heat
+            ):
+                self.preheat = {"mode": MODE_HEATING, "target": round(max_upcoming, 1)}
+        elif action == MODE_COOLING and near_cool:
+            min_upcoming = min(near_cool)
+            if (targets.cool is None and current_temp > min_upcoming) or (
+                targets.cool is not None and min_upcoming < targets.cool and current_temp <= targets.cool
+            ):
+                self.preheat = {"mode": MODE_COOLING, "target": round(min_upcoming, 1)}
 
         return action, power_fraction
 

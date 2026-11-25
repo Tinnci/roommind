@@ -13,6 +13,7 @@ export class RsTargetsSection extends LitElement {
   @property({ type: Number }) public comfortCool = 24.0;
   @property({ type: Number }) public ecoHeat = 17.0;
   @property({ type: Number }) public ecoCool = 27.0;
+  @property({ type: Boolean }) public preheatEnabled = true;
 
   static override styles = [
     inputStyles,
@@ -32,6 +33,21 @@ export class RsTargetsSection extends LitElement {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 16px;
+      }
+
+      .preheat-row {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
+      }
+
+      .preheat-toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
       }
 
       .temp-grid-auto {
@@ -184,6 +200,25 @@ export class RsTargetsSection extends LitElement {
           max=${tempRange(5, 35, this.hass).max}
           @change=${this._onEcoCoolChange}
         ></ha-textfield>
+      </div>
+      <div class="preheat-row">
+        <label class="preheat-toggle">
+          <ha-checkbox
+            .checked=${this.preheatEnabled}
+            @change=${(e: Event) =>
+              this.dispatchEvent(
+                new CustomEvent("preheat-enabled-changed", {
+                  detail: { value: (e.target as HTMLInputElement).checked },
+                  bubbles: true,
+                  composed: true,
+                }),
+              )}
+          ></ha-checkbox>
+          <span>${localize("targets.preheat_enabled", l)}</span>
+        </label>
+        <div class="fallback-hint" style="margin: 4px 0 0 36px">
+          ${localize("targets.preheat_enabled_hint", l)}
+        </div>
       </div>
     `;
   }

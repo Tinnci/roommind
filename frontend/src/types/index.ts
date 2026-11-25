@@ -89,6 +89,12 @@ export interface RoomLiveData {
   ac_overdrive_status?: AcOverdriveStatus[];
   inverter_regime?: InverterRegimeStatus | null;
   thermal_load_status?: ThermalLoadStatus | null;
+  coil_dry_active?: boolean;
+  coil_dry_phase?: string | null;
+  coil_dry_until?: number | null;
+  coil_dry_entities?: string[];
+  preheat?: { mode: RoomMode; target: number } | null;
+  occupancy_vacant?: boolean;
   current_temp: number | null;
   current_temp_raw?: number | null;
   current_humidity: number | null;
@@ -151,6 +157,10 @@ export interface DeviceConfig {
   idle_fan_mode?: string; // default "low"
   setpoint_mode?: "proportional" | "direct" | "adaptive"; // default "proportional"
   max_setpoint_offset_c?: number | null;
+  coil_dry?: "inherit" | "on" | "off";
+  coil_dry_minutes?: number;
+  coil_dry_mode?: "" | "fan_only" | "dry";
+  coil_dry_fan_mode?: string;
 }
 
 export type AirflowRole = "circulation" | "ventilation" | "hvac_fan";
@@ -469,6 +479,10 @@ export interface RoomConfig {
   heat_source_ac_min_outdoor?: number;
   climate_control_enabled?: boolean;
   fan_speed_mode?: string;
+  follow_thermostat_dial?: boolean;
+  preheat_enabled?: boolean;
+  occupancy_eco_enabled?: boolean;
+  occupancy_eco_delay_minutes?: number;
   live?: RoomLiveData;
 }
 
@@ -525,6 +539,12 @@ export interface GlobalSettings {
   mold_prevention_notify_enabled?: boolean;
   mold_prevention_notify_targets?: NotificationTarget[];
   compressor_groups?: CompressorGroup[];
+  coil_dry_enabled?: boolean;
+  coil_dry_minutes?: number;
+  coil_dry_mode?: "fan_only" | "dry";
+  coil_dry_fan_mode?: string;
+  coil_dry_min_cooling_minutes?: number;
+  coil_dry_drain_minutes?: number;
   room_order?: string[];
   group_by_floor?: boolean;
   boost_applied_at?: Record<string, number>;

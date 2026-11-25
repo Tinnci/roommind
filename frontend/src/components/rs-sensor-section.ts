@@ -18,6 +18,8 @@ export class RsSensorSection extends LitElement {
   @property({ type: String }) public humiditySensor = "";
   @property({ attribute: false }) public humiditySensors: Set<string> = new Set();
   @property({ attribute: false }) public occupancySensors: Set<string> = new Set();
+  @property({ type: Boolean }) public occupancyEcoEnabled = false;
+  @property({ type: Number }) public occupancyEcoDelayMinutes = 15;
   @property({ attribute: false }) public windowSensors: Set<string> = new Set();
   @property({ type: Number }) public windowOpenDelay = 0;
   @property({ type: Number }) public windowCloseDelay = 0;
@@ -876,6 +878,7 @@ export class RsSensorSection extends LitElement {
         areaSensors: areaOccupancySensors,
         externalSensors: externalOccupancySensors,
         selectedCount: this.occupancySensors.size,
+        extras: this._renderOccupancyExtras(lang),
       })}
       ${this._renderBlock({
         kind: "window",
@@ -1223,6 +1226,61 @@ export class RsSensorSection extends LitElement {
     if (age < 60) return `${Math.round(age)}s`;
     if (age < 3600) return `${Math.round(age / 60)}m`;
     return `${Math.round(age / 3600)}h`;
+  }
+
+  private _renderOccupancyExtras(lang: string) {
+    if (this.occupancySensors.size === 0) return nothing;
+    return html`
+      <div class="delay-fields" style="align-items: center; margin-top: 8px">
+        <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer">
+          <ha-checkbox
+            .checked=${this.occupancyEcoEnabled}
+            @change=${(e: Event) =>
+              this.dispatchEvent(
+                new CustomEvent("sensor-changed", {
+                  detail: {
+                    key: "occupancy_eco_enabled",
+                    value: (e.target as HTMLInputElement).checked,
+                  },
+                  bubbles: true,
+                  composed: true,
+                }),
+              )}
+          ></ha-checkbox>
+          <span>${localize("devices.occupancy_eco", lang)}</span>
+        </label>
+        ${
+          this.occupancyEcoEnabled
+            ? html`
+                <ha-textfield
+                  type="number"
+                  min="5"
+                  max="240"
+                  suffix="min"
+                  .label=${localize("devices.occupancy_eco_delay", lang)}
+                  .value=${String(this.occupancyEcoDelayMinutes)}
+                  @change=${(e: Event) => {
+                    const v = parseInt((e.target as HTMLInputElement).value, 10);
+                    if (!isNaN(v) && v >= 5 && v <= 240) {
+                      this.dispatchEvent(
+                        new CustomEvent("sensor-changed", {
+                          detail: { key: "occupancy_eco_delay_minutes", value: v },
+                          bubbles: true,
+                          composed: true,
+                        }),
+                      );
+                    }
+                  }}
+                ></ha-textfield>
+              `
+            : nothing
+        }
+      </div>
+      <div class="delay-hint" style="margin-top: 4px">
+        <ha-icon icon="mdi:information-outline"></ha-icon>
+        ${localize("sensors.occupancy_eco_info", lang)}
+      </div>
+    `;
   }
 
   private _renderWindowExtras(lang: string) {

@@ -52,6 +52,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await async_preload_translations(hass)
 
     coordinator = RoomMindCoordinator(hass, entry)
+    entry.async_on_unload(coordinator.device_setpoints.async_track(hass))
     await coordinator.async_config_entry_first_refresh()
 
     hass.data[DOMAIN][entry.entry_id] = coordinator

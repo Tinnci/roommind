@@ -22,6 +22,11 @@ export class RsDeviceSection extends LitElement {
   @property({ type: String }) public selectedTempSensor = "";
   @property({ attribute: false }) public valveProtectionExclude: Set<string> = new Set();
   @property({ type: Boolean }) public valveProtectionEnabled = false;
+  @property({ type: Boolean }) public coilDryEnabledGlobal = false;
+  @property({ type: Number }) public coilDryMinutesGlobal = 20;
+  @property({ type: String }) public coilDryModeGlobal: "fan_only" | "dry" = "fan_only";
+  @property({ type: String }) public coilDryFanModeGlobal = "low";
+  @property({ type: Boolean }) public followThermostatDial = false;
 
   @property({ type: Boolean }) public editing = false;
   @state() private _systemTypeInfoExpanded = false;
@@ -597,6 +602,32 @@ export class RsDeviceSection extends LitElement {
             `
           : nothing
       }
+      ${
+        this.devices.length > 0
+          ? html`
+              <div class="block-divider"></div>
+              <div class="block">
+                <label class="setback-inherit" style="margin-bottom: 4px">
+                  <ha-checkbox
+                    .checked=${this.followThermostatDial}
+                    @change=${(e: Event) =>
+                      this.dispatchEvent(
+                        new CustomEvent("follow-thermostat-dial-changed", {
+                          detail: { value: (e.target as HTMLInputElement).checked },
+                          bubbles: true,
+                          composed: true,
+                        }),
+                      )}
+                  ></ha-checkbox>
+                  <span>${localize("devices.follow_thermostat_dial", this.hass.language)}</span>
+                </label>
+                <p class="setback-hint">
+                  ${localize("devices.follow_thermostat_dial_hint", this.hass.language)}
+                </p>
+              </div>
+            `
+          : nothing
+      }
     `;
   }
 
@@ -911,6 +942,170 @@ export class RsDeviceSection extends LitElement {
                     .text=${localize("devices.valve_protection_exclude_hint", lang)}
                   ></rs-info-icon>
                 </div>
+              </div>
+            `
+          : nothing
+      }
+      ${isAc ? this._renderCoilDryDetail(device, entityState?.attributes?.fan_modes as string[] | undefined, lang) : nothing}
+    `;
+  }
+
+  private _renderCoilDryDetail(
+    device: DeviceConfig,
+    fanModesRaw: string[] | undefined,
+    lang: string,
+  ) {
+    const coilDry = device.coil_dry ?? "inherit";
+    const runs = coilDry === "on" || (coilDry === "inherit" && this.coilDryEnabledGlobal);
+    const fanModes =
+      Array.isArray(fanModesRaw) && fanModesRaw.length > 0
+        ? fanModesRaw
+        : ["low", "medium", "high"];
+    const inheritLabel = this.coilDryEnabledGlobal
+      ? localize("devices.coil_dry_inherit_on", lang)
+      : localize("devices.coil_dry_inherit_off", lang);
+    const modeLabel = (m: string) =>
+      localize(m === "dry" ? "devices.coil_dry_mode_dry" : "devices.coil_dry_mode_fan_only", lang);
+
+    return html`
+      <div class="block-divider" style="margin: 10px 0 8px"></div>
+      <div class="detail-field">
+        <ha-select
+          .label=${localize("devices.group_coil_dry", lang)}
+          .value=${coilDry}
+          .options=${[
+            { value: "inherit", label: inheritLabel },
+            { value: "on", label: localize("devices.coil_dry_on", lang) },
+            { value: "off", label: localize("devices.coil_dry_off", lang) },
+          ]}
+          @selected=${(e: Event) => {
+            const v = getSelectValue(e) as "inherit" | "on" | "off" | undefined;
+            if (v && v !== coilDry) {
+              this._fireDeviceChanged(
+                this.devices.map((d) =>
+                  d.entity_id === device.entity_id ? { ...d, coil_dry: v } : d,
+                ),
+              );
+            }
+          }}
+          @closed=${(e: Event) => e.stopPropagation()}
+          fixedMenuPosition
+        >
+          <ha-list-item value="inherit">${inheritLabel}</ha-list-item>
+          <ha-list-item value="on">${localize("devices.coil_dry_on", lang)}</ha-list-item>
+          <ha-list-item value="off">${localize("devices.coil_dry_off", lang)}</ha-list-item>
+        </ha-select>
+      </div>
+      ${
+        coilDry === "inherit" && !this.coilDryEnabledGlobal
+          ? html`<p class="setback-hint">${localize("devices.coil_dry_global_off_hint", lang)}</p>`
+          : nothing
+      }
+      ${
+        runs
+          ? html`
+              <div class="detail-field">
+                <ha-textfield
+                  type="number"
+                  min="0"
+                  max="60"
+                  step="1"
+                  .label=${localize("devices.coil_dry_minutes", lang)}
+                  .suffix=${localize("coil_dry.duration_suffix", lang)}
+                  .value=${String(device.coil_dry_minutes ?? 0)}
+                  @change=${(e: Event) => {
+                    const v = parseInt((e.target as HTMLInputElement).value, 10);
+                    if (isNaN(v) || v < 0 || v > 60) return;
+                    this._fireDeviceChanged(
+                      this.devices.map((d) =>
+                        d.entity_id === device.entity_id ? { ...d, coil_dry_minutes: v } : d,
+                      ),
+                    );
+                  }}
+                ></ha-textfield>
+                <p class="setback-hint">${localize("devices.coil_dry_minutes_info", lang)}</p>
+              </div>
+              <div class="detail-field">
+                <ha-select
+                  .label=${localize("devices.coil_dry_mode", lang)}
+                  .value=${device.coil_dry_mode ?? ""}
+                  .options=${[
+                    {
+                      value: "",
+                      label: localize("devices.coil_dry_mode_inherit", lang, {
+                        value: modeLabel(this.coilDryModeGlobal),
+                      }),
+                    },
+                    { value: "fan_only", label: localize("devices.coil_dry_mode_fan_only", lang) },
+                    { value: "dry", label: localize("devices.coil_dry_mode_dry", lang) },
+                  ]}
+                  @selected=${(e: Event) => {
+                    const v = (getSelectValue(e) ?? "") as "" | "fan_only" | "dry";
+                    if (v !== (device.coil_dry_mode ?? "")) {
+                      this._fireDeviceChanged(
+                        this.devices.map((d) =>
+                          d.entity_id === device.entity_id ? { ...d, coil_dry_mode: v } : d,
+                        ),
+                      );
+                    }
+                  }}
+                  @closed=${(e: Event) => e.stopPropagation()}
+                  fixedMenuPosition
+                >
+                  <ha-list-item value="">
+                    ${localize("devices.coil_dry_mode_inherit", lang, {
+                      value: modeLabel(this.coilDryModeGlobal),
+                    })}
+                  </ha-list-item>
+                  <ha-list-item value="fan_only"
+                    >${localize("devices.coil_dry_mode_fan_only", lang)}</ha-list-item
+                  >
+                  <ha-list-item value="dry"
+                    >${localize("devices.coil_dry_mode_dry", lang)}</ha-list-item
+                  >
+                </ha-select>
+              </div>
+              <div class="detail-field">
+                <ha-select
+                  .label=${localize("devices.coil_dry_fan_mode", lang)}
+                  .value=${device.coil_dry_fan_mode ?? ""}
+                  .options=${[
+                    {
+                      value: "",
+                      label: localize("devices.coil_dry_fan_mode_inherit", lang, {
+                        value:
+                          this.coilDryFanModeGlobal ||
+                          localize("devices.coil_dry_fan_mode_keep", lang),
+                      }),
+                    },
+                    { value: "__keep__", label: localize("devices.coil_dry_fan_mode_keep", lang) },
+                    ...fanModes.map((m) => ({ value: m, label: m })),
+                  ]}
+                  @selected=${(e: Event) => {
+                    const v = getSelectValue(e) ?? "";
+                    if (v !== (device.coil_dry_fan_mode ?? "")) {
+                      this._fireDeviceChanged(
+                        this.devices.map((d) =>
+                          d.entity_id === device.entity_id ? { ...d, coil_dry_fan_mode: v } : d,
+                        ),
+                      );
+                    }
+                  }}
+                  @closed=${(e: Event) => e.stopPropagation()}
+                  fixedMenuPosition
+                >
+                  <ha-list-item value="">
+                    ${localize("devices.coil_dry_fan_mode_inherit", lang, {
+                      value:
+                        this.coilDryFanModeGlobal ||
+                        localize("devices.coil_dry_fan_mode_keep", lang),
+                    })}
+                  </ha-list-item>
+                  <ha-list-item value="__keep__"
+                    >${localize("devices.coil_dry_fan_mode_keep", lang)}</ha-list-item
+                  >
+                  ${fanModes.map((m) => html`<ha-list-item value=${m}>${m}</ha-list-item>`)}
+                </ha-select>
               </div>
             `
           : nothing

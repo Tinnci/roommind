@@ -7,9 +7,9 @@ import {
 } from "./settings-hub";
 
 describe("settings-hub", () => {
-  it("contains all 11 global settings sections across categories", () => {
-    expect(SETTINGS_SECTIONS).toHaveLength(11);
-    expect(filterSettingsSections("all")).toHaveLength(11);
+  it("contains all 12 global settings sections across categories", () => {
+    expect(SETTINGS_SECTIONS).toHaveLength(12);
+    expect(filterSettingsSections("all")).toHaveLength(12);
     expect(filterSettingsSections("automation").map((s) => s.id)).toEqual([
       "control",
       "presence",
@@ -20,6 +20,7 @@ describe("settings-hub", () => {
       "general",
       "sensors",
       "valve",
+      "coil_dry",
       "mold",
     ]);
     expect(filterSettingsSections("maintenance").map((s) => s.id)).toEqual([
@@ -42,6 +43,7 @@ describe("settings-hub", () => {
       presencePersonsCount: 2,
       vacationActive: false,
       valveProtectionEnabled: true,
+      coilDryEnabled: false,
       outdoorSensorConfigured: true,
       weatherEntityConfigured: false,
       compressorGroupsCount: 1,

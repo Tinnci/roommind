@@ -12,6 +12,7 @@ export type SettingsSectionId =
   | "presence"
   | "vacation"
   | "valve"
+  | "coil_dry"
   | "compressor"
   | "mold"
   | "notifications"
@@ -88,6 +89,13 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = [
     icon: "mdi:shield-refresh",
   },
   {
+    id: "coil_dry",
+    category: "hardware",
+    titleKey: "coil_dry.title",
+    descKey: "settings.intro.coil_dry",
+    icon: "mdi:fan-clock",
+  },
+  {
     id: "mold",
     category: "hardware",
     titleKey: "mold.title",
@@ -142,6 +150,7 @@ export interface SettingsSectionStatusInput {
   presencePersonsCount: number;
   vacationActive: boolean;
   valveProtectionEnabled: boolean;
+  coilDryEnabled: boolean;
   outdoorSensorConfigured: boolean;
   weatherEntityConfigured: boolean;
   compressorGroupsCount: number;
@@ -175,6 +184,8 @@ export function getSettingsSectionTone(
       return input.vacationActive ? "accent" : "neutral";
     case "valve":
       return input.valveProtectionEnabled ? "ok" : "neutral";
+    case "coil_dry":
+      return input.coilDryEnabled ? "ok" : "neutral";
     case "compressor":
       return input.compressorGroupsCount > 0 ? "accent" : "neutral";
     case "mold":

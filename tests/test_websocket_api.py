@@ -159,6 +159,12 @@ async def test_list_rooms_empty(ws_hass, store, connection):
             "valve_protection_enabled": False,
             "compressor_groups": [],
             "setback_offset": 2.0,
+            "coil_dry_enabled": False,
+            "coil_dry_minutes": 20,
+            "coil_dry_mode": "fan_only",
+            "coil_dry_fan_mode": "low",
+            "coil_dry_min_cooling_minutes": 10,
+            "coil_dry_drain_minutes": 0,
         },
     )
 

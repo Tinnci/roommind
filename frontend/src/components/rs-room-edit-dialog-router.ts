@@ -32,6 +32,10 @@ export class RsRoomEditDialogRouter extends LitElement {
   @property({ attribute: false }) public presencePersons: string[] = [];
   @property({ type: Boolean }) public valveProtectionEnabled = false;
   @property({ type: Number }) public globalSetbackOffset = DEFAULT_SETBACK_OFFSET;
+  @property({ type: Boolean }) public coilDryEnabled = false;
+  @property({ type: Number }) public coilDryMinutes = 20;
+  @property({ type: String }) public coilDryMode: "fan_only" | "dry" = "fan_only";
+  @property({ type: String }) public coilDryFanMode = "low";
 
   protected override createRenderRoot() {
     return this;
@@ -204,10 +208,12 @@ export class RsRoomEditDialogRouter extends LitElement {
           .comfortCool=${draft.comfortCool}
           .ecoHeat=${draft.ecoHeat}
           .ecoCool=${draft.ecoCool}
+          .preheatEnabled=${draft.preheatEnabled}
           @comfort-heat-changed=${this._forward("comfort-heat-changed")}
           @comfort-cool-changed=${this._forward("comfort-cool-changed")}
           @eco-heat-changed=${this._forward("eco-heat-changed")}
           @eco-cool-changed=${this._forward("eco-cool-changed")}
+          @preheat-enabled-changed=${this._forward("preheat-enabled-changed")}
         ></rs-targets-section>`;
       case "schedule":
         return html`<rs-schedule-settings
@@ -236,9 +242,15 @@ export class RsRoomEditDialogRouter extends LitElement {
           .selectedTempSensor=${draft.selectedTempSensor}
           .valveProtectionExclude=${draft.valveProtectionExclude}
           .valveProtectionEnabled=${this.valveProtectionEnabled}
+          .coilDryEnabledGlobal=${this.coilDryEnabled}
+          .coilDryMinutesGlobal=${this.coilDryMinutes}
+          .coilDryModeGlobal=${this.coilDryMode}
+          .coilDryFanModeGlobal=${this.coilDryFanMode}
+          .followThermostatDial=${draft.followThermostatDial}
           @device-changed=${this._forward("device-changed")}
           @setback-offset-changed=${this._forward("setback-offset-changed")}
           @valve-protection-exclude-toggle=${this._forward("valve-protection-exclude-toggle")}
+          @follow-thermostat-dial-changed=${this._forward("follow-thermostat-dial-changed")}
         ></rs-device-section>`;
       case "sensors":
         return html`<rs-sensor-section
@@ -250,6 +262,8 @@ export class RsRoomEditDialogRouter extends LitElement {
           .humiditySensor=${draft.selectedHumiditySensor}
           .humiditySensors=${draft.selectedHumiditySensors}
           .occupancySensors=${draft.selectedOccupancySensors}
+          .occupancyEcoEnabled=${draft.occupancyEcoEnabled}
+          .occupancyEcoDelayMinutes=${draft.occupancyEcoDelayMinutes}
           .windowSensors=${draft.selectedWindowSensors}
           .windowOpenDelay=${draft.windowOpenDelay}
           .windowCloseDelay=${draft.windowCloseDelay}

@@ -36,6 +36,7 @@ import "./settings/rs-settings-control";
 import "./settings/rs-settings-presence";
 import "./settings/rs-settings-vacation";
 import "./settings/rs-settings-valve";
+import "./settings/rs-settings-coil-dry";
 import "./settings/rs-settings-compressor";
 import "./settings/rs-settings-mold";
 import "./settings/rs-settings-notifications";
@@ -71,6 +72,12 @@ export class RsSettings extends LitElement {
   @state() private _scheduleOffAction: "eco" | "off" = "eco";
   @state() private _valveProtectionEnabled = false;
   @state() private _valveProtectionInterval = 7;
+  @state() private _coilDryEnabled = false;
+  @state() private _coilDryMinutes = 20;
+  @state() private _coilDryMode: "fan_only" | "dry" = "fan_only";
+  @state() private _coilDryFanMode = "low";
+  @state() private _coilDryMinCoolingMinutes = 10;
+  @state() private _coilDryDrainMinutes = 0;
   @state() private _moldDetectionEnabled = false;
   @state() private _moldHumidityThreshold = 70;
   @state() private _moldSustainedMinutes = 30;
@@ -133,6 +140,12 @@ export class RsSettings extends LitElement {
       this._scheduleOffAction = s.schedule_off_action ?? "eco";
       this._valveProtectionEnabled = s.valve_protection_enabled ?? false;
       this._valveProtectionInterval = s.valve_protection_interval_days ?? 7;
+      this._coilDryEnabled = s.coil_dry_enabled ?? false;
+      this._coilDryMinutes = s.coil_dry_minutes ?? 20;
+      this._coilDryMode = s.coil_dry_mode ?? "fan_only";
+      this._coilDryFanMode = s.coil_dry_fan_mode ?? "low";
+      this._coilDryMinCoolingMinutes = s.coil_dry_min_cooling_minutes ?? 10;
+      this._coilDryDrainMinutes = s.coil_dry_drain_minutes ?? 0;
       this._moldDetectionEnabled = s.mold_detection_enabled ?? false;
       this._moldHumidityThreshold = s.mold_humidity_threshold ?? 70;
       this._moldSustainedMinutes = s.mold_sustained_minutes ?? 30;
@@ -407,6 +420,18 @@ export class RsSettings extends LitElement {
           .valveProtectionInterval=${this._valveProtectionInterval}
           @setting-changed=${this._onSettingChanged}
         ></rs-settings-valve>`;
+      case "coil_dry":
+        return html`<rs-settings-coil-dry
+          .hass=${this.hass}
+          .rooms=${this.rooms}
+          .coilDryEnabled=${this._coilDryEnabled}
+          .coilDryMinutes=${this._coilDryMinutes}
+          .coilDryMode=${this._coilDryMode}
+          .coilDryFanMode=${this._coilDryFanMode}
+          .coilDryMinCoolingMinutes=${this._coilDryMinCoolingMinutes}
+          .coilDryDrainMinutes=${this._coilDryDrainMinutes}
+          @setting-changed=${this._onSettingChanged}
+        ></rs-settings-coil-dry>`;
       case "compressor":
         return html`<rs-settings-compressor
           .hass=${this.hass}
@@ -462,6 +487,7 @@ export class RsSettings extends LitElement {
       presencePersonsCount: this._presencePersons.filter(Boolean).length,
       vacationActive: this._vacationActive,
       valveProtectionEnabled: this._valveProtectionEnabled,
+      coilDryEnabled: this._coilDryEnabled,
       outdoorSensorConfigured: Boolean(this._outdoorTempSensor),
       weatherEntityConfigured: Boolean(this._weatherEntity),
       compressorGroupsCount: this._compressorGroups.filter((g) => g.members.length > 0).length,
@@ -486,6 +512,8 @@ export class RsSettings extends LitElement {
         return this._vacationSummary(lang);
       case "valve":
         return this._valveSummary(lang);
+      case "coil_dry":
+        return this._coilDrySummary(lang);
       case "compressor":
         return this._compressorSummary(lang);
       case "mold":
@@ -595,6 +623,13 @@ export class RsSettings extends LitElement {
       localize("settings.summary.on", lang),
       localize("settings.summary.every_days", lang, { days: this._valveProtectionInterval }),
     );
+  }
+
+  private _coilDrySummary(lang: string): string {
+    if (!this._coilDryEnabled) return localize("settings.summary.off", lang);
+    return localize("settings.summary.coil_dry_on", lang, {
+      time: `${this._coilDryMinutes} min`,
+    });
   }
 
   private _compressorSummary(lang: string): string {
@@ -710,6 +745,12 @@ export class RsSettings extends LitElement {
         schedule_off_action: this._scheduleOffAction,
         valve_protection_enabled: this._valveProtectionEnabled,
         valve_protection_interval_days: this._valveProtectionInterval,
+        coil_dry_enabled: this._coilDryEnabled,
+        coil_dry_minutes: this._coilDryMinutes,
+        coil_dry_mode: this._coilDryMode,
+        coil_dry_fan_mode: this._coilDryFanMode,
+        coil_dry_min_cooling_minutes: this._coilDryMinCoolingMinutes,
+        coil_dry_drain_minutes: this._coilDryDrainMinutes,
         compressor_groups: this._compressorGroups.filter((g) => g.members.length > 0),
         mold_detection_enabled: this._moldDetectionEnabled,
         mold_humidity_threshold: this._moldHumidityThreshold,
