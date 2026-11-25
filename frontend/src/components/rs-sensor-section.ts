@@ -1149,7 +1149,9 @@ export class RsSensorSection extends LitElement {
               ${
                 status.is_primary
                   ? localize("devices.primary_sensor", lang)
-                  : localize("devices.sensor_auxiliary", lang)
+                  : status.sensor_class === "hvac_internal"
+                    ? localize("devices.sensor_hvac_internal", lang)
+                    : localize("devices.sensor_auxiliary", lang)
               }
             </span>
             <span class="fusion-chip ${status.freshness_status}">
@@ -1159,9 +1161,22 @@ export class RsSensorSection extends LitElement {
               >${this._freshnessSourceLabel(status.freshness_source, lang)}</span
             >
             <span class="fusion-chip">${this._formatAge(status.age_s)}</span>
+            ${
+              typeof status.cadence_s === "number"
+                ? html`<span class="fusion-chip">~${Math.round(status.cadence_s)}s</span>`
+                : nothing
+            }
           </div>
         </div>
         <div class="fusion-values">
+          ${
+            typeof status.weight === "number"
+              ? html`<span class="fusion-chip"
+                  >${localize("devices.sensor_weight", lang)}
+                  ${Math.round(status.weight * 100)}%</span
+                >`
+              : nothing
+          }
           <span class="fusion-chip">
             ${localize("devices.sensor_corrected", lang)}
             ${Number(status.corrected_value).toFixed(1)}${unit}

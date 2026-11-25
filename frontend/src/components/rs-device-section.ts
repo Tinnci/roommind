@@ -419,6 +419,7 @@ export class RsDeviceSection extends LitElement {
       device?.idle_action === "setback" ||
       device?.idle_action === "low";
     const showDirectBadge = device?.setpoint_mode === "direct" && !!this.selectedTempSensor;
+    const showAdaptiveBadge = device?.setpoint_mode === "adaptive" && !!this.selectedTempSensor;
 
     return html`
       <div class="view-row">
@@ -441,9 +442,14 @@ export class RsDeviceSection extends LitElement {
             : nothing
         }
         ${
-          showDirectBadge
+          showDirectBadge || showAdaptiveBadge
             ? html`<span class="valve-exclude-badge">
-                ${localize("devices.setpoint_mode_direct", this.hass.language)}
+                ${localize(
+                  showAdaptiveBadge
+                    ? "devices.setpoint_mode_adaptive_short"
+                    : "devices.setpoint_mode_direct",
+                  this.hass.language,
+                )}
               </span>`
             : nothing
         }
@@ -646,9 +652,15 @@ export class RsDeviceSection extends LitElement {
                 : nothing
             }
             ${
-              device?.setpoint_mode === "direct" && this.selectedTempSensor
+              (device?.setpoint_mode === "direct" || device?.setpoint_mode === "adaptive") &&
+              this.selectedTempSensor
                 ? html`<span class="meta-pill"
-                    >${localize("devices.setpoint_mode_direct", this.hass.language)}</span
+                    >${localize(
+                      device.setpoint_mode === "adaptive"
+                        ? "devices.setpoint_mode_adaptive_short"
+                        : "devices.setpoint_mode_direct",
+                      this.hass.language,
+                    )}</span
                   >`
                 : nothing
             }
@@ -819,6 +831,10 @@ export class RsDeviceSection extends LitElement {
                       label: localize("devices.setpoint_mode_proportional", lang),
                     },
                     {
+                      value: "adaptive",
+                      label: localize("devices.setpoint_mode_adaptive", lang),
+                    },
+                    {
                       value: "direct",
                       label: localize("devices.setpoint_mode_direct", lang),
                     },
@@ -830,6 +846,9 @@ export class RsDeviceSection extends LitElement {
                   <ha-list-item value="proportional"
                     >${localize("devices.setpoint_mode_proportional", lang)}</ha-list-item
                   >
+                  <ha-list-item value="adaptive"
+                    >${localize("devices.setpoint_mode_adaptive", lang)}</ha-list-item
+                  >
                   <ha-list-item value="direct"
                     >${localize("devices.setpoint_mode_direct", lang)}</ha-list-item
                   >
@@ -837,7 +856,7 @@ export class RsDeviceSection extends LitElement {
                 <rs-info-icon .text=${localize("devices.setpoint_mode_hint", lang)}></rs-info-icon>
               </div>
               ${
-                (device.setpoint_mode ?? "proportional") === "proportional"
+                (device.setpoint_mode ?? "proportional") !== "direct"
                   ? html` <div class="detail-field with-info">
                       <ha-textfield
                         type="number"
@@ -1031,7 +1050,9 @@ export class RsDeviceSection extends LitElement {
 
   private _onSetpointModeChange(entityId: string, mode: string): void {
     const newDevices = this.devices.map((d) =>
-      d.entity_id === entityId ? { ...d, setpoint_mode: mode as "proportional" | "direct" } : d,
+      d.entity_id === entityId
+        ? { ...d, setpoint_mode: mode as "proportional" | "direct" | "adaptive" }
+        : d,
     );
     this._fireDeviceChanged(newDevices);
   }

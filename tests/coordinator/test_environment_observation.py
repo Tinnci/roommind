@@ -35,8 +35,13 @@ def test_device_observations_use_celsius_and_preserve_assumed_state(hass, mock_c
 
 async def test_quiet_accessories_precede_climate_and_share_its_observation(hass, mock_config_entry, monkeypatch):
     from custom_components.roommind.utils import target_resolution
+    from custom_components.roommind.utils.night_utils import SleepPhaseStatus
 
-    monkeypatch.setattr(target_resolution, "is_night_mode_active", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        target_resolution,
+        "resolve_sleep_phase",
+        lambda *_args, **_kwargs: SleepPhaseStatus(phase="sleep", night_active=True, trigger_source="clock"),
+    )
     room = {
         **SAMPLE_ROOM,
         "climate_mode": "cool_only",

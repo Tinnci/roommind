@@ -143,7 +143,7 @@ ROOM_CONFIG_SCHEMA: dict[vol.Marker, object] = {
                 vol.Optional("heating_system_type", default=""): vol.In(["", "radiator", "underfloor"]),
                 vol.Optional("idle_action", default="off"): vol.In(["off", "fan_only", "setback", "low"]),
                 vol.Optional("idle_fan_mode", default="low"): str,
-                vol.Optional("setpoint_mode", default="proportional"): vol.In(["proportional", "direct"]),
+                vol.Optional("setpoint_mode", default="proportional"): vol.In(["proportional", "direct", "adaptive"]),
                 vol.Optional("max_setpoint_offset_c"): vol.Any(
                     None, vol.All(vol.Coerce(float), vol.Range(min=0, max=10))
                 ),

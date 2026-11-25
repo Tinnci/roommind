@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 import time
 from collections.abc import Callable, Iterable
@@ -18,6 +20,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import (
@@ -53,6 +56,7 @@ from .const import (
     is_override_suppressed,
     make_roommind_context,
 )
+from .control.ac_overdrive import ACOverdriveManager
 from .control.actuation import ActuationLedger
 from .control.constraints import ConstraintInput, ConstraintReducer
 from .control.hvac_observation import HVACOutputObservation, observed_room_activity
@@ -244,6 +248,26 @@ class RoomControlObservation:
     shading_factor: float
 
 
+_OBSERVED_STATE_ATTRS = frozenset(
+    {
+        "temperature",
+        "target_temp_low",
+        "target_temp_high",
+        "current_temperature",
+        "current_humidity",
+        "hvac_action",
+        "fan_mode",
+        "swing_mode",
+        "preset_mode",
+        "hvac_mode_observed_at",
+        "hvac_action_observed_at",
+        "assumed_state",
+        "observed_at",
+    }
+)
+_OBS_SYNC_DEBOUNCE_SECONDS = 0.15
+
+
 def _get_area_name(hass: HomeAssistant, area_id: str) -> str:
     """Get human-readable area name from area registry."""
     try:
@@ -301,6 +325,12 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # EKF training accumulation
         self._ekf_training = EkfTrainingManager(self._model_manager)
         self._sensor_fusion = SensorFusionManager()
+        self._ac_overdrive = ACOverdriveManager()
+        self._tracked_entity_areas: dict[str, set[str]] = {}
+        self._remove_state_listeners: Callable[[], None] | None = None
+        self._pending_obs_areas: set[str] = set()
+        self._obs_sync_handle: asyncio.TimerHandle | None = None
+        self._last_room_pf_mix: dict[str, tuple[float, float]] = {}
         self._observation_store: ObservationStore | None = None
         self._raw_observation_buffer: list[dict] = []
         self._raw_observation_prune_count: int = 0
@@ -356,6 +386,9 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             evidence = self._actuation_ledger.record_tcl_event(data)
             if evidence is None or not self.data:
                 return
+            entity_id = data.get("entity_id")
+            if isinstance(entity_id, str) and entity_id in self._tracked_entity_areas:
+                self._reconcile_observed_room_states(set(self._tracked_entity_areas[entity_id]))
             previous = self.data.get("rooms", {})
             rooms = {area_id: self._reconcile_room_evidence(room) for area_id, room in previous.items()}
             if any(rooms[area_id] is not room for area_id, room in previous.items()):
@@ -363,6 +396,192 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self.data = {**self.data, "rooms": rooms}
                 # Publish evidence without restarting the scheduled Control Cycle.
                 self.async_update_listeners()
+
+    @staticmethod
+    def _room_tracked_entities(room: dict[str, Any]) -> set[str]:
+        """Collect all entity IDs whose state changes should sync room observations."""
+        tracked: set[str] = set()
+        for dev in room.get("devices", []) or []:
+            if isinstance(dev, dict) and dev.get("entity_id"):
+                tracked.add(str(dev["entity_id"]))
+        for dev in room.get("airflow_devices", []) or []:
+            if isinstance(dev, dict):
+                if dev.get("entity_id"):
+                    tracked.add(str(dev["entity_id"]))
+                if dev.get("power_sensor_entity"):
+                    tracked.add(str(dev["power_sensor_entity"]))
+        for nc in room.get("night_controls", []) or []:
+            if isinstance(nc, dict) and nc.get("entity_id"):
+                tracked.add(str(nc["entity_id"]))
+        for key in ("temperature_sensor", "humidity_sensor"):
+            if room.get(key):
+                tracked.add(str(room[key]))
+        for key in ("temperature_sensors", "humidity_sensors", "window_sensors"):
+            for eid in room.get(key, []) or []:
+                if isinstance(eid, str) and eid:
+                    tracked.add(eid)
+        sleep_dev = room.get("sleep_device")
+        if isinstance(sleep_dev, dict):
+            for key, val in sleep_dev.items():
+                if key.endswith("_entity") and isinstance(val, str) and val:
+                    tracked.add(val)
+        return tracked
+
+    def _sync_entity_state_listeners(self, rooms: dict[str, dict[str, Any]]) -> None:
+        """Keep HA state-change subscriptions aligned with configured room entities."""
+        entity_map: dict[str, set[str]] = {}
+        for area_id, room in rooms.items():
+            for eid in self._room_tracked_entities(room):
+                entity_map.setdefault(eid, set()).add(area_id)
+
+        if set(entity_map) == set(self._tracked_entity_areas):
+            self._tracked_entity_areas = entity_map
+            return
+
+        if self._remove_state_listeners is not None:
+            with contextlib.suppress(Exception):
+                self._remove_state_listeners()
+            self._remove_state_listeners = None
+
+        self._tracked_entity_areas = entity_map
+        if not entity_map:
+            return
+        bus = getattr(self.hass, "bus", None)
+        if bus is None or not callable(getattr(bus, "async_listen", None)):
+            return
+        try:
+            self._remove_state_listeners = async_track_state_change_event(
+                self.hass,
+                sorted(entity_map),
+                self._handle_tracked_entity_state_change,
+            )
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("Failed to attach state-change listener for tracked entities", exc_info=True)
+
+    @callback
+    def _handle_tracked_entity_state_change(self, event: Any) -> None:
+        """Schedule a debounced observation-only sync when a managed entity changes."""
+        data = getattr(event, "data", None)
+        if not isinstance(data, dict):
+            return
+        entity_id = data.get("entity_id")
+        if not isinstance(entity_id, str) or entity_id not in self._tracked_entity_areas:
+            return
+        old_state = data.get("old_state")
+        new_state = data.get("new_state")
+        if old_state is not None and new_state is not None and old_state.state == new_state.state:
+            old_attrs = getattr(old_state, "attributes", {}) or {}
+            new_attrs = getattr(new_state, "attributes", {}) or {}
+            if not any(old_attrs.get(k) != new_attrs.get(k) for k in _OBSERVED_STATE_ATTRS):
+                return
+
+        self._pending_obs_areas.update(self._tracked_entity_areas.get(entity_id, ()))
+        if self._obs_sync_handle is not None:
+            return
+        loop = getattr(self.hass, "loop", None)
+        call_later = getattr(loop, "call_later", None)
+        if not callable(call_later):
+            try:
+                loop = asyncio.get_running_loop()
+                call_later = loop.call_later
+            except RuntimeError:
+                self._flush_pending_observation_sync()
+                return
+        self._obs_sync_handle = call_later(_OBS_SYNC_DEBOUNCE_SECONDS, self._flush_pending_observation_sync)
+
+    @callback
+    def _flush_pending_observation_sync(self) -> None:
+        self._obs_sync_handle = None
+        areas = set(self._pending_obs_areas)
+        self._pending_obs_areas.clear()
+        if areas:
+            self._reconcile_observed_room_states(areas)
+
+    def _reconcile_observed_room_states(self, area_ids: set[str]) -> bool:
+        """Update live observed room state without advancing EKF/MPC control cycles."""
+        if not area_ids or not self.data:
+            return False
+        store = self.hass.data.get(DOMAIN, {}).get("store")
+        if store is None:
+            return False
+        rooms_cfg = store.get_rooms()
+        previous = self.data.get("rooms", {})
+        if not previous:
+            return False
+
+        updated_rooms = dict(previous)
+        changed = False
+        for area_id in area_ids:
+            prev_live = previous.get(area_id)
+            room = rooms_cfg.get(area_id)
+            if not isinstance(prev_live, dict) or not isinstance(room, dict):
+                continue
+
+            sensors = self._read_room_sensors(room, area_id, record_raw=False)
+            climate_devices = self._read_climate_device_snapshot(room)
+            actuator_states = capture_entity_snapshots(
+                self.hass,
+                (
+                    *climate_devices.all_entity_ids,
+                    *(config["entity_id"] for config in room.get("night_controls", []) or [] if config.get("entity_id")),
+                ),
+            )
+            device_action = self._observe_device_action(room)
+            airflow = self._environmental_factors.read_room_airflow(room)
+            obs_stub = RoomControlObservation(
+                sensors=sensors,
+                climate_devices=climate_devices,
+                actuator_states=actuator_states,
+                device_action=device_action,
+                airflow=airflow,
+                hvac_output=self._observe_hvac_output(room, airflow),
+                raw_window_open=self._is_window_open(room),
+                q_occupancy=prev_live.get("q_occupancy", 0.0),
+                shading_factor=prev_live.get("shading_factor", 1.0),
+            )
+
+            next_live = dict(prev_live)
+            observed_mode = device_action[0]
+            next_live["observed_mode"] = observed_mode
+            next_live["observation_status"] = "observed" if observed_mode is not None else "unknown"
+            next_live["mode"] = observed_mode or MODE_IDLE
+            next_live["device_observations"] = self._device_observation_status(obs_stub)
+            next_live["hvac_output_status"] = (
+                obs_stub.hvac_output.as_status_dict() if obs_stub.hvac_output is not None else None
+            )
+            next_live["airflow_devices_status"] = airflow.as_status_dicts()
+            next_live["sleep_device_status"] = inspect_sleep_device_state(self.hass, room.get("sleep_device"))
+
+            if sensors.current_temp is not None:
+                next_live["current_temp"] = sensors.current_temp
+                next_live["current_temp_raw"] = sensors.current_temp_raw
+            if sensors.humidity.value is not None or sensors.humidity.sources:
+                next_live["current_humidity"] = sensors.humidity.value
+                next_live.update(sensors.humidity.as_live_status())
+
+            temp_obs = sensors.temperature_observations
+            last_pf, last_mix = self._last_room_pf_mix.get(area_id, (device_action[1], airflow.q_fan_mix))
+            next_live["sensor_conflict"] = airflow_sensor_conflict(temp_obs)
+            next_live["sensor_fusion_status"] = self._sensor_fusion.diagnostics(
+                temp_obs, power_fraction=last_pf, q_fan_mix=last_mix
+            )
+            if next_live.get("current_temp") is not None:
+                next_live["perceived_temp"] = perceived_temperature(
+                    air_temp_c=next_live["current_temp"],
+                    humidity=next_live.get("current_humidity"),
+                    q_mix=airflow.q_fan_mix,
+                    mode=next_live.get("commanded_mode", MODE_IDLE),
+                )
+            next_live = self._reconcile_room_evidence(next_live)
+            if next_live != prev_live:
+                updated_rooms[area_id] = next_live
+                changed = True
+
+        if changed:
+            self.rooms = updated_rooms
+            self.data = {**self.data, "rooms": updated_rooms}
+            self.async_update_listeners()
+        return changed
 
     def _reconcile_room_evidence(self, room: dict[str, Any]) -> dict[str, Any]:
         """Replace evidence fields while retaining the cycle's physical observations."""
@@ -389,6 +608,13 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def async_shutdown(self) -> None:
         """Release event subscriptions owned by the coordinator."""
+        if self._obs_sync_handle is not None:
+            self._obs_sync_handle.cancel()
+            self._obs_sync_handle = None
+        if self._remove_state_listeners is not None:
+            with contextlib.suppress(Exception):
+                self._remove_state_listeners()
+            self._remove_state_listeners = None
         self._remove_tcl_command_listener()
         await super().async_shutdown()
         if self._observation_store is not None:
@@ -440,6 +666,7 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """
         store = self.hass.data[DOMAIN]["store"]
         rooms = store.get_rooms()
+        self._sync_entity_state_listeners(rooms)
 
         settings = store.get_settings()
         self._read_outdoor_environment(settings)
@@ -531,6 +758,7 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._cover_orchestrator.set_model_manager(self._model_manager)
                 if isinstance(thermal_data, dict):
                     self._sensor_fusion = SensorFusionManager.from_dict(thermal_data.get("sensor_biases", {}))
+                    self._ac_overdrive = ACOverdriveManager.from_dict(thermal_data.get("ac_overdrive", {}))
             self._valve_manager.load_actuation_data(settings.get("valve_last_actuation", {}))
             self._model_loaded = True
 
@@ -714,6 +942,7 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             {
                 "models": self._model_manager.to_dict(),
                 "sensor_biases": self._sensor_fusion.to_dict(),
+                "ac_overdrive": self._ac_overdrive.to_dict(),
             }
         )
         return True
@@ -832,6 +1061,8 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self,
         room: dict,
         area_id: str,
+        *,
+        record_raw: bool = True,
     ) -> RoomSensorSnapshot:
         """Read a complete sensor snapshot for one room control cycle."""
         primary_sensor_id = room.get("temperature_sensor")
@@ -840,19 +1071,18 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         observations: list[TemperatureObservation] = []
         now = datetime.now(UTC)
 
-        current_temp: float | None = None
-        current_temp_age_s = 0.0
         for temp_sensor_id in temp_sensor_ids:
             raw_temp = read_sensor_value(self.hass, temp_sensor_id, area_id, "temperature", now=now)
             temp_c = ha_temp_to_celsius(self.hass, raw_temp, entity_id=temp_sensor_id) if raw_temp is not None else None
             state = self.hass.states.get(temp_sensor_id) if temp_sensor_id else None
-            self._record_raw_state_observation(
-                area_id,
-                temp_sensor_id,
-                "temperature",
-                state,
-                is_primary=(temp_sensor_id == primary_sensor_id),
-            )
+            if record_raw:
+                self._record_raw_state_observation(
+                    area_id,
+                    temp_sensor_id,
+                    "temperature",
+                    state,
+                    is_primary=(temp_sensor_id == primary_sensor_id),
+                )
             observation = self._sensor_fusion.observation_from_state(
                 temp_sensor_id,
                 state,
@@ -862,9 +1092,36 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
             if observation is not None:
                 observations.append(observation)
-                if current_temp is None:
-                    current_temp = observation.value
-                    current_temp_age_s = observation.age_s
+
+        last_pf, last_mix = self._last_room_pf_mix.get(area_id, (0.0, 0.0))
+        ekf_pred_temp: float | None = None
+        ekf_pred_var: float | None = None
+        if observations and self.outdoor_temp_effective is not None and self._model_manager.get_confidence(area_id) >= 0.3:
+            model = self._model_manager.get_model(area_id)
+            prev_mode = self._previous_modes.get(area_id, MODE_IDLE)
+            q_act = (
+                last_pf * model.Q_heat
+                if prev_mode == MODE_HEATING
+                else (-last_pf * model.Q_cool if prev_mode == MODE_COOLING else 0.0)
+            )
+            anchor_temp = observations[0].value
+            ekf_pred_temp = model.predict(anchor_temp, self.outdoor_temp_effective, q_act, UPDATE_INTERVAL / 60.0)
+            ekf_pred_var = (
+                self._model_manager.get_prediction_std(
+                    area_id, q_act, anchor_temp, self.outdoor_temp_effective, UPDATE_INTERVAL / 60.0
+                )
+                ** 2
+            )
+
+        fused = self._sensor_fusion.fuse_temperature(
+            observations,
+            power_fraction=last_pf,
+            q_fan_mix=last_mix,
+            ekf_predicted_temp=ekf_pred_temp,
+            ekf_prediction_var=ekf_pred_var,
+        )
+        current_temp: float | None = fused.value
+        current_temp_age_s = min((obs.age_s for obs in observations), default=0.0)
 
         # Fallback: read current_temperature from first thermostat/AC if no external sensor
         if current_temp is None and not has_external_sensor:
@@ -891,7 +1148,7 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             else:
                 del self._last_valid_temps[area_id]
 
-        humidity = self._read_room_humidity(room, area_id, now)
+        humidity = self._read_room_humidity(room, area_id, now, record_raw=record_raw)
 
         return RoomSensorSnapshot(
             current_temp=current_temp,
@@ -978,20 +1235,23 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         return sensor_ids
 
-    def _read_room_humidity(self, room: dict, area_id: str, now: datetime) -> HumiditySensorSnapshot:
+    def _read_room_humidity(
+        self, room: dict, area_id: str, now: datetime, *, record_raw: bool = True
+    ) -> HumiditySensorSnapshot:
         """Read configured humidity sources into an explicit weighted snapshot."""
         sensor_ids = self._humidity_sensor_ids(room)
-        weighted_values: list[tuple[float, float, str]] = []
+        channels: list[tuple[str, float, float, bool]] = []
         primary = room.get("humidity_sensor") or ""
         for sensor_id in sensor_ids:
             state = self.hass.states.get(sensor_id)
-            self._record_raw_state_observation(
-                area_id,
-                sensor_id,
-                "humidity",
-                state,
-                is_primary=(sensor_id == primary),
-            )
+            if record_raw:
+                self._record_raw_state_observation(
+                    area_id,
+                    sensor_id,
+                    "humidity",
+                    state,
+                    is_primary=(sensor_id == primary),
+                )
             value = read_sensor_value(self.hass, sensor_id, area_id, "humidity", now=now)
             if value is None:
                 continue
@@ -999,20 +1259,15 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             age_s = sensor_observation_age(state, now=now, attribute=attribute)
             if age_s is None:
                 continue
-            weight = 1.0 / (1.0 + age_s / 900.0)
-            if sensor_id == primary:
-                weight *= 1.25
-            weighted_values.append((value, weight, sensor_id))
+            channels.append((sensor_id, value, age_s, sensor_id == primary))
 
-        if weighted_values:
-            sources = [sensor_id for _, _, sensor_id in weighted_values]
-            total_weight = sum(weight for _, weight, _ in weighted_values)
-            if total_weight > 0:
-                return HumiditySensorSnapshot(
-                    value=round(sum(value * weight for value, weight, _ in weighted_values) / total_weight, 2),
-                    sources=tuple(sources),
-                    primary_available=primary in sources,
-                )
+        fused, sources, primary_available = self._sensor_fusion.fuse_humidity(channels, learn=record_raw)
+        if fused is not None:
+            return HumiditySensorSnapshot(
+                value=fused,
+                sources=tuple(sources),
+                primary_available=primary_available,
+            )
         return HumiditySensorSnapshot(value=None)
 
     def _humidity_sensor_ids(self, room: dict) -> list[str]:
@@ -1505,6 +1760,8 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             night_active=night_mode_active,
             night_quiet_penalty=0.35,
             coupling_terms=coupling_terms,
+            ac_overdrive=self._ac_overdrive,
+            sensor_fusion=self._sensor_fusion,
         )
         mode, power_fraction = await controller.async_evaluate(current_temp, targets)
 
@@ -1809,6 +2066,37 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             q_residual=q_residual,
             pause_learning=bool(sleep_device_status and sleep_device_status.get("mite_removal_active")),
         )
+        self._last_room_pf_mix[area_id] = (display_pf, airflow.q_fan_mix)
+
+        # Observe thermal progress of any adaptive-overdrive AC units.
+        if has_external_sensor and current_temp_raw is not None:
+            model = self._model_manager.get_model(area_id)
+            alpha = model.U / max(model.C, 0.001)
+            for dev in room.get("devices", []) or []:
+                if not isinstance(dev, dict) or dev.get("setpoint_mode") != "adaptive":
+                    continue
+                dev_eid = dev.get("entity_id", "")
+                if not dev_eid:
+                    continue
+                pre_dev_state = observation.actuator_states.get(dev_eid)
+                raw_ac_temp = pre_dev_state.attributes.get("current_temperature") if pre_dev_state else None
+                ac_internal_c = (
+                    ha_temp_to_celsius(self.hass, float(raw_ac_temp), entity_id=dev_eid)
+                    if isinstance(raw_ac_temp, int | float) and not isinstance(raw_ac_temp, bool)
+                    else None
+                )
+                is_heating = mode == MODE_HEATING or (device_action[0] == MODE_HEATING)
+                is_active = device_action[0] in (MODE_HEATING, MODE_COOLING) or mode in (MODE_HEATING, MODE_COOLING)
+                self._ac_overdrive.observe_response(
+                    dev_eid,
+                    room_temp_c=current_temp_raw,
+                    target_c=target_temp,
+                    ac_internal_temp_c=ac_internal_c,
+                    heating=is_heating,
+                    active=bool(is_active),
+                    outdoor_temp_c=self.outdoor_temp_effective,
+                    alpha=alpha,
+                )
 
         room_state = self._build_room_state_dict(
             area_id=area_id,
@@ -1854,6 +2142,7 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         room_state["dispatch_status"] = dispatch_status
         room_state["device_observations"] = self._device_observation_status(observation)
         room_state["sleep_device_status"] = sleep_device_status
+        room_state["ac_overdrive_status"] = controller.last_overdrive_status
         return room_state
 
     async def _observe_and_train(

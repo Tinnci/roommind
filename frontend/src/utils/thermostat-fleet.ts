@@ -139,26 +139,41 @@ export function buildThermostatFleet(
     const obs = obsById.get(device.entity_id);
     const actuation = pickBestActuation(operations, device.entity_id);
 
-    const hvacMode = obs?.hvac_mode ?? (haState?.state || null);
-    const available =
-      obs?.available ?? (haState ? !["unavailable", "unknown"].includes(haState.state) : false);
+    const hasLiveHaState =
+      !!haState &&
+      !["unavailable", "unknown"].includes(haState.state) &&
+      !haState.attributes?.assumed_state;
+    const hvacMode = hasLiveHaState ? haState.state : (obs?.hvac_mode ?? (haState?.state || null));
+    const available = hasLiveHaState
+      ? true
+      : (obs?.available ?? (haState ? !["unavailable", "unknown"].includes(haState.state) : false));
     const isActive = available && hvacMode !== null && ACTIVE_HA_MODES.has(hvacMode);
 
-    let setpointC: number | null = obs?.temperature ?? null;
+    let setpointC: number | null = null;
     if (
-      setpointC == null &&
+      hasLiveHaState &&
       typeof haState?.attributes?.temperature === "number" &&
       hvacMode !== "off"
     ) {
       setpointC = toCelsius(haState.attributes.temperature, hass);
+    } else if (obs?.temperature != null) {
+      setpointC = obs.temperature;
+    } else if (typeof haState?.attributes?.temperature === "number" && hvacMode !== "off") {
+      setpointC = toCelsius(haState.attributes.temperature, hass);
     }
 
     const setpointLowC =
+      (hasLiveHaState && typeof haState?.attributes?.target_temp_low === "number"
+        ? toCelsius(haState.attributes.target_temp_low, hass)
+        : null) ??
       obs?.target_temp_low ??
       (typeof haState?.attributes?.target_temp_low === "number"
         ? toCelsius(haState.attributes.target_temp_low, hass)
         : null);
     const setpointHighC =
+      (hasLiveHaState && typeof haState?.attributes?.target_temp_high === "number"
+        ? toCelsius(haState.attributes.target_temp_high, hass)
+        : null) ??
       obs?.target_temp_high ??
       (typeof haState?.attributes?.target_temp_high === "number"
         ? toCelsius(haState.attributes.target_temp_high, hass)

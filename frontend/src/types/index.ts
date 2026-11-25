@@ -28,11 +28,14 @@ export interface CoverScheduleEntry {
 export interface SensorFusionStatus {
   entity_id: string;
   is_primary: boolean;
+  sensor_class?: "primary" | "external" | "hvac_internal" | string;
   value: number;
   corrected_value: number;
   static_bias: number;
   active_bias: number;
   k_mix: number;
+  weight?: number;
+  cadence_s?: number | null;
   age_s: number;
   variance: number;
   freshness_source: "last_reported" | "last_updated" | "last_changed" | "none" | string;
@@ -43,6 +46,17 @@ export interface SensorFusionStatus {
   last_changed?: string | null;
 }
 
+export interface AcOverdriveStatus {
+  entity_id: string;
+  intake_bias_c: number;
+  deadband_c: number;
+  response_gain: number;
+  integral_trim_c: number;
+  drive_offset_c: number;
+  commanded_setpoint_c: number;
+  samples: number;
+}
+
 export interface RoomLiveData {
   observed_mode?: RoomMode | null;
   observation_status?: "observed" | "unknown";
@@ -51,6 +65,7 @@ export interface RoomLiveData {
   dispatch_status?: "sent" | "skipped" | "deferred" | "failed" | "disabled" | "unknown";
   device_actuation_status?: DeviceActuationStatus[];
   device_observations?: DeviceObservation[];
+  ac_overdrive_status?: AcOverdriveStatus[];
   current_temp: number | null;
   current_temp_raw?: number | null;
   current_humidity: number | null;
@@ -111,7 +126,7 @@ export interface DeviceConfig {
   heating_system_type?: string;
   idle_action?: "off" | "fan_only" | "setback" | "low"; // default "off"
   idle_fan_mode?: string; // default "low"
-  setpoint_mode?: "proportional" | "direct"; // default "proportional"
+  setpoint_mode?: "proportional" | "direct" | "adaptive"; // default "proportional"
   max_setpoint_offset_c?: number | null;
 }
 
@@ -496,6 +511,10 @@ export interface GlobalSettings {
 export interface HassConnection {
   addEventListener(event: string, callback: () => void): void;
   removeEventListener(event: string, callback: () => void): void;
+  subscribeMessage?: <T = unknown>(
+    callback: (ev: T) => void,
+    subscribeMessage: Record<string, unknown>,
+  ) => Promise<() => void>;
 }
 
 export interface HomeAssistant {

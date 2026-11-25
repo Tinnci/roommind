@@ -32,6 +32,7 @@ MAX_IDLE_SETBACK_OFFSET = 5.0
 
 SETPOINT_MODE_PROPORTIONAL = "proportional"
 SETPOINT_MODE_DIRECT = "direct"
+SETPOINT_MODE_ADAPTIVE = "adaptive"
 
 # Active HVAC modes that indicate real device capabilities.
 _ACTIVE_HVAC_MODES = {"heat", "cool", "heat_cool", "auto"}
@@ -228,6 +229,11 @@ def get_idle_action(devices: list[dict], entity_id: str) -> tuple[str, str]:
 def get_direct_setpoint_eids(devices: list[dict]) -> set[str]:
     """Return entity IDs of devices with setpoint_mode='direct'."""
     return {d["entity_id"] for d in devices if d.get("entity_id") and d.get("setpoint_mode") == SETPOINT_MODE_DIRECT}
+
+
+def get_adaptive_setpoint_eids(devices: list[dict]) -> set[str]:
+    """Return entity IDs of devices with setpoint_mode='adaptive'."""
+    return {d["entity_id"] for d in devices if d.get("entity_id") and d.get("setpoint_mode") == SETPOINT_MODE_ADAPTIVE}
 
 
 def build_rooms_devices_map(rooms: dict) -> dict[str, list[dict]]:

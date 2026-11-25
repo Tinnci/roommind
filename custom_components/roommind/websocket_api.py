@@ -140,39 +140,22 @@ def _validate_no_duplicate_devices(config: dict) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-@websocket_api.websocket_command({vol.Required("type"): "roommind/rooms/list"})
-@websocket_api.async_response
-async def websocket_list_rooms(
-    hass: HomeAssistant,
-    connection: ActiveConnection,
-    msg: dict,
-) -> None:
-    """Return all rooms with current state."""
+def _build_rooms_list_payload(hass: HomeAssistant) -> dict:
+    """Build the rooms + settings live snapshot payload for WS responses and pushes."""
     store = hass.data[DOMAIN]["store"]
     rooms = store.get_rooms()
 
-    # Merge live state from coordinator
     coordinator = _get_coordinator(hass)
-    # If coordinator has no data yet but rooms exist, trigger an immediate refresh
-    if coordinator and rooms and not coordinator.rooms:
-        await coordinator.async_request_refresh()
     live_states = coordinator.rooms if coordinator else {}
 
-    # Outdoor temperature availability gates EKF training (#301).  Surface the
-    # paused state per room so the frontend can show an explanatory badge.
     outdoor_available = coordinator is not None and coordinator.outdoor_temp_effective is not None
     settings = store.get_settings()
     learning_disabled = set(settings.get("learning_disabled_rooms", []))
 
-    # Build response: config + live state per room
-    # Compute override fields from the store (always up-to-date) rather
-    # than from the coordinator (which refreshes on a 10s cycle).
     result = {}
     for area_id, room_config in rooms.items():
         room_data = dict(room_config)
         live = live_states.get(area_id, {})
-        # Managed Mode rooms (no temperature_sensor) never train the EKF, so
-        # surfacing "learning paused" would be misleading.
         has_external_sensor = bool(room_config.get("temperature_sensor"))
         if (
             not outdoor_available
@@ -202,6 +185,7 @@ async def websocket_list_rooms(
                 "device_setpoint": live.get("device_setpoint"),
                 "device_actuation_status": live.get("device_actuation_status", []),
                 "device_observations": live.get("device_observations", []),
+                "ac_overdrive_status": live.get("ac_overdrive_status", []),
                 "window_open": live.get("window_open", False),
                 **build_override_live(
                     room_config,
@@ -245,36 +229,96 @@ async def websocket_list_rooms(
         )
         result[area_id] = room_data
 
-    # Vacation state from settings
     vacation_until = settings.get("vacation_until")
     vacation_active = bool(vacation_until and time.time() < vacation_until)
 
-    connection.send_result(
-        msg["id"],
-        {
-            "rooms": result,
-            "outdoor_temp": coordinator.outdoor_temp_effective if coordinator else None,
-            "outdoor_humidity": coordinator.outdoor_humidity if coordinator else None,
-            "vacation_active": vacation_active,
-            "vacation_temp": settings.get("vacation_temp") if vacation_active else None,
-            "vacation_until": vacation_until if vacation_active else None,
-            "hidden_rooms": settings.get("hidden_rooms", []),
-            "room_order": settings.get("room_order", []),
-            "group_by_floor": settings.get("group_by_floor", False),
-            "control_mode": settings.get("control_mode", DEFAULT_CONTROL_MODE),
-            "optimizer_strategy": settings.get("optimizer_strategy", "greedy"),
-            "climate_control_active": settings.get("climate_control_active", True),
-            "presence_enabled": settings.get("presence_enabled", False),
-            "presence_persons": settings.get("presence_persons", []),
-            "presence_away_action": settings.get("presence_away_action", "eco"),
-            "presence_clears_override": settings.get("presence_clears_override", False),
-            "schedule_off_action": settings.get("schedule_off_action", "eco"),
-            "anyone_home": _compute_anyone_home(hass, settings),
-            "valve_protection_enabled": settings.get("valve_protection_enabled", False),
-            "compressor_groups": settings.get("compressor_groups", []),
-            "setback_offset": resolve_setback_offset({}, settings),
-        },
-    )
+    return {
+        "rooms": result,
+        "outdoor_temp": coordinator.outdoor_temp_effective if coordinator else None,
+        "outdoor_humidity": coordinator.outdoor_humidity if coordinator else None,
+        "vacation_active": vacation_active,
+        "vacation_temp": settings.get("vacation_temp") if vacation_active else None,
+        "vacation_until": vacation_until if vacation_active else None,
+        "hidden_rooms": settings.get("hidden_rooms", []),
+        "room_order": settings.get("room_order", []),
+        "group_by_floor": settings.get("group_by_floor", False),
+        "control_mode": settings.get("control_mode", DEFAULT_CONTROL_MODE),
+        "optimizer_strategy": settings.get("optimizer_strategy", "greedy"),
+        "climate_control_active": settings.get("climate_control_active", True),
+        "presence_enabled": settings.get("presence_enabled", False),
+        "presence_persons": settings.get("presence_persons", []),
+        "presence_away_action": settings.get("presence_away_action", "eco"),
+        "presence_clears_override": settings.get("presence_clears_override", False),
+        "schedule_off_action": settings.get("schedule_off_action", "eco"),
+        "anyone_home": _compute_anyone_home(hass, settings),
+        "valve_protection_enabled": settings.get("valve_protection_enabled", False),
+        "compressor_groups": settings.get("compressor_groups", []),
+        "setback_offset": resolve_setback_offset({}, settings),
+    }
+
+
+@websocket_api.websocket_command({vol.Required("type"): "roommind/rooms/list"})
+@websocket_api.async_response
+async def websocket_list_rooms(
+    hass: HomeAssistant,
+    connection: ActiveConnection,
+    msg: dict,
+) -> None:
+    """Return all rooms with current state."""
+    store = hass.data[DOMAIN]["store"]
+    rooms = store.get_rooms()
+    coordinator = _get_coordinator(hass)
+    if coordinator and rooms and not coordinator.rooms:
+        await coordinator.async_request_refresh()
+
+    connection.send_result(msg["id"], _build_rooms_list_payload(hass))
+
+
+@websocket_api.websocket_command({vol.Required("type"): "roommind/rooms/subscribe"})
+@websocket_api.async_response
+async def websocket_subscribe_rooms(
+    hass: HomeAssistant,
+    connection: ActiveConnection,
+    msg: dict,
+) -> None:
+    """Push live room state updates immediately on coordinator changes."""
+    store = hass.data[DOMAIN]["store"]
+    rooms = store.get_rooms()
+    coordinator = _get_coordinator(hass)
+    if coordinator and rooms and not coordinator.rooms:
+        await coordinator.async_request_refresh()
+
+    sub_id = msg["id"]
+    scheduled = False
+
+    def _emit() -> None:
+        nonlocal scheduled
+        scheduled = False
+        try:
+            connection.send_message(websocket_api.event_message(sub_id, _build_rooms_list_payload(hass)))
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("Failed sending roommind/rooms/subscribe update", exc_info=True)
+
+    @callback
+    def _on_coordinator_update() -> None:
+        nonlocal scheduled
+        if scheduled:
+            return
+        scheduled = True
+        loop = getattr(hass, "loop", None)
+        call_soon = getattr(loop, "call_soon", None)
+        if callable(call_soon):
+            call_soon(_emit)
+        else:
+            _emit()
+
+    remove_listener = coordinator.async_add_listener(_on_coordinator_update) if coordinator else None
+    subscriptions = getattr(connection, "subscriptions", None)
+    if isinstance(subscriptions, dict):
+        subscriptions[sub_id] = remove_listener if remove_listener is not None else (lambda: None)
+
+    connection.send_result(sub_id, None)
+    connection.send_message(websocket_api.event_message(sub_id, _build_rooms_list_payload(hass)))
 
 
 # ---------------------------------------------------------------------------
@@ -1053,6 +1097,7 @@ async def websocket_sleep_action(
 def async_register_websocket_commands(hass: HomeAssistant) -> None:
     """Register all RoomMind WebSocket commands."""
     websocket_api.async_register_command(hass, websocket_list_rooms)
+    websocket_api.async_register_command(hass, websocket_subscribe_rooms)
     websocket_api.async_register_command(hass, websocket_save_room)
     websocket_api.async_register_command(hass, websocket_delete_room)
     websocket_api.async_register_command(hass, websocket_override_set)

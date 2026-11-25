@@ -81,6 +81,7 @@ export class RoomMindPanel extends LitElement {
   @state() private _fleetFilter: FleetFilter = "all";
 
   private _refreshInterval: ReturnType<typeof setInterval> | undefined;
+  private _roomsUnsub: (() => void) | null = null;
   private _routeApplied = false;
   private _saveStatusTimeout: ReturnType<typeof setTimeout> | undefined;
   private _hiddenUndoTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -783,7 +784,8 @@ export class RoomMindPanel extends LitElement {
       this._elementsLoaded = true;
     });
     this._loadRooms();
-    this._refreshInterval = setInterval(() => this._loadRooms(), 5000);
+    this._subscribeRooms();
+    this._refreshInterval = setInterval(() => this._loadRooms(), 15000);
     this.addEventListener("save-status", this._onSaveStatus as EventListener);
     if (!this._routeApplied) {
       this._applyRoute();
@@ -813,6 +815,7 @@ export class RoomMindPanel extends LitElement {
       clearInterval(this._refreshInterval);
       this._refreshInterval = undefined;
     }
+    this._unsubscribeRooms();
     if (this._saveStatusTimeout) clearTimeout(this._saveStatusTimeout);
     if (this._hiddenUndoTimeout) clearTimeout(this._hiddenUndoTimeout);
     this.removeEventListener("save-status", this._onSaveStatus as EventListener);
@@ -1535,6 +1538,72 @@ export class RoomMindPanel extends LitElement {
     }));
   }
 
+  private _applyRoomsPayload(result: {
+    rooms: Record<string, RoomConfig>;
+    vacation_active?: boolean;
+    vacation_temp?: number | null;
+    vacation_until?: number | null;
+    hidden_rooms?: string[];
+    room_order?: string[];
+    group_by_floor?: boolean;
+    control_mode?: "mpc" | "bangbang";
+    optimizer_strategy?: "greedy" | "horizon_search";
+    climate_control_active?: boolean;
+    presence_enabled?: boolean;
+    anyone_home?: boolean;
+    presence_persons?: string[];
+    presence_away_action?: "eco" | "off";
+    schedule_off_action?: "eco" | "off";
+    valve_protection_enabled?: boolean;
+    setback_offset?: number;
+    compressor_groups?: CompressorGroup[];
+  }) {
+    this._rooms = result.rooms;
+    this._compressorGroups = result.compressor_groups ?? [];
+    this._vacationActive = result.vacation_active ?? false;
+    this._vacationTemp = result.vacation_temp ?? null;
+    this._vacationUntil = result.vacation_until ?? null;
+    this._hiddenRooms = result.hidden_rooms ?? [];
+    this._roomOrder = result.room_order ?? [];
+    this._groupByFloor = result.group_by_floor ?? false;
+    this._controlMode = result.control_mode ?? DEFAULT_CONTROL_MODE;
+    this._climateControlActive = result.climate_control_active ?? true;
+    this._presenceEnabled = result.presence_enabled ?? false;
+    this._valveProtectionEnabled = result.valve_protection_enabled ?? false;
+    this._setbackOffset = result.setback_offset ?? DEFAULT_SETBACK_OFFSET;
+    this._anyoneHome = result.anyone_home ?? true;
+    this._presencePersons = result.presence_persons ?? [];
+    this._presenceAwayAction = result.presence_away_action ?? "eco";
+    this._roomsLoaded = true;
+  }
+
+  private async _subscribeRooms() {
+    if (this._roomsUnsub || !this.hass?.connection?.subscribeMessage) return;
+    try {
+      this._roomsUnsub = await this.hass.connection.subscribeMessage(
+        (payload: unknown) => {
+          this._applyRoomsPayload(payload as Parameters<RoomMindPanel["_applyRoomsPayload"]>[0]);
+        },
+        { type: "roommind/rooms/subscribe" },
+      );
+    } catch (err) {
+      // Fallback polling remains active if push subscription is unsupported
+      // eslint-disable-next-line no-console
+      console.debug("[RoomMind] subscribeRooms:", err);
+    }
+  }
+
+  private _unsubscribeRooms() {
+    if (this._roomsUnsub) {
+      try {
+        this._roomsUnsub();
+      } catch {
+        // Ignore teardown errors on closed sockets
+      }
+      this._roomsUnsub = null;
+    }
+  }
+
   private async _loadRooms() {
     if (!this.hass) return;
     try {
@@ -1560,22 +1629,7 @@ export class RoomMindPanel extends LitElement {
       }>({
         type: "roommind/rooms/list",
       });
-      this._rooms = result.rooms;
-      this._compressorGroups = result.compressor_groups ?? [];
-      this._vacationActive = result.vacation_active ?? false;
-      this._vacationTemp = result.vacation_temp ?? null;
-      this._vacationUntil = result.vacation_until ?? null;
-      this._hiddenRooms = result.hidden_rooms ?? [];
-      this._roomOrder = result.room_order ?? [];
-      this._groupByFloor = result.group_by_floor ?? false;
-      this._controlMode = result.control_mode ?? DEFAULT_CONTROL_MODE;
-      this._climateControlActive = result.climate_control_active ?? true;
-      this._presenceEnabled = result.presence_enabled ?? false;
-      this._valveProtectionEnabled = result.valve_protection_enabled ?? false;
-      this._setbackOffset = result.setback_offset ?? DEFAULT_SETBACK_OFFSET;
-      this._anyoneHome = result.anyone_home ?? true;
-      this._presencePersons = result.presence_persons ?? [];
-      this._presenceAwayAction = result.presence_away_action ?? "eco";
+      this._applyRoomsPayload(result);
     } catch (err) {
       // eslint-disable-next-line no-console
       console.debug("[RoomMind] loadRooms:", err);
@@ -1921,10 +1975,13 @@ export class RoomMindPanel extends LitElement {
   override updated(changedProps: Map<string, unknown>) {
     if (changedProps.has("hass") && this.hass && !this._roomsLoaded) {
       this._loadRooms();
+      this._subscribeRooms();
     }
     if (changedProps.has("hass") && this.hass?.connection && !this._boundConnectionReady) {
       this._boundConnectionReady = () => {
+        this._unsubscribeRooms();
         this._loadRooms();
+        this._subscribeRooms();
         this.requestUpdate();
       };
       this.hass.connection.addEventListener("ready", this._boundConnectionReady);

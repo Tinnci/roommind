@@ -36,6 +36,7 @@ from ..managers.airflow_levels import resolve_fan_mode_for_policy
 from ..room_config import resolve_setback_offset
 from ..settings_config import mpc_control_enabled
 from ..utils.device_utils import (
+    SETPOINT_MODE_ADAPTIVE,
     get_ac_eids,
     get_device_by_eid,
     get_direct_setpoint_eids,
@@ -44,7 +45,8 @@ from ..utils.device_utils import (
     has_reliable_hvac_modes,
 )
 from ..utils.entity_snapshot import EntitySnapshots, capture_entity_snapshots
-from ..utils.temp_utils import celsius_delta_to_ha, celsius_to_ha_temp
+from ..utils.temp_utils import celsius_delta_to_ha, celsius_to_ha_temp, ha_temp_to_celsius
+from .ac_overdrive import ACOverdriveManager
 from .actuation import ActuationLedger, DeviceActuationResult, DispatchStatus, plan_active_temperature
 from .climate_actuator import (  # noqa: F401 -- Preserve previous helper import paths.
     _command_payload_matches,
@@ -73,6 +75,7 @@ from .thermal_model import RoomModelManager
 
 if TYPE_CHECKING:
     from ..managers.heat_source_orchestrator import HeatSourcePlan
+    from ..managers.sensor_fusion_manager import SensorFusionManager
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -313,6 +316,8 @@ class MPCController:
         night_active: bool = False,
         night_quiet_penalty: float = 0.0,
         coupling_terms: list[dict] | None = None,
+        ac_overdrive: ACOverdriveManager | None = None,
+        sensor_fusion: SensorFusionManager | None = None,
     ) -> None:
         self.hass = hass
         self.room_config = room_config
@@ -333,6 +338,9 @@ class MPCController:
         self._paced_entities: set[str] = set()
         self._area_id = room_config.get("area_id", "unknown")
         self._dispatch_results: dict[str, list[DeviceActuationResult]] = {}
+        self._overdrive_statuses: dict[str, dict[str, Any]] = {}
+        self._ac_overdrive = ac_overdrive
+        self._sensor_fusion = sensor_fusion
         self._target_resolver = target_resolver
         self.last_plan: MPCPlan | None = None
         self._solar_exposure = solar_exposure or SolarExposure(raw_solar=q_solar, shading_factor=shading_factor)
@@ -1311,6 +1319,7 @@ class MPCController:
     ) -> AppliedCommandReport:
         """Apply a controller intent and return the actual command report."""
         self._dispatch_results = {}
+        self._overdrive_statuses = {}
         self._cycle_observations = (
             self._actuator_observations
             if self._actuator_observations is not None
@@ -1400,6 +1409,11 @@ class MPCController:
             return self._cycle_observations.get(entity_id)
         return self.hass.states.get(entity_id)
 
+    @property
+    def last_overdrive_status(self) -> list[dict[str, Any]]:
+        """Return diagnostic details for adaptive AC overdrive decisions in this cycle."""
+        return list(self._overdrive_statuses.values())
+
     def _plan_device_temperature(
         self, entity_id: str, context: DeviceApplyContext, *, heating: bool, demand: float | None = None
     ) -> float:
@@ -1407,10 +1421,41 @@ class MPCController:
         is_trv = entity_id in self.thermostats
         limit = context.trv_heat_boost if is_trv else context.ac_heat_boost if heating else context.ac_cool_boost
         device = get_device_by_eid(self._devices, entity_id) or {}
+        eff_demand = context.power_fraction if demand is None else demand
+        if (
+            not is_trv
+            and device.get("setpoint_mode") == SETPOINT_MODE_ADAPTIVE
+            and self.has_external_sensor
+            and context.current_temp is not None
+            and self._ac_overdrive is not None
+        ):
+            ac_state = self._device_state(entity_id)
+            raw_ac_temp = ac_state.attributes.get("current_temperature") if ac_state else None
+            ac_internal_c: float | None = None
+            if isinstance(raw_ac_temp, (int, float)) and not isinstance(raw_ac_temp, bool):
+                ac_internal_c = ha_temp_to_celsius(self.hass, float(raw_ac_temp), entity_id=entity_id)
+            learned_bias_c: float | None = None
+            if self._sensor_fusion is not None:
+                bias = self._sensor_fusion.get_bias(entity_id)
+                learned_bias_c = bias.static_c + bias.active_c * eff_demand
+            temperature, diag = self._ac_overdrive.plan_setpoint(
+                entity_id,
+                target_c=context.effective_target,
+                room_temp_c=context.current_temp,
+                ac_internal_temp_c=ac_internal_c,
+                demand=eff_demand,
+                heating=heating,
+                limit_c=limit,
+                max_offset_c=device.get("max_setpoint_offset_c"),
+                learned_sensor_bias_c=learned_bias_c,
+            )
+            self._overdrive_statuses[entity_id] = diag
+            return celsius_to_ha_temp(self.hass, round(temperature, 1))
+
         temperature = plan_active_temperature(
             target=context.effective_target,
             current_temp=context.current_temp,
-            demand=context.power_fraction if demand is None else demand,
+            demand=eff_demand,
             limit=limit,
             heating=heating,
             direct=(
