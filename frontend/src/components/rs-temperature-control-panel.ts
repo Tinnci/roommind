@@ -57,8 +57,8 @@ export class RsTemperatureControlPanel extends LitElement {
 
       .control-card {
         display: grid;
-        gap: 24px;
-        padding: 24px;
+        gap: 10px;
+        padding: 12px 16px;
       }
 
       .control-card.paused {
@@ -69,13 +69,13 @@ export class RsTemperatureControlPanel extends LitElement {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 16px;
+        gap: 12px;
         min-width: 0;
       }
 
       .title-block {
         display: grid;
-        grid-template-columns: 34px minmax(0, 1fr);
+        grid-template-columns: 30px minmax(0, 1fr);
         gap: 10px;
         align-items: center;
         min-width: 0;
@@ -85,15 +85,15 @@ export class RsTemperatureControlPanel extends LitElement {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 34px;
-        height: 34px;
+        width: 30px;
+        height: 30px;
         border-radius: var(--roommind-radius-control, 8px);
         background: var(--roommind-primary-muted);
         color: var(--primary-color);
       }
 
       .title-icon ha-icon {
-        --mdc-icon-size: 20px;
+        --mdc-icon-size: 18px;
       }
 
       .title-copy {
@@ -103,14 +103,14 @@ export class RsTemperatureControlPanel extends LitElement {
       .panel-title {
         margin: 0;
         color: var(--primary-text-color);
-        font-size: 16px;
+        font-size: 14px;
         font-weight: 650;
         line-height: 1.25;
       }
 
       .panel-status {
         display: block;
-        margin-top: 3px;
+        margin-top: 1px;
         color: var(--secondary-text-color);
         font-size: 12px;
         line-height: 1.35;
@@ -123,29 +123,40 @@ export class RsTemperatureControlPanel extends LitElement {
         flex: 0 0 auto;
       }
 
-      .control-grid {
-        display: grid;
-        grid-template-columns: minmax(260px, 1.35fr) minmax(280px, 1fr);
-        gap: 28px;
-        align-items: stretch;
-      }
-
-      .target-zone,
-      .side-zone {
+      .control-primary-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
         min-width: 0;
       }
 
-      .target-zone {
-        display: grid;
-        gap: 16px;
+      .target-cluster {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
       }
 
-      .side-zone {
+      .duration-cluster {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+        min-width: 0;
+      }
+
+      .control-secondary-row {
         display: flex;
-        flex-direction: column;
-        gap: 24px;
-        padding-left: 28px;
-        border-left: var(--roommind-border-faint);
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding-top: 10px;
+        border-top: var(--roommind-border-faint);
+        min-width: 0;
       }
 
       .section-label {
@@ -157,13 +168,9 @@ export class RsTemperatureControlPanel extends LitElement {
       }
 
       .target-editor {
-        display: grid;
-        grid-template-columns: 44px minmax(140px, 1fr) 44px;
-        gap: 12px;
+        display: inline-flex;
         align-items: center;
-        width: 100%;
-        max-width: 340px;
-        justify-self: center;
+        gap: 4px;
       }
 
       .step-button,
@@ -174,7 +181,7 @@ export class RsTemperatureControlPanel extends LitElement {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        gap: 6px;
+        gap: 5px;
         min-width: 0;
         border-radius: var(--roommind-radius-control, 8px);
         border: var(--roommind-border-subtle);
@@ -200,47 +207,50 @@ export class RsTemperatureControlPanel extends LitElement {
       }
 
       .step-button {
-        width: 44px;
-        height: 44px;
+        width: 34px;
+        height: 34px;
         padding: 0;
-        border-radius: 50%;
-        font-size: 24px;
+        border-radius: var(--roommind-radius-control, 8px);
+        font-size: 18px;
       }
 
       .step-button ha-icon,
-      .mode-button ha-icon,
-      .preset-button ha-icon,
       .action-button ha-icon {
-        --mdc-icon-size: 18px;
+        --mdc-icon-size: 16px;
+        flex: 0 0 auto;
+      }
+
+      .mode-button ha-icon,
+      .preset-button ha-icon {
+        --mdc-icon-size: 15px;
         flex: 0 0 auto;
       }
 
       .target-input {
-        display: grid;
+        display: inline-grid;
         grid-template-columns: minmax(0, 1fr) auto;
         align-items: baseline;
-        width: 100%;
-        min-height: 56px;
+        min-height: 36px;
         box-sizing: border-box;
-        border: 1px solid transparent;
+        border: var(--roommind-border-subtle);
         border-radius: var(--roommind-radius-control, 8px);
         background: var(--roommind-surface);
-        padding: 0 12px;
+        padding: 0 8px;
       }
 
       .target-native {
-        width: 100%;
+        width: 58px;
         min-width: 0;
-        height: 56px;
+        height: 34px;
         box-sizing: border-box;
         border: none;
         outline: none;
         background: transparent;
         color: var(--primary-text-color);
         font: inherit;
-        font-size: 40px;
-        font-weight: 450;
-        letter-spacing: -0.03em;
+        font-size: 18px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
         line-height: 1;
         text-align: center;
         font-variant-numeric: tabular-nums;
@@ -258,7 +268,7 @@ export class RsTemperatureControlPanel extends LitElement {
 
       .target-unit {
         color: var(--secondary-text-color);
-        font-size: 14px;
+        font-size: 12px;
         font-weight: 650;
       }
 
@@ -281,10 +291,9 @@ export class RsTemperatureControlPanel extends LitElement {
       }
 
       .target-actions {
-        display: flex;
-        justify-content: center;
+        display: inline-flex;
         flex-wrap: wrap;
-        gap: 8px;
+        gap: 6px;
       }
 
       .pending-note {
@@ -303,21 +312,15 @@ export class RsTemperatureControlPanel extends LitElement {
         flex: 0 0 auto;
       }
 
-      .duration-row {
-        display: grid;
-        gap: 8px;
-      }
-
       .duration-buttons {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 6px;
+        display: inline-flex;
+        gap: 4px;
       }
 
       .action-button {
-        min-height: 44px;
-        padding: 8px 14px;
-        font-size: 13px;
+        min-height: 36px;
+        padding: 0 12px;
+        font-size: 12.5px;
         font-weight: 650;
       }
 
@@ -327,28 +330,25 @@ export class RsTemperatureControlPanel extends LitElement {
         color: var(--primary-color);
       }
 
-      .mode-row,
-      .preset-row {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-
       .mode-buttons {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 6px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
       }
 
       .mode-button,
       .duration-button,
       .preset-button {
-        min-height: 44px;
-        padding: 0 9px;
-        font-size: 12.5px;
+        min-height: 34px;
+        padding: 0 10px;
+        font-size: 12px;
         font-weight: 650;
         white-space: nowrap;
         overflow: hidden;
+      }
+
+      .preset-button {
+        padding: 0 11px;
       }
 
       .mode-button[active],
@@ -385,9 +385,8 @@ export class RsTemperatureControlPanel extends LitElement {
       }
 
       .preset-buttons {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 8px;
+        display: inline-flex;
+        gap: 6px;
       }
 
       .preset-button.boost[active] {
@@ -408,22 +407,10 @@ export class RsTemperatureControlPanel extends LitElement {
         line-height: 1.4;
       }
 
-      @media (max-width: 900px) {
-        .control-grid {
-          grid-template-columns: 1fr;
-        }
-
-        .side-zone {
-          padding: 20px 0 0;
-          border-left: none;
-          border-top: var(--roommind-border-faint);
-        }
-      }
-
-      @media (max-width: 520px) {
+      @media (max-width: 560px) {
         .control-card {
-          padding: 20px;
-          gap: 20px;
+          padding: 12px 14px;
+          gap: 10px;
         }
 
         .control-header {
@@ -434,28 +421,36 @@ export class RsTemperatureControlPanel extends LitElement {
           white-space: normal;
         }
 
-        .target-editor {
-          grid-template-columns: 44px minmax(0, 1fr) 44px;
+        .target-cluster,
+        .duration-cluster {
+          width: 100%;
+          justify-content: space-between;
         }
 
-        .target-native {
-          font-size: 36px;
+        .duration-buttons {
+          width: 100%;
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+
+        .mode-buttons {
+          width: 100%;
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
         }
 
         .mode-button {
           white-space: normal;
-          padding: 8px 6px;
+          padding: 0 6px;
         }
 
         .mode-button ha-icon {
           display: none;
         }
 
-        .duration-buttons {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-
         .preset-buttons {
+          width: 100%;
+          display: grid;
           grid-template-columns: 1fr 1fr;
         }
       }
@@ -544,11 +539,8 @@ export class RsTemperatureControlPanel extends LitElement {
             ></ha-switch>
           </div>
 
-          <div class="control-grid">
-            <section class="target-zone">
-              <span class="section-label"
-                >${localize("room.temperature_panel.target", this.language)}</span
-              >
+          <div class="control-primary-row">
+            <div class="target-cluster">
               <div class="target-editor">
                 <button
                   class="step-button"
@@ -617,70 +609,52 @@ export class RsTemperatureControlPanel extends LitElement {
                     : nothing
                 }
               </div>
-              ${
-                this._targetDirty
-                  ? html`
-                      <div class="pending-note">
-                        <ha-icon icon="mdi:alert-circle-outline"></ha-icon>
-                        ${localize("room.temperature_panel.pending_hint", this.language)}
-                      </div>
-                    `
-                  : nothing
-              }
-              ${
-                this._overrideError
-                  ? html`<div class="error">${this._overrideError}</div>`
-                  : nothing
-              }
-              <div class="duration-row">
-                <span class="section-label"
-                  >${localize("room.temperature_panel.hold", this.language)}</span
-                >
-                <div class="duration-buttons">
-                  ${this._renderDurationButton(1, "room.temperature_panel.hold_1h", tempDisabled)}
-                  ${this._renderDurationButton(2, "room.temperature_panel.hold_2h", tempDisabled)}
-                  ${this._renderDurationButton(4, "room.temperature_panel.hold_4h", tempDisabled)}
-                  ${this._renderDurationButton(
-                    0,
-                    this.hasSchedule
-                      ? "room.temperature_panel.hold_permanent"
-                      : "room.temperature_panel.direct_label",
-                    tempDisabled,
-                  )}
-                </div>
-              </div>
-            </section>
+            </div>
 
-            <section class="side-zone">
-              <div class="mode-row">
-                <span class="section-label"
-                  >${localize("room.temperature_panel.mode", this.language)}</span
-                >
-                <div class="mode-buttons">
-                  ${this._renderModeButton("off", "mode.off", "mdi:power")}
-                  ${this._renderModeButton("cool_only", "mode.cool_only", "mdi:snowflake")}
-                  ${this._renderModeButton("heat_only", "mode.heat_only", "mdi:fire")}
-                  ${this._renderModeButton("dry", "mode.dry", "mdi:water-percent")}
-                  ${this._renderModeButton("fan_only", "mode.fan_only", "mdi:fan")}
-                  ${this._renderModeButton("auto", "mode.auto", "mdi:autorenew")}
-                </div>
+            <div class="duration-cluster">
+              <span class="section-label"
+                >${localize("room.temperature_panel.hold", this.language)}</span
+              >
+              <div class="duration-buttons">
+                ${this._renderDurationButton(1, "room.temperature_panel.hold_1h", tempDisabled)}
+                ${this._renderDurationButton(2, "room.temperature_panel.hold_2h", tempDisabled)}
+                ${this._renderDurationButton(4, "room.temperature_panel.hold_4h", tempDisabled)}
+                ${this._renderDurationButton(
+                  0,
+                  this.hasSchedule
+                    ? "room.temperature_panel.hold_permanent"
+                    : "room.temperature_panel.direct_label",
+                  tempDisabled,
+                )}
               </div>
+            </div>
+          </div>
 
-              <div class="preset-row">
-                <span class="section-label"
-                  >${localize("room.temperature_panel.shortcuts", this.language)}</span
-                >
-                <div class="preset-buttons">
-                  ${this._renderPresetButton(
-                    "boost",
-                    "override.comfort",
-                    comfortIcon,
-                    tempDisabled,
-                  )}
-                  ${this._renderPresetButton("eco", "override.eco", "mdi:leaf", tempDisabled)}
-                </div>
-              </div>
-            </section>
+          ${
+            this._targetDirty
+              ? html`
+                  <div class="pending-note">
+                    <ha-icon icon="mdi:alert-circle-outline"></ha-icon>
+                    ${localize("room.temperature_panel.pending_hint", this.language)}
+                  </div>
+                `
+              : nothing
+          }
+          ${this._overrideError ? html`<div class="error">${this._overrideError}</div>` : nothing}
+
+          <div class="control-secondary-row">
+            <div class="mode-buttons">
+              ${this._renderModeButton("off", "mode.off", "mdi:power")}
+              ${this._renderModeButton("cool_only", "mode.cool_only", "mdi:snowflake")}
+              ${this._renderModeButton("heat_only", "mode.heat_only", "mdi:fire")}
+              ${this._renderModeButton("dry", "mode.dry", "mdi:water-percent")}
+              ${this._renderModeButton("fan_only", "mode.fan_only", "mdi:fan")}
+              ${this._renderModeButton("auto", "mode.auto", "mdi:autorenew")}
+            </div>
+            <div class="preset-buttons">
+              ${this._renderPresetButton("boost", "override.comfort", comfortIcon, tempDisabled)}
+              ${this._renderPresetButton("eco", "override.eco", "mdi:leaf", tempDisabled)}
+            </div>
           </div>
         </div>
       </ha-card>

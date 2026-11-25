@@ -7,8 +7,8 @@ export const roommindThemeStyles = css`
     --mdc-shape-medium: var(--roommind-radius-control);
     --md-filled-text-field-container-shape: var(--roommind-radius-control);
     --md-outlined-text-field-container-shape: var(--roommind-radius-control);
-    --roommind-radius-card: 18px;
-    --roommind-radius-control: 10px;
+    --roommind-radius-card: 12px;
+    --roommind-radius-control: 8px;
     --roommind-radius-small: 6px;
     --roommind-motion-duration: 180ms;
     --roommind-motion-easing: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -61,7 +61,7 @@ export const roommindThemeStyles = css`
     --roommind-border-faint: 1px solid var(--divider-color, rgba(0, 0, 0, 0.06));
     --roommind-shadow-soft: 0 2px 12px rgba(0, 0, 0, 0.035);
     --roommind-shadow-dialog: 0 24px 48px rgba(0, 0, 0, 0.32);
-    --roommind-header-min-height: 44px;
+    --roommind-header-min-height: 38px;
     --roommind-info-color: var(--info-color, #2196f3);
     --roommind-success-color: var(--success-color, #4caf50);
     --roommind-warning-color: var(--warning-color, #ff9800);

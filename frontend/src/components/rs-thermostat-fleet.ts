@@ -41,8 +41,8 @@ export class RsThermostatFleet extends LitElement {
     .fleet-card {
       background: var(--roommind-surface, var(--card-background-color));
       border: var(--roommind-border-subtle, 1px solid var(--divider-color));
-      border-radius: var(--roommind-radius-card, 16px);
-      padding: 18px 20px;
+      border-radius: var(--roommind-radius-card, 12px);
+      padding: 12px 16px;
     }
 
     .fleet-header {
@@ -51,7 +51,7 @@ export class RsThermostatFleet extends LitElement {
       justify-content: space-between;
       gap: 10px;
       flex-wrap: wrap;
-      margin-bottom: 14px;
+      margin-bottom: 10px;
     }
 
     .fleet-title {
@@ -104,17 +104,17 @@ export class RsThermostatFleet extends LitElement {
 
     .unit-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
-      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+      gap: 8px;
     }
 
     .unit-card {
       position: relative;
       display: flex;
       flex-direction: column;
-      gap: 10px;
-      padding: 13px 14px;
-      border-radius: var(--roommind-radius-control, 12px);
+      gap: 6px;
+      padding: 10px 12px;
+      border-radius: var(--roommind-radius-control, 8px);
       background: var(--roommind-surface-subtle, rgba(0, 0, 0, 0.02));
       border: var(--roommind-border-faint, 1px solid rgba(0, 0, 0, 0.08));
       border-left: 3px solid var(--divider-color, rgba(0, 0, 0, 0.14));
@@ -238,7 +238,7 @@ export class RsThermostatFleet extends LitElement {
     }
 
     .setpoint-value {
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 700;
       color: var(--primary-text-color);
       font-variant-numeric: tabular-nums;

@@ -48,9 +48,14 @@ export class RsControlDetails extends LitElement {
       background: var(--card-background-color);
     }
     summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
       cursor: pointer;
-      padding: 18px 24px;
+      padding: 10px 16px;
       color: var(--primary-text-color);
+      font-size: 13px;
       font-weight: 600;
     }
     summary:focus-visible,
@@ -60,13 +65,13 @@ export class RsControlDetails extends LitElement {
     }
     .summary-status {
       display: inline;
-      margin-left: 10px;
+      margin-left: 0;
       font-size: 12px;
       font-weight: 400;
       color: var(--secondary-text-color);
     }
     .body {
-      padding: 0 24px 24px;
+      padding: 0 16px 14px;
     }
     p,
     .source {
@@ -83,11 +88,11 @@ export class RsControlDetails extends LitElement {
     .devices {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
-      gap: 12px;
+      gap: 8px;
     }
     article {
       min-width: 0;
-      padding: 14px;
+      padding: 10px 12px;
       border: var(--roommind-border-faint, 1px solid var(--divider-color));
       border-radius: var(--roommind-radius-control);
       background: var(--roommind-surface-subtle);

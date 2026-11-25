@@ -33,10 +33,10 @@ export class RsSectionCard extends LitElement {
 
       .section-header {
         display: flex;
-        align-items: flex-start;
+        align-items: center;
         gap: 10px;
-        min-height: var(--roommind-header-min-height, 44px);
-        padding: 12px 16px 10px;
+        min-height: var(--roommind-header-min-height, 38px);
+        padding: 10px 14px;
         background: var(--roommind-panel-surface);
         border-bottom: var(
           --roommind-border-faint,
@@ -48,11 +48,10 @@ export class RsSectionCard extends LitElement {
         --mdc-icon-size: 18px;
         opacity: 0.7;
         flex: 0 0 auto;
-        margin-top: 1px;
       }
 
       .section-title {
-        font-size: 15px;
+        font-size: 14px;
         font-weight: 600;
         color: var(--primary-text-color);
         margin: 0;
@@ -84,7 +83,7 @@ export class RsSectionCard extends LitElement {
       }
 
       .section-body {
-        padding: 14px 16px 16px;
+        padding: 10px 14px 12px;
         background: var(--roommind-panel-surface);
       }
     `,

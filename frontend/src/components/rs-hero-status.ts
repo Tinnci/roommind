@@ -35,7 +35,7 @@ export class RsHeroStatus extends LitElement {
 
       ha-card {
         --hero-glow: transparent;
-        padding: 28px;
+        padding: 14px 18px;
         position: relative;
         overflow: hidden;
         border-radius: var(--roommind-radius-card);
@@ -59,17 +59,26 @@ export class RsHeroStatus extends LitElement {
         --hero-glow: color-mix(in srgb, var(--roommind-success-color) 10%, transparent);
       }
 
-      .hero-header {
+      .hero-main-row {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 16px;
-        margin-bottom: 28px;
+        gap: 14px;
+        flex-wrap: wrap;
+        min-width: 0;
+      }
+
+      .hero-identity {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        min-width: 0;
+        flex: 1 1 220px;
       }
 
       .area-name {
-        font-size: 24px;
-        font-weight: 550;
+        font-size: 18px;
+        font-weight: 600;
         letter-spacing: -0.02em;
         color: var(--primary-text-color);
         margin: 0;
@@ -77,11 +86,11 @@ export class RsHeroStatus extends LitElement {
       }
 
       .hero-temps {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(170px, 0.42fr);
-        gap: 16px;
+        display: inline-flex;
         align-items: center;
+        gap: 14px;
         min-width: 0;
+        flex-shrink: 0;
       }
 
       .hero-current-wrap {
@@ -91,22 +100,22 @@ export class RsHeroStatus extends LitElement {
       .hero-current-value {
         display: flex;
         align-items: baseline;
-        gap: 8px;
+        gap: 4px;
         min-width: 0;
       }
 
       .hero-current {
-        font-size: 64px;
-        font-weight: 350;
-        letter-spacing: -0.04em;
+        font-size: 32px;
+        font-weight: 500;
+        letter-spacing: -0.03em;
         font-variant-numeric: tabular-nums;
         color: var(--primary-text-color);
         line-height: 1;
       }
 
       .hero-unit {
-        font-size: 24px;
-        font-weight: 300;
+        font-size: 15px;
+        font-weight: 400;
         color: var(--secondary-text-color);
       }
 
@@ -115,22 +124,22 @@ export class RsHeroStatus extends LitElement {
         flex-direction: column;
         justify-content: center;
         min-width: 0;
-        gap: 6px;
-        padding: 4px 0 4px 24px;
+        gap: 2px;
+        padding: 0 0 0 14px;
         border-left: var(--roommind-border-faint);
         text-align: left;
         box-sizing: border-box;
       }
 
       .hero-target-label {
-        font-size: 13px;
+        font-size: 11px;
         color: var(--secondary-text-color);
-        line-height: 1.5;
+        line-height: 1.2;
       }
 
       .hero-target-value {
-        font-size: 26px;
-        font-weight: 500;
+        font-size: 20px;
+        font-weight: 600;
         font-variant-numeric: tabular-nums;
         letter-spacing: -0.02em;
         color: var(--primary-text-color);
@@ -159,11 +168,11 @@ export class RsHeroStatus extends LitElement {
       .hero-metric {
         display: inline-flex;
         align-items: center;
-        gap: 6px;
-        min-height: 28px;
-        padding: 4px 9px;
-        border-radius: 8px;
-        font-size: 13px;
+        gap: 5px;
+        min-height: 24px;
+        padding: 2px 8px;
+        border-radius: 6px;
+        font-size: 12px;
         line-height: 1.25;
         color: var(--secondary-text-color);
         background: var(--roommind-surface-subtle);
@@ -172,7 +181,7 @@ export class RsHeroStatus extends LitElement {
       }
 
       .hero-metric ha-icon {
-        --mdc-icon-size: 16px;
+        --mdc-icon-size: 14px;
         flex-shrink: 0;
       }
 
@@ -197,8 +206,8 @@ export class RsHeroStatus extends LitElement {
       .hero-metrics {
         display: flex;
         flex-wrap: wrap;
-        gap: 8px;
-        margin-top: 24px;
+        gap: 6px;
+        margin-top: 10px;
       }
 
       .hero-metrics:empty {
@@ -261,8 +270,8 @@ export class RsHeroStatus extends LitElement {
       }
 
       .name-input {
-        font-size: 22px;
-        font-weight: 400;
+        font-size: 18px;
+        font-weight: 500;
         color: var(--primary-text-color);
         background: transparent;
         border: none;
@@ -291,51 +300,48 @@ export class RsHeroStatus extends LitElement {
 
       .hero-status-pills {
         display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        gap: 4px;
-        flex-shrink: 0;
+        flex-direction: row;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
       }
 
       @media (max-width: 620px) {
         ha-card {
-          padding: 24px 20px;
+          padding: 12px 14px;
         }
 
-        .hero-header {
-          align-items: flex-start;
+        .hero-main-row {
           flex-direction: column;
+          align-items: flex-start;
           gap: 10px;
         }
 
-        .hero-status-pills {
-          align-items: flex-start;
+        .hero-identity {
+          flex: none;
+          width: 100%;
         }
 
         .hero-temps {
-          grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
-          gap: 12px;
-        }
-
-        .hero-current-value {
-          gap: 4px;
+          width: 100%;
+          justify-content: space-between;
+          gap: 10px;
         }
 
         .hero-current {
-          font-size: 48px;
+          font-size: 28px;
         }
 
         .hero-unit {
-          font-size: 18px;
+          font-size: 14px;
         }
 
         .hero-target {
-          width: 100%;
-          padding-left: 16px;
+          padding-left: 12px;
         }
 
         .hero-target-value {
-          font-size: 22px;
+          font-size: 18px;
         }
       }
       .control-mode-badge {
@@ -623,100 +629,150 @@ export class RsHeroStatus extends LitElement {
 
     return html`
       <ha-card data-activity=${mode ?? "unknown"}>
-        <div class="hero-header">
-          ${
-            this._editingName
-              ? html`
-                  <div class="name-edit-row">
-                    <input
-                      class="name-input"
-                      type="text"
-                      .value=${this._nameInput}
-                      placeholder=${localize("room.alias.placeholder", this.hass?.language ?? "en")}
-                      @input=${this._onNameInput}
-                      @keydown=${this._onNameKeydown}
-                    />
-                    <ha-icon-button
-                      class="name-done-btn"
-                      .path=${CHECK_PATH}
-                      @click=${this._onNameDone}
-                    ></ha-icon-button>
-                  </div>
-                  ${
-                    this.config?.display_name
-                      ? html`<button class="name-clear-btn" @click=${this._onNameClear}>
-                          ${localize("room.alias.clear", this.hass?.language ?? "en")}
-                        </button>`
-                      : nothing
-                  }
-                `
-              : html`
-                  <div class="name-row">
-                    <h2 class="area-name">${this.config?.display_name || this.area.name}</h2>
-                    <ha-icon-button
-                      class="name-edit-btn"
-                      .path=${PENCIL_PATH}
-                      @click=${this._onEditName}
-                    ></ha-icon-button>
-                  </div>
-                `
-          }
-          ${
-            !this.isOutdoor
-              ? html`
-                  <div class="hero-status-pills">
+        ${
+          live?.window_open && !this.isOutdoor
+            ? html`<div class="hero-window-open">
+                <ha-icon icon="mdi:window-open-variant"></ha-icon>
+                ${localize("hero.window_open", this.hass?.language ?? "en")}
+              </div>`
+            : nothing
+        }
+        <div class="hero-main-row">
+          <div class="hero-identity">
+            ${
+              this._editingName
+                ? html`
+                    <div class="name-edit-row">
+                      <input
+                        class="name-input"
+                        type="text"
+                        .value=${this._nameInput}
+                        placeholder=${localize(
+                          "room.alias.placeholder",
+                          this.hass?.language ?? "en",
+                        )}
+                        @input=${this._onNameInput}
+                        @keydown=${this._onNameKeydown}
+                      />
+                      <ha-icon-button
+                        class="name-done-btn"
+                        .path=${CHECK_PATH}
+                        @click=${this._onNameDone}
+                      ></ha-icon-button>
+                    </div>
                     ${
-                      live
-                        ? html`
-                            <span class="mode-pill ${getModeClass(mode)}">
-                              <span class="mode-dot"></span>
-                              ${
-                                mode === null
-                                  ? localize("hero.output_unknown", this.hass?.language ?? "en")
-                                  : formatMode(mode, this.hass?.language ?? "en")
-                              }
-                            </span>
-                          `
+                      this.config?.display_name
+                        ? html`<button class="name-clear-btn" @click=${this._onNameClear}>
+                            ${localize("room.alias.clear", this.hass?.language ?? "en")}
+                          </button>`
                         : nothing
                     }
-                    ${
-                      this.config
-                        ? html`
-                            <button
-                              class="control-mode-badge"
-                              aria-expanded=${this._controlModeInfoExpanded}
-                              @click=${this._toggleControlModeInfo}
-                            >
-                              ${
-                                this.config.temperature_sensor
-                                  ? localize(
-                                      "room.control_mode.full_control",
-                                      this.hass?.language ?? "en",
-                                    )
-                                  : localize(
-                                      "room.control_mode.managed",
-                                      this.hass?.language ?? "en",
-                                    )
-                              }
-                              <ha-icon
-                                class="control-mode-info-icon ${
-                                  this._controlModeInfoExpanded ? "active" : ""
-                                }"
-                                icon="mdi:information-outline"
-                              ></ha-icon>
-                            </button>
-                          `
-                        : nothing
-                    }
+                  `
+                : html`
+                    <div class="name-row">
+                      <h2 class="area-name">${this.config?.display_name || this.area.name}</h2>
+                      <ha-icon-button
+                        class="name-edit-btn"
+                        .path=${PENCIL_PATH}
+                        @click=${this._onEditName}
+                      ></ha-icon-button>
+                    </div>
+                  `
+            }
+            ${
+              !this.isOutdoor
+                ? html`
+                    <div class="hero-status-pills">
+                      ${
+                        live
+                          ? html`
+                              <span class="mode-pill ${getModeClass(mode)}">
+                                <span class="mode-dot"></span>
+                                ${
+                                  mode === null
+                                    ? localize("hero.output_unknown", this.hass?.language ?? "en")
+                                    : formatMode(mode, this.hass?.language ?? "en")
+                                }
+                              </span>
+                            `
+                          : nothing
+                      }
+                      ${
+                        this.config
+                          ? html`
+                              <button
+                                class="control-mode-badge"
+                                aria-expanded=${this._controlModeInfoExpanded}
+                                @click=${this._toggleControlModeInfo}
+                              >
+                                ${
+                                  this.config.temperature_sensor
+                                    ? localize(
+                                        "room.control_mode.full_control",
+                                        this.hass?.language ?? "en",
+                                      )
+                                    : localize(
+                                        "room.control_mode.managed",
+                                        this.hass?.language ?? "en",
+                                      )
+                                }
+                                <ha-icon
+                                  class="control-mode-info-icon ${
+                                    this._controlModeInfoExpanded ? "active" : ""
+                                  }"
+                                  icon="mdi:information-outline"
+                                ></ha-icon>
+                              </button>
+                            `
+                          : nothing
+                      }
+                    </div>
+                  `
+                : nothing
+            }
+          </div>
+          ${
+            live
+              ? html`
+                  <div class="hero-temps">
+                    <div class="hero-current-wrap">
+                      <div class="hero-target-label">
+                        ${localize(
+                          isTemperatureCached(live)
+                            ? "room.temperature_cached"
+                            : "room.temperature_panel.current",
+                          this.hass.language,
+                        )}
+                      </div>
+                      <div class="hero-current-value">
+                        ${
+                          live.current_temp !== null
+                            ? html`
+                                <span class="hero-current"
+                                  >${formatTemp(live.current_temp, this.hass)}</span
+                                >
+                                <span class="hero-unit">${tempUnit(this.hass)}</span>
+                              `
+                            : html`<span class="hero-current" style="opacity: 0.3">--</span>`
+                        }
+                      </div>
+                    </div>
+                    ${!this.isOutdoor ? this._renderTargetSection(live) : nothing}
                   </div>
                 `
-              : nothing
+              : this.config
+                ? html`<div class="hero-no-data">
+                    ${localize("hero.waiting", this.hass?.language ?? "en")}
+                  </div>`
+                : html`<div class="hero-no-data">
+                    ${localize("hero.not_configured", this.hass?.language ?? "en")}
+                  </div>`
           }
         </div>
         ${
           this._controlModeInfoExpanded && this.config && !this.isOutdoor
             ? html`
-                <div class="control-mode-info-panel">
+                <div class="control-mode-info-panel" style="margin-top: 10px; margin-bottom: 0;">
                   ${
                     this.config.temperature_sensor
                       ? localize("room.control_mode.full_control_info", this.hass?.language ?? "en")
@@ -730,41 +786,9 @@ export class RsHeroStatus extends LitElement {
           live
             ? html`
                 ${
-                  live.window_open && !this.isOutdoor
-                    ? html`<div class="hero-window-open">
-                        <ha-icon icon="mdi:window-open-variant"></ha-icon>
-                        ${localize("hero.window_open", this.hass?.language ?? "en")}
-                      </div>`
-                    : nothing
-                }
-                <div class="hero-temps">
-                  <div class="hero-current-wrap">
-                    <div class="hero-target-label">
-                      ${localize(
-                        isTemperatureCached(live)
-                          ? "room.temperature_cached"
-                          : "room.temperature_panel.current",
-                        this.hass.language,
-                      )}
-                    </div>
-                    <div class="hero-current-value">
-                      ${
-                        live.current_temp !== null
-                          ? html`
-                              <span class="hero-current"
-                                >${formatTemp(live.current_temp, this.hass)}</span
-                              >
-                              <span class="hero-unit">${tempUnit(this.hass)}</span>
-                            `
-                          : html`<span class="hero-current" style="opacity: 0.3">--</span>`
-                      }
-                    </div>
-                  </div>
-                  ${!this.isOutdoor ? this._renderTargetSection(live) : nothing}
-                </div>
-                ${
                   !this.isOutdoor
                     ? html`<rs-thermal-band
+                        compact
                         .hass=${this.hass}
                         .config=${this.config}
                       ></rs-thermal-band>`
@@ -779,13 +803,7 @@ export class RsHeroStatus extends LitElement {
                   }).map((metric) => this._renderHeroMetric(metric, live))}
                 </div>
               `
-            : this.config
-              ? html`<div class="hero-no-data">
-                  ${localize("hero.waiting", this.hass?.language ?? "en")}
-                </div>`
-              : html`<div class="hero-no-data">
-                  ${localize("hero.not_configured", this.hass?.language ?? "en")}
-                </div>`
+            : nothing
         }
       </ha-card>
     `;

@@ -68,14 +68,14 @@ export class RsRoomDetail extends LitElement {
     css`
       :host {
         display: block;
-        max-width: 2400px;
+        max-width: 1280px;
         margin: 0 auto;
       }
 
       .detail-layout {
         display: flex;
         flex-direction: column;
-        gap: 14px;
+        gap: 10px;
         --roommind-detail-tile: color-mix(
           in srgb,
           var(--roommind-surface) 96%,

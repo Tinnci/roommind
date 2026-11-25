@@ -17,12 +17,12 @@ export class RsFleetOverview extends LitElement {
     .overview-bar {
       background: var(--roommind-surface, var(--card-background-color));
       border: var(--roommind-border-subtle, 1px solid var(--divider-color));
-      border-radius: var(--roommind-radius-card, 16px);
-      padding: 14px 18px;
-      margin-bottom: 18px;
+      border-radius: var(--roommind-radius-card, 12px);
+      padding: 10px 14px;
+      margin-bottom: 14px;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 8px;
     }
 
     .stats-row {
@@ -90,7 +90,7 @@ export class RsFleetOverview extends LitElement {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 6px 12px;
+      padding: 4px 10px;
       border-radius: 999px;
       border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.14));
       background: transparent;

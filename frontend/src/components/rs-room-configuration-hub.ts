@@ -176,22 +176,22 @@ export class RsRoomConfigurationHub extends LitElement {
 
     .config-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(min(195px, 100%), 1fr));
       gap: 8px;
     }
 
     .config-group {
       display: grid;
-      grid-template-columns: 30px minmax(0, 1fr) 20px;
+      grid-template-columns: 26px minmax(0, 1fr) 16px;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
       width: 100%;
       min-width: 0;
-      min-height: 74px;
+      min-height: 54px;
       box-sizing: border-box;
       border: 1px solid transparent;
       border-radius: var(--roommind-radius-control, 8px);
-      padding: 10px;
+      padding: 8px 10px;
       background: var(--roommind-surface-subtle);
       color: var(--primary-text-color);
       font: inherit;
@@ -218,7 +218,7 @@ export class RsRoomConfigurationHub extends LitElement {
     }
 
     .config-row-static {
-      grid-template-columns: 30px minmax(0, 1fr) auto;
+      grid-template-columns: 26px minmax(0, 1fr) auto;
       align-items: start;
       cursor: default;
     }
@@ -231,22 +231,22 @@ export class RsRoomConfigurationHub extends LitElement {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 30px;
-      height: 30px;
-      border-radius: 8px;
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
       background: var(--roommind-surface-muted);
     }
 
     .config-icon ha-icon,
     .config-chevron {
-      --mdc-icon-size: 20px;
+      --mdc-icon-size: 16px;
       color: var(--secondary-text-color);
     }
 
     .config-main {
       display: flex;
       flex-direction: column;
-      gap: 5px;
+      gap: 2px;
       min-width: 0;
     }
 
@@ -254,14 +254,14 @@ export class RsRoomConfigurationHub extends LitElement {
       display: flex;
       align-items: center;
       flex-wrap: wrap;
-      gap: 8px;
+      gap: 6px;
       min-width: 0;
     }
 
     .config-title {
       flex: 1;
       min-width: 0;
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
       line-height: 1.3;
       overflow-wrap: anywhere;
@@ -272,7 +272,7 @@ export class RsRoomConfigurationHub extends LitElement {
       flex-shrink: 0;
       max-width: 100%;
       min-height: 18px;
-      padding: 1px 7px;
+      padding: 1px 6px;
       border-radius: 6px;
       background: var(--roommind-surface-muted);
       color: var(--secondary-text-color);
@@ -281,6 +281,11 @@ export class RsRoomConfigurationHub extends LitElement {
       line-height: 1.5;
       overflow-wrap: anywhere;
       white-space: normal;
+    }
+
+    .complete .config-status {
+      background: var(--roommind-success-tint);
+      color: var(--success-color, #4caf50);
     }
 
     .partial .config-status {
@@ -295,7 +300,7 @@ export class RsRoomConfigurationHub extends LitElement {
 
     .config-meta {
       color: var(--secondary-text-color);
-      font-size: 12px;
+      font-size: 11.5px;
       line-height: 1.35;
       overflow-wrap: anywhere;
       white-space: normal;
@@ -318,8 +323,8 @@ export class RsRoomConfigurationHub extends LitElement {
       }
 
       .config-row-static {
-        grid-template-columns: 30px minmax(0, 1fr) auto;
-        gap: 10px;
+        grid-template-columns: 26px minmax(0, 1fr) auto;
+        gap: 8px;
       }
     }
   `;
