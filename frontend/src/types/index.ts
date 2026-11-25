@@ -95,6 +95,7 @@ export interface RoomLiveData {
   hvac_output_status?: HVACOutputStatus | null;
   night_mode?: NightModeLiveStatus;
   night_control_status?: NightControlStatus[];
+  sleep_device_status?: SleepDeviceLiveStatus | null;
   rapid_recovery_active?: boolean;
   effective_control_target?: "air_temperature" | "perceived_temperature" | string;
   coupling_status?: CouplingStatus[];
@@ -222,9 +223,79 @@ export interface HVACOutputStatus {
 
 export interface NightModeLiveStatus {
   active: boolean;
+  phase?: "day" | "pre_warm" | "sleep" | "pre_wake";
+  trigger_source?: "none" | "clock" | "entity" | "override";
+  effective_ramp_c?: number;
+  coupled_offset_active?: boolean;
+  tonight_override?: string | null;
   quiet_hours?: { start: string; end: string } | null;
   sleep_temp_ramp_c?: number;
   max_fan_level?: number | null;
+}
+
+export interface SleepDeviceConfig {
+  name?: string;
+  power_entity?: string;
+  heat_level_entity?: string;
+  gears_entity?: string;
+  sleep_switch_entity?: string;
+  zone_a_sleep_entity?: string;
+  zone_b_sleep_entity?: string;
+  zone_a_countdown_entity?: string;
+  zone_b_countdown_entity?: string;
+  remote_switch_entity?: string;
+  mite_removal_entity?: string;
+  anti_scald_entity?: string;
+  fault_entity?: string;
+  prewarm_gear_a?: number;
+  prewarm_gear_b?: number;
+  sleep_gear_a?: number;
+  sleep_gear_b?: number;
+  sync_native_curve?: boolean;
+}
+
+export interface SleepCurveStatus {
+  enabled: boolean;
+  start: string;
+  end: string;
+}
+
+export interface SleepDeviceLiveStatus {
+  configured: boolean;
+  name?: string;
+  power_on: boolean;
+  sleep_switch_on: boolean;
+  heat_level?: string | null;
+  gear_a?: number | null;
+  gear_b?: number | null;
+  countdown_a?: number | null;
+  countdown_b?: number | null;
+  remote_enabled: boolean;
+  mite_removal_active: boolean;
+  anti_scald_on?: boolean | null;
+  fault?: string | null;
+  fault_ok: boolean;
+  heating_active: boolean;
+  zone_a_curve?: SleepCurveStatus | null;
+  zone_b_curve?: SleepCurveStatus | null;
+}
+
+export interface ScheduleBlock {
+  from: string;
+  to: string;
+  data?: {
+    temperature?: number;
+    heat_temperature?: number;
+    cool_temperature?: number;
+    [key: string]: unknown;
+  };
+}
+
+export interface RoomScheduleBlocksResponse {
+  area_id: string;
+  blocks_by_entity: Record<string, Record<string, ScheduleBlock[]>>;
+  active_index: number;
+  selector_entity: string;
 }
 
 export interface NightControlStatus {
@@ -306,6 +377,12 @@ export interface RoomConfig {
   rapid_recovery_enabled?: boolean;
   max_fan_level_night?: number;
   sleep_temp_ramp_c?: number;
+  sleep_trigger_mode?: "clock" | "entity" | "either";
+  sleep_trigger_entity?: string;
+  sleep_prewarm_minutes?: number;
+  sleep_prewake_minutes?: number;
+  sleep_coupled_offset_c?: number;
+  sleep_device?: SleepDeviceConfig | null;
   adjacent_rooms?: AdjacentRoomConfig[];
   temperature_sensor: string;
   temperature_sensors?: string[];
@@ -475,6 +552,8 @@ export interface HassEntityRegistryEntry {
 export interface HassDeviceRegistryEntry {
   id: string;
   area_id: string | null;
+  name?: string | null;
+  name_by_user?: string | null;
 }
 
 export interface HassEntity {

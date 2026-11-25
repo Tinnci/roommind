@@ -8,11 +8,14 @@ import type {
   NightControlConfig,
   NightControlStatus,
   NightModeLiveStatus,
+  SleepDeviceConfig,
 } from "../types";
 import { inputStyles } from "../styles/input-styles";
 import { getSelectValue, openEntityInfo } from "../utils/events";
 import { localize, type TranslationKey } from "../utils/localize";
 import { summarizeNightControls } from "../utils/actuation-status";
+import { discoverSleepDeviceInArea } from "../utils/sleep-device";
+import { tempUnit } from "../utils/temperature";
 
 const DEFAULT_QUIET_HOURS = {
   start: "22:00",
@@ -33,6 +36,12 @@ export class RsComfortSection extends LitElement {
   @property({ type: Boolean }) public nightModeEnabled = true;
   @property({ type: Number }) public maxFanLevelNight = 0.5;
   @property({ type: Number }) public sleepTempRampC = 0;
+  @property() public sleepTriggerMode: "clock" | "entity" | "either" = "clock";
+  @property() public sleepTriggerEntity = "";
+  @property({ type: Number }) public sleepPrewarmMinutes = 30;
+  @property({ type: Number }) public sleepPrewakeMinutes = 30;
+  @property({ type: Number }) public sleepCoupledOffsetC = 0;
+  @property({ attribute: false }) public sleepDevice: SleepDeviceConfig | null = null;
   @property({ type: Boolean }) public nightAllowRapidRecovery = true;
   @property({ type: Number }) public rapidRecoveryDeltaC = 2.0;
   @property({ type: Boolean }) public rapidRecoveryEnabled = true;
@@ -418,6 +427,62 @@ export class RsComfortSection extends LitElement {
               @input=${(e: Event) => this._updateQuiet("end", (e.target as HTMLInputElement).value)}
             ></ha-textfield>
           </div>
+          <div class="field-row">
+            <div class="native-select-field">
+              <label>${localize("sleep.config.trigger_mode", lang)}</label>
+              <select
+                class="native-select"
+                .value=${this.sleepTriggerMode}
+                @change=${(e: Event) =>
+                  this._emit("sleep_trigger_mode", (e.target as HTMLSelectElement).value)}
+              >
+                <option value="clock">${localize("sleep.trigger.clock", lang)}</option>
+                <option value="entity">${localize("sleep.trigger.entity", lang)}</option>
+                <option value="either">${localize("sleep.trigger.either", lang)}</option>
+              </select>
+            </div>
+            ${this._numberField(
+              "sleep.config.prewarm_min",
+              "sleep_prewarm_minutes",
+              this.sleepPrewarmMinutes,
+              0,
+              120,
+              5,
+            )}
+          </div>
+          <div class="field-row">
+            ${this._numberField(
+              "sleep.config.prewake_min",
+              "sleep_prewake_minutes",
+              this.sleepPrewakeMinutes,
+              0,
+              120,
+              5,
+            )}
+            <ha-textfield
+              type="number"
+              min="0"
+              max="4"
+              step="0.5"
+              .label=${localize("sleep.config.coupled_offset", lang, { unit: tempUnit(this.hass) })}
+              .value=${String(this.sleepCoupledOffsetC)}
+              @input=${(e: Event) => this._onNumberInput("sleep_coupled_offset_c", e)}
+            ></ha-textfield>
+          </div>
+          ${
+            this.sleepTriggerMode !== "clock"
+              ? html`<div style="margin-top: 10px;">
+                  <ha-entity-picker
+                    .hass=${this.hass}
+                    .includeDomains=${["switch", "binary_sensor", "input_boolean"]}
+                    .value=${this.sleepTriggerEntity}
+                    .label=${localize("sleep.config.trigger_entity", lang)}
+                    @value-changed=${(e: CustomEvent) =>
+                      this._emit("sleep_trigger_entity", e.detail?.value || "")}
+                  ></ha-entity-picker>
+                </div>`
+              : nothing
+          }
         </div>
 
         <div class="config-card">
@@ -508,6 +573,11 @@ export class RsComfortSection extends LitElement {
       </details>
 
       <details class="settings-group">
+        <summary>${localize("sleep.config.device_title", lang)}</summary>
+        <div class="settings-group-body">${this._renderSleepDeviceEdit(lang)}</div>
+      </details>
+
+      <details class="settings-group">
         <summary>${localize("comfort.night_controls", lang)}</summary>
         <div class="settings-group-body">
           <div class="list">
@@ -562,7 +632,7 @@ export class RsComfortSection extends LitElement {
       </div>
       <ha-entity-picker
         .hass=${this.hass}
-        .includeDomains=${["light", "switch", "select", "input_select", "number", "input_number"]}
+        .includeDomains=${["light", "switch", "select", "input_select", "number", "input_number", "text"]}
         .value=${item.entity_id ?? ""}
         .label=${localize("comfort.night_control_entity", lang)}
         @value-changed=${(e: CustomEvent) =>
@@ -796,6 +866,82 @@ export class RsComfortSection extends LitElement {
         composed: true,
       }),
     );
+  }
+
+  private _renderSleepDeviceEdit(lang: string) {
+    const dev = this.sleepDevice;
+    if (!dev) {
+      return html`
+        <button type="button" class="add-btn" @click=${this._detectSleepDevice}>
+          + ${localize("sleep.config.detect_btn", lang)}
+        </button>
+      `;
+    }
+
+    const gearSelect = (
+      labelKey: TranslationKey,
+      field: keyof SleepDeviceConfig,
+      value: number,
+    ) => html`
+      <div class="native-select-field">
+        <label>${localize(labelKey, lang)}</label>
+        <select
+          class="native-select"
+          .value=${String(value)}
+          @change=${(e: Event) =>
+            this._updateSleepDevice({ [field]: Number((e.target as HTMLSelectElement).value) })}
+        >
+          ${[0, 1, 2, 3, 4, 5, 6].map(
+            (g) => html`
+              <option value=${String(g)}>
+                ${g === 0 ? localize("sleep.gear_off", lang) : localize("sleep.gear_n", lang, { n: g })}
+              </option>
+            `,
+          )}
+        </select>
+      </div>
+    `;
+
+    return html`
+      <div class="list-item">
+        <div class="item-head">
+          <div class="item-title">${dev.name || localize("sleep.config.device_title", lang)}</div>
+          <button type="button" class="remove-btn" @click=${() => this._emit("sleep_device", null)}>
+            ${localize("sleep.config.unlink_btn", lang)}
+          </button>
+        </div>
+        <div class="field-row">
+          ${gearSelect("sleep.config.prewarm_a", "prewarm_gear_a", dev.prewarm_gear_a ?? 4)}
+          ${gearSelect("sleep.config.prewarm_b", "prewarm_gear_b", dev.prewarm_gear_b ?? 4)}
+        </div>
+        <div class="field-row">
+          ${gearSelect("sleep.config.sleep_a", "sleep_gear_a", dev.sleep_gear_a ?? 2)}
+          ${gearSelect("sleep.config.sleep_b", "sleep_gear_b", dev.sleep_gear_b ?? 2)}
+        </div>
+        <div class="toggle-row" style="margin-top: 10px;">
+          <div class="toggle-title">${localize("sleep.config.sync_curve", lang)}</div>
+          <ha-switch
+            .checked=${dev.sync_native_curve !== false}
+            @change=${(e: Event) =>
+              this._updateSleepDevice({
+                sync_native_curve: (e.target as HTMLInputElement).checked,
+              })}
+          ></ha-switch>
+        </div>
+      </div>
+    `;
+  }
+
+  private _detectSleepDevice = () => {
+    const detected = discoverSleepDeviceInArea(this.area.area_id, this.hass);
+    if (detected) {
+      this._emit("sleep_device", detected);
+    }
+  };
+
+  private _updateSleepDevice(patch: Partial<SleepDeviceConfig>) {
+    if (!this.sleepDevice) return;
+    this._emit("sleep_device", { ...this.sleepDevice, ...patch });
   }
 
   private _areaName(areaId: string): string {

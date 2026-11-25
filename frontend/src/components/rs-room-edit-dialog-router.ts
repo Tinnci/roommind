@@ -212,6 +212,7 @@ export class RsRoomEditDialogRouter extends LitElement {
       case "schedule":
         return html`<rs-schedule-settings
           .hass=${this.hass}
+          .roomConfig=${this.config}
           .schedules=${draft.schedules}
           .scheduleSelectorEntity=${draft.scheduleSelectorEntity}
           .activeScheduleIndex=${live?.active_schedule_index ?? -1}
@@ -291,6 +292,12 @@ export class RsRoomEditDialogRouter extends LitElement {
           .nightModeEnabled=${draft.nightModeEnabled}
           .maxFanLevelNight=${draft.maxFanLevelNight}
           .sleepTempRampC=${draft.sleepTempRampC}
+          .sleepTriggerMode=${draft.sleepTriggerMode}
+          .sleepTriggerEntity=${draft.sleepTriggerEntity}
+          .sleepPrewarmMinutes=${draft.sleepPrewarmMinutes}
+          .sleepPrewakeMinutes=${draft.sleepPrewakeMinutes}
+          .sleepCoupledOffsetC=${draft.sleepCoupledOffsetC}
+          .sleepDevice=${draft.sleepDevice}
           .nightAllowRapidRecovery=${draft.nightAllowRapidRecovery}
           .rapidRecoveryDeltaC=${draft.rapidRecoveryDeltaC}
           .rapidRecoveryEnabled=${draft.rapidRecoveryEnabled}

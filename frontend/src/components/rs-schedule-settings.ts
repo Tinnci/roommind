@@ -3,10 +3,13 @@ import { customElement, property } from "lit/decorators.js";
 import type { ScheduleEntry, ClimateMode } from "../types";
 import { localize } from "../utils/localize";
 import { formatTemp, tempUnit } from "../utils/temperature";
+import type { RoomConfig } from "../types";
 import { RsScheduleBase } from "./shared/rs-schedule-base";
+import "./rs-schedule-timeline";
 
 @customElement("rs-schedule-settings")
 export class RsScheduleSettings extends RsScheduleBase {
+  @property({ attribute: false }) public roomConfig: RoomConfig | null = null;
   @property({ attribute: false }) public schedules: ScheduleEntry[] = [];
   /** Alias: parent passes .scheduleSelectorEntity, base uses selectorEntity. */
   @property({ type: String }) public set scheduleSelectorEntity(v: string) {
@@ -101,8 +104,31 @@ export class RsScheduleSettings extends RsScheduleBase {
     const l = this.hass.language;
     const count = this.schedules.length;
     const usedIds = new Set(this.schedules.map((s) => s.entity_id));
+    const previewConfig: RoomConfig | null = this.roomConfig
+      ? {
+          ...this.roomConfig,
+          schedules: this.schedules,
+          schedule_selector_entity: this.scheduleSelectorEntity,
+          comfort_heat: this.comfortHeat,
+          comfort_cool: this.comfortCool,
+          eco_heat: this.ecoHeat,
+          eco_cool: this.ecoCool,
+          climate_mode: this.climateMode,
+        }
+      : null;
 
     return html`
+      ${
+        previewConfig
+          ? html`<rs-schedule-timeline
+              style="margin-bottom: 12px;"
+              .hass=${this.hass}
+              .config=${previewConfig}
+              .compact=${true}
+              .language=${l}
+            ></rs-schedule-timeline>`
+          : nothing
+      }
       ${this._renderScheduleList()}
       ${this._renderAddRow(
         localize("schedule.select_schedule", l),

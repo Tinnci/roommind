@@ -117,6 +117,7 @@ from .utils.schedule_utils import (
     resolve_schedule_index,
 )
 from .utils.sensor_utils import read_sensor_value, sensor_observation_age, sensor_observation_timestamp
+from .utils.sleep_device import inspect_sleep_device_state
 from .utils.target_resolution import ControlTargetPlan, prepare_control_target_plan
 from .utils.temp_utils import celsius_delta_to_ha, ha_temp_to_celsius, ha_temp_unit_str
 
@@ -325,6 +326,27 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_valid_temps: dict[str, tuple[float, float]] = {}  # {area_id: (celsius, monotonic_ts)}
         # Per-entity cache of schedule blocks; fallback when schedule.get_schedule fails (#308)
         self._schedule_blocks_cache: dict[str, dict] = {}
+        # Tonight sleep phase overrides: {area_id: (action, expires_ts)}
+        self._tonight_sleep_overrides: dict[str, tuple[str, float]] = {}
+
+    def set_tonight_sleep_override(self, area_id: str, action: str, ttl_seconds: float = 12 * 3600) -> None:
+        """Set a temporary sleep phase override for one room until wake/expiry."""
+        self._tonight_sleep_overrides[area_id] = (action, time.time() + ttl_seconds)
+
+    def get_tonight_sleep_override(self, area_id: str) -> str | None:
+        """Return active tonight sleep override action if unexpired."""
+        entry = self._tonight_sleep_overrides.get(area_id)
+        if entry is None:
+            return None
+        action, expires_at = entry
+        if time.time() >= expires_at:
+            self._tonight_sleep_overrides.pop(area_id, None)
+            return None
+        return action
+
+    def clear_tonight_sleep_override(self, area_id: str) -> None:
+        """Clear any temporary sleep phase override for one room."""
+        self._tonight_sleep_overrides.pop(area_id, None)
 
     @callback
     def _handle_tcl_command_result(self, event: Any) -> None:
@@ -1402,11 +1424,17 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             mold_prevention_temp_delta,
         ) = await self._evaluate_mold_risk(area_id, current_temp, current_humidity, settings)
 
+        sleep_device_status = inspect_sleep_device_state(self.hass, room.get("sleep_device"))
+        sleep_device_heating = bool(sleep_device_status and sleep_device_status.get("heating_active"))
+        tonight_override = self.get_tonight_sleep_override(area_id)
+
         target_plan = await self.async_prepare_control_target_plan(
             room,
             settings,
             mold_prevention_active=mold_prevention_active_room,
             mold_prevention_delta=mold_prevention_temp_delta,
+            tonight_override=tonight_override,
+            sleep_device_heating=sleep_device_heating,
         )
         self._schedule_expired_target_state_cleanup(area_id, target_plan)
         targets = target_plan.targets
@@ -1779,6 +1807,7 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             mode=mode,
             window_open=window_open,
             q_residual=q_residual,
+            pause_learning=bool(sleep_device_status and sleep_device_status.get("mite_removal_active")),
         )
 
         room_state = self._build_room_state_dict(
@@ -1824,6 +1853,7 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         room_state["requested_power"] = round(power_fraction * 100) if mode != MODE_IDLE else 0
         room_state["dispatch_status"] = dispatch_status
         room_state["device_observations"] = self._device_observation_status(observation)
+        room_state["sleep_device_status"] = sleep_device_status
         return room_state
 
     async def _observe_and_train(
@@ -1837,6 +1867,7 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         mode: str,
         window_open: bool,
         q_residual: float,
+        pause_learning: bool = False,
     ) -> tuple[str, float]:
         """Observe device state, train EKF, compute display mode.
 
@@ -1859,7 +1890,7 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # pegs at the upper bound (see #301). Skip the update and flush any
         # accumulated batch when no real outdoor source is available.
         learning_disabled = settings.get("learning_disabled_rooms", [])
-        learning_active = area_id not in learning_disabled
+        learning_active = (area_id not in learning_disabled) and not pause_learning
         if learning_active and current_temp_raw is not None and self.outdoor_temp_effective is not None:
             can_heat, can_cool = get_can_heat_cool(room, acs_can_heat=observation.climate_devices.acs_can_heat)
             training_observations = (
@@ -2008,6 +2039,11 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "hvac_output_status": hvac_output_status,
             "night_mode": {
                 "active": target_plan.night_active,
+                "phase": target_plan.sleep_phase,
+                "trigger_source": target_plan.sleep_trigger_source,
+                "effective_ramp_c": target_plan.effective_sleep_ramp_c,
+                "coupled_offset_active": target_plan.coupled_offset_active,
+                "tonight_override": self.get_tonight_sleep_override(area_id),
                 "quiet_hours": room.get("quiet_hours"),
                 "sleep_temp_ramp_c": room.get("sleep_temp_ramp_c", 0.0),
                 "max_fan_level": room.get("max_fan_level_night"),
@@ -2336,6 +2372,8 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         *,
         mold_prevention_active: bool = False,
         mold_prevention_delta: float = 0.0,
+        tonight_override: str | None = None,
+        sleep_device_heating: bool = False,
     ) -> ControlTargetPlan:
         """Prepare targets while keeping the schedule cache coordinator-owned."""
         return await prepare_control_target_plan(
@@ -2345,6 +2383,8 @@ class RoomMindCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             schedule_blocks_cache=self._schedule_blocks_cache,
             mold_prevention_active=mold_prevention_active,
             mold_prevention_delta=mold_prevention_delta,
+            tonight_override=tonight_override,
+            sleep_device_heating=sleep_device_heating,
         )
 
     def analytics_runtime_snapshot(

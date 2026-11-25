@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from homeassistant.util import dt as dt_util
 
@@ -45,6 +46,102 @@ def is_quiet_hours_now(quiet_hours: dict[str, Any] | None, now: datetime | None 
     if start < end:
         return start <= minute_now < end
     return minute_now >= start or minute_now < end
+
+
+@dataclass(frozen=True, slots=True)
+class SleepPhaseStatus:
+    """Resolved sleep phase, night-mode active flag, and active trigger source."""
+
+    phase: Literal["day", "pre_warm", "sleep", "pre_wake"]
+    night_active: bool
+    trigger_source: Literal["none", "clock", "entity", "override"]
+
+
+def _in_minute_window(minute_now: int, start_min: int, end_min: int) -> bool:
+    if start_min == end_min:
+        return False
+    if start_min < end_min:
+        return start_min <= minute_now < end_min
+    return minute_now >= start_min or minute_now < end_min
+
+
+def _resolve_clock_phase(
+    quiet_hours: dict[str, Any] | None,
+    *,
+    prewarm_minutes: int = 30,
+    prewake_minutes: int = 30,
+    now: datetime | None = None,
+) -> Literal["day", "pre_warm", "sleep", "pre_wake"]:
+    if not quiet_hours:
+        return "day"
+    start = parse_time_minutes(quiet_hours.get("start"))
+    end = parse_time_minutes(quiet_hours.get("end"))
+    if start is None or end is None or start == end:
+        return "day"
+
+    current = now or dt_util.now()
+    minute_now = current.hour * 60 + current.minute
+
+    if _in_minute_window(minute_now, start, end):
+        # Measure distance before wake (`end`), supporting midnight wrap.
+        prewake = max(0, min(120, int(prewake_minutes)))
+        minutes_to_end = (end - minute_now) % 1440
+        if prewake > 0 and 0 < minutes_to_end <= prewake:
+            return "pre_wake"
+        return "sleep"
+
+    prewarm = max(0, min(120, int(prewarm_minutes)))
+    if prewarm > 0:
+        prewarm_start = (start - prewarm) % 1440
+        if _in_minute_window(minute_now, prewarm_start, start):
+            return "pre_warm"
+    return "day"
+
+
+def resolve_sleep_phase(
+    config: dict[str, Any],
+    *,
+    now: datetime | None = None,
+    trigger_entity_on: bool = False,
+    tonight_override: str | None = None,
+) -> SleepPhaseStatus:
+    """Resolve current sleep phase across manual tonight override, clock, and trigger entity."""
+    if tonight_override == "skip":
+        return SleepPhaseStatus(phase="day", night_active=False, trigger_source="override")
+    if tonight_override == "pre_warm":
+        return SleepPhaseStatus(phase="pre_warm", night_active=False, trigger_source="override")
+    if tonight_override == "sleep":
+        return SleepPhaseStatus(phase="sleep", night_active=True, trigger_source="override")
+
+    if not bool(config.get("night_mode_enabled", True)):
+        return SleepPhaseStatus(phase="day", night_active=False, trigger_source="none")
+
+    mode = str(config.get("sleep_trigger_mode") or "clock")
+    clock_allowed = mode in ("clock", "either")
+    entity_allowed = mode in ("entity", "either")
+
+    clock_phase: Literal["day", "pre_warm", "sleep", "pre_wake"] = "day"
+    if clock_allowed:
+        clock_phase = _resolve_clock_phase(
+            config.get("quiet_hours"),
+            prewarm_minutes=int(config.get("sleep_prewarm_minutes") or 0),
+            prewake_minutes=int(config.get("sleep_prewake_minutes") or 0),
+            now=now,
+        )
+
+    if entity_allowed and trigger_entity_on:
+        if clock_phase == "pre_wake":
+            return SleepPhaseStatus(phase="pre_wake", night_active=True, trigger_source="entity")
+        return SleepPhaseStatus(phase="sleep", night_active=True, trigger_source="entity")
+
+    if clock_phase == "pre_warm":
+        return SleepPhaseStatus(phase="pre_warm", night_active=False, trigger_source="clock")
+    if clock_phase == "sleep":
+        return SleepPhaseStatus(phase="sleep", night_active=True, trigger_source="clock")
+    if clock_phase == "pre_wake":
+        return SleepPhaseStatus(phase="pre_wake", night_active=True, trigger_source="clock")
+
+    return SleepPhaseStatus(phase="day", night_active=False, trigger_source="none")
 
 
 def is_night_mode_active(config: dict[str, Any], now: datetime | None = None) -> bool:

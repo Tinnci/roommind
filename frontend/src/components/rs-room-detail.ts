@@ -11,10 +11,13 @@ import type {
   AirflowDeviceConfig,
   CompressorGroup,
   AreaSuggestion,
+  SleepDeviceConfig,
 } from "../types";
 import "./rs-hero-status";
 import "./rs-thermostat-fleet";
 import "./rs-temperature-control-panel";
+import "./rs-sleep-bar";
+import "./rs-schedule-timeline";
 import "./rs-control-details";
 import "./rs-room-configuration-hub";
 import "./rs-room-edit-dialog-router";
@@ -632,6 +635,27 @@ export class RsRoomDetail extends LitElement {
         ${!this._isOutdoor ? this._renderTemperatureControlPanel() : nothing}
         ${
           !this._isOutdoor
+            ? html`<rs-sleep-bar
+                .hass=${this.hass}
+                .area=${this.area}
+                .config=${this.config}
+                .language=${this.hass.language}
+                @sleep-device-linked=${this._onSleepDeviceLinked}
+              ></rs-sleep-bar>`
+            : nothing
+        }
+        ${
+          !this._isOutdoor
+            ? html`<rs-schedule-timeline
+                .hass=${this.hass}
+                .config=${this.config}
+                .language=${this.hass.language}
+                @configuration-edit=${this._onConfigurationEdit}
+              ></rs-schedule-timeline>`
+            : nothing
+        }
+        ${
+          !this._isOutdoor
             ? html`<rs-control-details
                 .hass=${this.hass}
                 .config=${this.config}
@@ -820,7 +844,35 @@ export class RsRoomDetail extends LitElement {
       this._patchDraft({ rapidRecoveryEnabled: value as boolean });
     else if (key === "max_fan_level_night") this._maxFanLevelNight = value as number;
     else if (key === "sleep_temp_ramp_c") this._sleepTempRampC = value as number;
+    else if (key === "sleep_trigger_mode")
+      this._patchDraft({ sleepTriggerMode: value as RoomConfigDraft["sleepTriggerMode"] });
+    else if (key === "sleep_trigger_entity")
+      this._patchDraft({ sleepTriggerEntity: value as string });
+    else if (key === "sleep_prewarm_minutes")
+      this._patchDraft({ sleepPrewarmMinutes: value as number });
+    else if (key === "sleep_prewake_minutes")
+      this._patchDraft({ sleepPrewakeMinutes: value as number });
+    else if (key === "sleep_coupled_offset_c")
+      this._patchDraft({ sleepCoupledOffsetC: value as number });
+    else if (key === "sleep_device")
+      this._patchDraft({ sleepDevice: value as SleepDeviceConfig | null });
     else if (key === "adjacent_rooms") this._adjacentRooms = value as RoomConfig["adjacent_rooms"];
+    this._autoSave();
+  }
+
+  private _onSleepDeviceLinked(e: CustomEvent<{ sleepDevice: SleepDeviceConfig }>) {
+    this._patchDraft({
+      sleepDevice: e.detail.sleepDevice,
+      quietHours: this._quietHours ?? { start: "22:00", end: "07:00" },
+      sleepCoupledOffsetC:
+        this._draft.sleepCoupledOffsetC > 0 ? this._draft.sleepCoupledOffsetC : 1.5,
+      sleepTriggerMode:
+        e.detail.sleepDevice.sleep_switch_entity && this._draft.sleepTriggerMode === "clock"
+          ? "either"
+          : this._draft.sleepTriggerMode,
+      sleepTriggerEntity:
+        this._draft.sleepTriggerEntity || e.detail.sleepDevice.sleep_switch_entity || "",
+    });
     this._autoSave();
   }
 

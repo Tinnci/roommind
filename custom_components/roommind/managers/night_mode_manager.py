@@ -241,4 +241,7 @@ class NightModeManager:
             ):
                 raise ValueError("invalid_number")
             return "set_value", {"value": number}, number
+        if domain == "text":
+            text_value = str(target)
+            return "set_value", {"value": text_value}, text_value
         raise ValueError("unsupported_domain")

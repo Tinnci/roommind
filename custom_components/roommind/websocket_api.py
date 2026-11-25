@@ -37,6 +37,13 @@ from .settings_config import (
     validate_settings_changes,
 )
 from .utils.area_discovery import suggest_area_entities
+from .utils.schedule_utils import read_schedule_blocks
+from .utils.sleep_device import (
+    format_ab_gears,
+    gear_to_heat_level_option,
+    inspect_sleep_device_state,
+    update_qushui_sleep_curve,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -107,6 +114,12 @@ def _validate_no_own_entities(
                 eid = item.get(entity_field, "")
                 if eid and is_own(eid):
                     return f"Cannot assign RoomMind's own entity '{eid}' as a physical input or actuator"
+
+    sleep_dev = config.get("sleep_device")
+    if isinstance(sleep_dev, dict):
+        for key, val in sleep_dev.items():
+            if key.endswith("_entity") and isinstance(val, str) and val and is_own(val):
+                return f"Cannot assign RoomMind's own entity '{val}' as a physical input or actuator"
 
     return None
 
@@ -223,6 +236,7 @@ async def websocket_list_rooms(
                 "hvac_output_status": live.get("hvac_output_status"),
                 "night_mode": live.get("night_mode", {"active": False}),
                 "night_control_status": live.get("night_control_status", []),
+                "sleep_device_status": live.get("sleep_device_status"),
                 "rapid_recovery_active": live.get("rapid_recovery_active", False),
                 "effective_control_target": live.get("effective_control_target"),
                 "coupling_status": live.get("coupling_status", []),
@@ -816,6 +830,225 @@ async def websocket_area_suggest(
 # ---------------------------------------------------------------------------
 
 
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "roommind/schedules/blocks",
+        vol.Required("area_id"): str,
+    }
+)
+@websocket_api.async_response
+async def websocket_get_schedule_blocks(
+    hass: HomeAssistant,
+    connection: ActiveConnection,
+    msg: dict,
+) -> None:
+    """Return resolved weekly schedule blocks for every schedule configured on a room."""
+    store = hass.data[DOMAIN]["store"]
+    area_id = msg["area_id"]
+    room = store.get_room(area_id)
+    if room is None:
+        connection.send_error(msg["id"], "not_found", f"Room '{area_id}' not found")
+        return
+
+    coordinator = _get_coordinator(hass)
+    cache = getattr(coordinator, "_schedule_blocks_cache", None) if coordinator else None
+    blocks_by_entity: dict[str, dict] = {}
+    for entry in room.get("schedules", []) or []:
+        eid = entry.get("entity_id", "") if isinstance(entry, dict) else ""
+        if not eid:
+            continue
+        blocks = await read_schedule_blocks(hass, eid, cache=cache)
+        if blocks is not None:
+            normalized_days: dict[str, list[dict]] = {}
+            for day_key, items in blocks.items():
+                if not isinstance(items, list):
+                    continue
+                norm_items = []
+                for blk in items:
+                    if not isinstance(blk, dict):
+                        continue
+                    f_raw = blk.get("from", "00:00:00")
+                    t_raw = blk.get("to", "00:00:00")
+                    norm_items.append(
+                        {
+                            "from": f_raw.strftime("%H:%M:%S") if hasattr(f_raw, "strftime") else str(f_raw),
+                            "to": t_raw.strftime("%H:%M:%S") if hasattr(t_raw, "strftime") else str(t_raw),
+                            "data": dict(blk.get("data") or {}),
+                        }
+                    )
+                normalized_days[str(day_key)] = norm_items
+            blocks_by_entity[eid] = normalized_days
+
+    live = (coordinator.rooms.get(area_id, {}) if coordinator else {}) or {}
+    connection.send_result(
+        msg["id"],
+        {
+            "area_id": area_id,
+            "blocks_by_entity": blocks_by_entity,
+            "active_index": live.get("active_schedule_index", -1),
+            "selector_entity": room.get("schedule_selector_entity", ""),
+        },
+    )
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "roommind/sleep/action",
+        vol.Required("area_id"): str,
+        vol.Required("action"): vol.In(
+            [
+                "pre_warm",
+                "sleep_now",
+                "skip_tonight",
+                "clear",
+                "set_gears",
+                "toggle_power",
+                "toggle_sleep_switch",
+                "sync_curve",
+            ]
+        ),
+        vol.Optional("gear_a"): vol.All(vol.Coerce(int), vol.Range(min=0, max=6)),
+        vol.Optional("gear_b"): vol.All(vol.Coerce(int), vol.Range(min=0, max=6)),
+        vol.Optional("countdown_min"): vol.All(vol.Coerce(int), vol.Range(min=0, max=720)),
+        vol.Optional("zone_a_enabled"): bool,
+        vol.Optional("zone_b_enabled"): bool,
+    }
+)
+@websocket_api.async_response
+async def websocket_sleep_action(
+    hass: HomeAssistant,
+    connection: ActiveConnection,
+    msg: dict,
+) -> None:
+    """Apply tonight sleep phase overrides or heated-blanket device commands."""
+    store = hass.data[DOMAIN]["store"]
+    area_id = msg["area_id"]
+    room = store.get_room(area_id)
+    if room is None:
+        connection.send_error(msg["id"], "not_found", f"Room '{area_id}' not found")
+        return
+
+    action = msg["action"]
+    coordinator = _get_coordinator(hass)
+    sleep_dev = room.get("sleep_device") if isinstance(room.get("sleep_device"), dict) else None
+    status = inspect_sleep_device_state(hass, sleep_dev)
+    ctx = make_roommind_context()
+
+    async def _call(domain: str, service: str, data: dict) -> None:
+        res = hass.services.async_call(domain, service, data, blocking=True, context=ctx)
+        if inspect.isawaitable(res):
+            await res
+
+    hardware_actions = {"pre_warm", "sleep_now", "set_gears", "toggle_power", "toggle_sleep_switch", "sync_curve"}
+    if action in hardware_actions and status and not status.get("remote_enabled", True):
+        if action in {"set_gears", "toggle_power", "toggle_sleep_switch", "sync_curve"}:
+            connection.send_result(msg["id"], {"ok": False, "reason": "remote_disabled"})
+            return
+
+    async def _apply_gears(gear_a: int, gear_b: int, *, turn_on: bool = True) -> None:
+        if not sleep_dev:
+            return
+        if sleep_dev.get("power_entity"):
+            if turn_on and (gear_a > 0 or gear_b > 0):
+                await _call("switch", "turn_on", {"entity_id": sleep_dev["power_entity"]})
+            elif gear_a == 0 and gear_b == 0 and not turn_on:
+                await _call("switch", "turn_off", {"entity_id": sleep_dev["power_entity"]})
+        if sleep_dev.get("gears_entity"):
+            await _call(
+                "text",
+                "set_value",
+                {"entity_id": sleep_dev["gears_entity"], "value": format_ab_gears(gear_a, gear_b)},
+            )
+        elif sleep_dev.get("heat_level_entity"):
+            await _call(
+                "select",
+                "select_option",
+                {"entity_id": sleep_dev["heat_level_entity"], "option": gear_to_heat_level_option(max(gear_a, gear_b))},
+            )
+
+    if action == "pre_warm":
+        if coordinator:
+            coordinator.set_tonight_sleep_override(area_id, "pre_warm")
+        if sleep_dev and (not status or status.get("remote_enabled", True)):
+            ga = int(sleep_dev.get("prewarm_gear_a", 4))
+            gb = int(sleep_dev.get("prewarm_gear_b", 4))
+            await _apply_gears(ga, gb, turn_on=True)
+            cd = int(msg.get("countdown_min", 60))
+            for cd_key in ("zone_a_countdown_entity", "zone_b_countdown_entity"):
+                if sleep_dev.get(cd_key):
+                    await _call("number", "set_value", {"entity_id": sleep_dev[cd_key], "value": cd})
+    elif action == "sleep_now":
+        if coordinator:
+            coordinator.set_tonight_sleep_override(area_id, "sleep")
+        if sleep_dev and (not status or status.get("remote_enabled", True)):
+            ga = int(sleep_dev.get("sleep_gear_a", 2))
+            gb = int(sleep_dev.get("sleep_gear_b", 2))
+            await _apply_gears(ga, gb, turn_on=True)
+            if sleep_dev.get("sleep_switch_entity"):
+                await _call("switch", "turn_on", {"entity_id": sleep_dev["sleep_switch_entity"]})
+    elif action == "skip_tonight":
+        if coordinator:
+            coordinator.set_tonight_sleep_override(area_id, "skip")
+        if sleep_dev and status and status.get("remote_enabled", True):
+            if sleep_dev.get("sleep_switch_entity") and status.get("sleep_switch_on"):
+                await _call("switch", "turn_off", {"entity_id": sleep_dev["sleep_switch_entity"]})
+            if sleep_dev.get("power_entity") and status.get("power_on"):
+                await _call("switch", "turn_off", {"entity_id": sleep_dev["power_entity"]})
+    elif action == "clear":
+        if coordinator:
+            coordinator.clear_tonight_sleep_override(area_id)
+    elif action == "set_gears":
+        if sleep_dev:
+            cur_a = status["gear_a"] if status and status.get("gear_a") is not None else 0
+            cur_b = status["gear_b"] if status and status.get("gear_b") is not None else 0
+            ga = int(msg["gear_a"]) if "gear_a" in msg else cur_a
+            gb = int(msg["gear_b"]) if "gear_b" in msg else cur_b
+            await _apply_gears(ga, gb, turn_on=(ga > 0 or gb > 0))
+            if "countdown_min" in msg:
+                cd = int(msg["countdown_min"])
+                for cd_key in ("zone_a_countdown_entity", "zone_b_countdown_entity"):
+                    if sleep_dev.get(cd_key):
+                        await _call("number", "set_value", {"entity_id": sleep_dev[cd_key], "value": cd})
+    elif action == "toggle_power":
+        if sleep_dev and sleep_dev.get("power_entity"):
+            is_on = bool(status and status.get("power_on"))
+            await _call(
+                "switch",
+                "turn_off" if is_on else "turn_on",
+                {"entity_id": sleep_dev["power_entity"]},
+            )
+    elif action == "toggle_sleep_switch":
+        if sleep_dev and sleep_dev.get("sleep_switch_entity"):
+            is_on = bool(status and status.get("sleep_switch_on"))
+            await _call(
+                "switch",
+                "turn_off" if is_on else "turn_on",
+                {"entity_id": sleep_dev["sleep_switch_entity"]},
+            )
+    elif action == "sync_curve":
+        if sleep_dev:
+            qh = room.get("quiet_hours") or {"start": "23:00", "end": "07:00"}
+            start_str = str(qh.get("start") or "23:00")
+            end_str = str(qh.get("end") or "07:00")
+            for key, en_key in (
+                ("zone_a_sleep_entity", "zone_a_enabled"),
+                ("zone_b_sleep_entity", "zone_b_enabled"),
+            ):
+                eid = sleep_dev.get(key)
+                if not eid:
+                    continue
+                st = hass.states.get(eid)
+                raw = str(st.state) if st else None
+                en_val = msg[en_key] if en_key in msg else None
+                next_curve = update_qushui_sleep_curve(raw, enabled=en_val, start=start_str, end=end_str)
+                await _call("text", "set_value", {"entity_id": eid, "value": next_curve})
+
+    if coordinator:
+        await coordinator.async_request_refresh()
+
+    connection.send_result(msg["id"], {"ok": True})
+
+
 @callback
 def async_register_websocket_commands(hass: HomeAssistant) -> None:
     """Register all RoomMind WebSocket commands."""
@@ -833,3 +1066,5 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_boost_learning)
     websocket_api.async_register_command(hass, websocket_get_diagnostics)
     websocket_api.async_register_command(hass, websocket_area_suggest)
+    websocket_api.async_register_command(hass, websocket_get_schedule_blocks)
+    websocket_api.async_register_command(hass, websocket_sleep_action)

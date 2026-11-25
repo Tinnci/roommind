@@ -8,6 +8,7 @@ import type {
   DeviceType,
   RoomConfig,
   ScheduleEntry,
+  SleepDeviceConfig,
 } from "../types";
 
 export interface RoomConfigDraft {
@@ -24,6 +25,12 @@ export interface RoomConfigDraft {
   rapidRecoveryEnabled: boolean;
   maxFanLevelNight: number;
   sleepTempRampC: number;
+  sleepTriggerMode: "clock" | "entity" | "either";
+  sleepTriggerEntity: string;
+  sleepPrewarmMinutes: number;
+  sleepPrewakeMinutes: number;
+  sleepCoupledOffsetC: number;
+  sleepDevice: SleepDeviceConfig | null;
   adjacentRooms: RoomConfig["adjacent_rooms"];
   selectedTempSensor: string;
   selectedTempSensors: Set<string>;
@@ -83,6 +90,12 @@ export function createEmptyRoomConfigDraft(): RoomConfigDraft {
     rapidRecoveryEnabled: true,
     maxFanLevelNight: 0.5,
     sleepTempRampC: 0.0,
+    sleepTriggerMode: "clock",
+    sleepTriggerEntity: "",
+    sleepPrewarmMinutes: 30,
+    sleepPrewakeMinutes: 30,
+    sleepCoupledOffsetC: 0.0,
+    sleepDevice: null,
     adjacentRooms: [],
     selectedTempSensor: "",
     selectedTempSensors: new Set(),
@@ -159,6 +172,12 @@ export function createRoomConfigDraft(config: RoomConfig | null): RoomConfigDraf
   draft.rapidRecoveryEnabled = config.rapid_recovery_enabled ?? true;
   draft.maxFanLevelNight = config.max_fan_level_night ?? 0.5;
   draft.sleepTempRampC = config.sleep_temp_ramp_c ?? 0.0;
+  draft.sleepTriggerMode = config.sleep_trigger_mode ?? "clock";
+  draft.sleepTriggerEntity = config.sleep_trigger_entity ?? "";
+  draft.sleepPrewarmMinutes = config.sleep_prewarm_minutes ?? 30;
+  draft.sleepPrewakeMinutes = config.sleep_prewake_minutes ?? 30;
+  draft.sleepCoupledOffsetC = config.sleep_coupled_offset_c ?? 0.0;
+  draft.sleepDevice = config.sleep_device ? { ...config.sleep_device } : null;
   draft.adjacentRooms = [...(config.adjacent_rooms ?? [])];
   draft.selectedTempSensor = config.temperature_sensor;
   draft.selectedTempSensors = new Set(
@@ -508,6 +527,12 @@ export function buildRoomSavePayload(
     rapid_recovery_enabled: draft.rapidRecoveryEnabled,
     max_fan_level_night: draft.maxFanLevelNight,
     sleep_temp_ramp_c: draft.sleepTempRampC,
+    sleep_trigger_mode: draft.sleepTriggerMode,
+    sleep_trigger_entity: draft.sleepTriggerEntity,
+    sleep_prewarm_minutes: draft.sleepPrewarmMinutes,
+    sleep_prewake_minutes: draft.sleepPrewakeMinutes,
+    sleep_coupled_offset_c: draft.sleepCoupledOffsetC,
+    sleep_device: draft.sleepDevice,
     adjacent_rooms: draft.adjacentRooms ?? [],
     temperature_sensor: draft.selectedTempSensor,
     temperature_sensors: temperatureSensorIdsForSave(draft),

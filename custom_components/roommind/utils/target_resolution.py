@@ -25,7 +25,7 @@ from ..const import (
 )
 from .night_utils import (
     apply_sleep_ramp_to_targets,
-    is_night_mode_active,
+    resolve_sleep_phase,
     wrap_target_resolver_for_sleep_ramp,
 )
 from .presence_utils import is_presence_away
@@ -59,8 +59,21 @@ class ControlTargetPlan:
     presence_away: bool
     night_active: bool
     resolved_at: float
+    sleep_phase: str = "day"
+    sleep_trigger_source: str = "none"
+    effective_sleep_ramp_c: float = 0.0
+    coupled_offset_active: bool = False
     clear_expired_override: bool = False
     clear_expired_vacation: bool = False
+
+
+def _is_sleep_trigger_active(hass: HomeAssistant, entity_id: str | None) -> bool:
+    if not entity_id:
+        return False
+    st = hass.states.get(entity_id)
+    if st is None:
+        return False
+    return str(st.state).strip().lower() in {"on", "home", "sleeping", "true"}
 
 
 async def prepare_control_target_plan(
@@ -72,6 +85,8 @@ async def prepare_control_target_plan(
     mold_prevention_active: bool = False,
     mold_prevention_delta: float = 0.0,
     now: float | None = None,
+    tonight_override: str | None = None,
+    sleep_device_heating: bool = False,
 ) -> ControlTargetPlan:
     """Resolve effective current and future targets through one policy chain.
 
@@ -116,11 +131,27 @@ async def prepare_control_target_plan(
     )
 
     resolved_local_time = datetime.fromtimestamp(resolved_at, tz=dt_util.DEFAULT_TIME_ZONE)
-    night_active = is_night_mode_active(room, now=resolved_local_time)
+    trigger_entity_on = _is_sleep_trigger_active(hass, room.get("sleep_trigger_entity"))
+    phase_status = resolve_sleep_phase(
+        room,
+        now=resolved_local_time,
+        trigger_entity_on=trigger_entity_on,
+        tonight_override=tonight_override,
+    )
+    night_active = phase_status.night_active
     sleep_ramp_c = max(0.0, float(room.get("sleep_temp_ramp_c") or 0.0))
-    if night_active and sleep_ramp_c > 0:
-        targets = apply_sleep_ramp_to_targets(targets, sleep_ramp_c)
-        resolver = wrap_target_resolver_for_sleep_ramp(resolver, sleep_ramp_c)
+    coupled_offset_c = max(0.0, float(room.get("sleep_coupled_offset_c") or 0.0))
+    coupled_offset_active = bool(
+        phase_status.phase == "sleep" and coupled_offset_c > 0 and sleep_device_heating
+    )
+    effective_sleep_ramp_c = (
+        sleep_ramp_c + (coupled_offset_c if coupled_offset_active else 0.0)
+        if phase_status.phase == "sleep"
+        else 0.0
+    )
+    if phase_status.phase == "sleep" and effective_sleep_ramp_c > 0:
+        targets = apply_sleep_ramp_to_targets(targets, effective_sleep_ramp_c)
+        resolver = wrap_target_resolver_for_sleep_ramp(resolver, effective_sleep_ramp_c)
 
     return ControlTargetPlan(
         targets=targets,
@@ -129,6 +160,10 @@ async def prepare_control_target_plan(
         presence_away=presence_away,
         night_active=night_active,
         resolved_at=resolved_at,
+        sleep_phase=phase_status.phase,
+        sleep_trigger_source=phase_status.trigger_source,
+        effective_sleep_ramp_c=round(effective_sleep_ramp_c, 2),
+        coupled_offset_active=coupled_offset_active,
         clear_expired_override=base.clear_expired_override,
         clear_expired_vacation=base.clear_expired_vacation,
     )
