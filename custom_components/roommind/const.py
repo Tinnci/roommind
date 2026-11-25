@@ -59,6 +59,11 @@ DEFAULT_ECO_COOL = 27.0
 # Automations can check: trigger.context.parent_id == "roommind"
 ROOMMIND_CONTEXT_ID = "roommind"
 
+# Missed-off confirmation retry constants
+OFF_CONFIRM_SECONDS = 300
+OFF_RESEND_INTERVAL_SECONDS = 600
+OFF_RESEND_MAX = 3
+
 
 def make_roommind_context() -> Context:
     """Create a HA Context tagged as originating from RoomMind."""

@@ -326,6 +326,7 @@ async def websocket_subscribe_rooms(
 # ---------------------------------------------------------------------------
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "roommind/rooms/save",
@@ -383,6 +384,7 @@ async def websocket_save_room(
 # ---------------------------------------------------------------------------
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "roommind/rooms/delete",
@@ -656,6 +658,7 @@ async def websocket_get_settings(
 # ---------------------------------------------------------------------------
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "roommind/settings/save",
@@ -735,6 +738,7 @@ async def websocket_get_analytics(
 # ---------------------------------------------------------------------------
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "roommind/thermal/reset",
@@ -771,6 +775,7 @@ async def websocket_thermal_reset(
 # ---------------------------------------------------------------------------
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command({vol.Required("type"): "roommind/thermal/reset_all"})
 @websocket_api.async_response
 async def websocket_thermal_reset_all(
@@ -798,6 +803,7 @@ async def websocket_thermal_reset_all(
     connection.send_result(msg["id"], {"success": True})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "roommind/model/boost_learning",
@@ -835,6 +841,7 @@ async def websocket_boost_learning(
 # ---------------------------------------------------------------------------
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command({vol.Required("type"): "roommind/diagnostics/get"})
 @websocket_api.async_response
 async def websocket_get_diagnostics(

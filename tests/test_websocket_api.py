@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import inspect
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import voluptuous as vol
+from homeassistant.exceptions import Unauthorized
 from homeassistant.helpers import entity_registry as er
 
 from custom_components.roommind.const import DOMAIN
@@ -34,28 +36,28 @@ from custom_components.roommind.websocket_api import (
     websocket_thermal_reset_all,
 )
 
-# The HA @async_response decorator wraps async handlers into synchronous
-# schedulers.  Access the original coroutine via ``__wrapped__`` so we can
-# ``await`` them directly in tests without needing a running event-loop task
-# factory on the mock hass object.
-_list_rooms = websocket_list_rooms.__wrapped__
-_save_room = websocket_save_room.__wrapped__
-_delete_room = websocket_delete_room.__wrapped__
-_override_set = websocket_override_set.__wrapped__
-_override_clear = websocket_override_clear.__wrapped__
-_fan_set = websocket_fan_set.__wrapped__
-_get_settings = websocket_get_settings.__wrapped__
-_save_settings = websocket_save_settings.__wrapped__
-_thermal_reset = websocket_thermal_reset.__wrapped__
-_thermal_reset_all = websocket_thermal_reset_all.__wrapped__
-_get_analytics = websocket_get_analytics.__wrapped__
-_get_diagnostics = websocket_get_diagnostics.__wrapped__
+# The HA decorators (@require_admin / @websocket_command / @async_response) wrap
+# async handlers into synchronous schedulers. Unwrap to the original coroutine so
+# tests can ``await`` them directly.
+_list_rooms = inspect.unwrap(websocket_list_rooms)
+_save_room = inspect.unwrap(websocket_save_room)
+_delete_room = inspect.unwrap(websocket_delete_room)
+_override_set = inspect.unwrap(websocket_override_set)
+_override_clear = inspect.unwrap(websocket_override_clear)
+_fan_set = inspect.unwrap(websocket_fan_set)
+_get_settings = inspect.unwrap(websocket_get_settings)
+_save_settings = inspect.unwrap(websocket_save_settings)
+_thermal_reset = inspect.unwrap(websocket_thermal_reset)
+_thermal_reset_all = inspect.unwrap(websocket_thermal_reset_all)
+_get_analytics = inspect.unwrap(websocket_get_analytics)
+_get_diagnostics = inspect.unwrap(websocket_get_diagnostics)
 
 
 @pytest.fixture
 def connection():
     """Return a mocked WebSocket connection."""
     conn = MagicMock()
+    conn.user = MagicMock(is_admin=True)
     conn.send_result = MagicMock()
     conn.send_error = MagicMock()
     return conn
@@ -2100,7 +2102,7 @@ async def test_boost_learning_no_coordinator_errors(ws_hass, store, connection):
     """boost_learning without coordinator sends an error."""
     from custom_components.roommind.websocket_api import websocket_boost_learning
 
-    _boost_learning = websocket_boost_learning.__wrapped__
+    _boost_learning = inspect.unwrap(websocket_boost_learning)
 
     await store.async_load()
     # No coordinator in hass.data
@@ -2116,7 +2118,7 @@ async def test_boost_learning_success(ws_hass, store, connection):
     """boost_learning with coordinator boosts EKF and persists cooldown."""
     from custom_components.roommind.websocket_api import websocket_boost_learning
 
-    _boost_learning = websocket_boost_learning.__wrapped__
+    _boost_learning = inspect.unwrap(websocket_boost_learning)
 
     await store.async_load()
 
@@ -3019,3 +3021,41 @@ async def test_fan_set_persists_room_policy_and_dispatches_unit_controls(ws_hass
     assert ("fan", "oscillate", {"entity_id": "fan.stand", "oscillating": True}) in calls
     assert ("fan", "set_direction", {"entity_id": "fan.stand", "direction": "reverse"}) in calls
     connection.send_result.assert_called_once()
+
+
+def test_target_temperature_bounds_validation():
+    """Target temperatures in room and settings schemas must stay within 5.0..35.0 C."""
+    room_schema = vol.Schema({vol.Required("area_id"): str, **ROOM_CONFIG_SCHEMA})
+    settings_schema = vol.Schema(SETTINGS_SCHEMA)
+
+    assert room_schema({"area_id": "living", "comfort_heat": 5.0, "comfort_cool": 35.0})["comfort_heat"] == 5.0
+    for bad in (4.9, 35.1):
+        with pytest.raises(vol.Invalid):
+            room_schema({"area_id": "living", "comfort_heat": bad})
+        with pytest.raises(vol.Invalid):
+            room_schema({"area_id": "living", "eco_cool": bad})
+        with pytest.raises(vol.Invalid):
+            settings_schema({"vacation_temp": bad})
+
+
+@pytest.mark.asyncio
+async def test_admin_commands_reject_non_admin_user(ws_hass, store):
+    """Admin-gated config/reset WS handlers raise Unauthorized for non-admin connections."""
+    await store.async_load()
+    non_admin = MagicMock()
+    non_admin.user = MagicMock(is_admin=False)
+    non_admin.send_error = MagicMock()
+    non_admin.send_result = MagicMock()
+
+    with pytest.raises(Unauthorized):
+        websocket_save_room(ws_hass, non_admin, {"id": 1, "type": "roommind/rooms/save", "area_id": "living"})
+
+    with pytest.raises(Unauthorized):
+        websocket_save_settings(ws_hass, non_admin, {"id": 2, "type": "roommind/settings/save", "comfort_weight": 50})
+
+    with pytest.raises(Unauthorized):
+        websocket_delete_room(ws_hass, non_admin, {"id": 3, "type": "roommind/rooms/delete", "area_id": "living"})
+
+    # Non-admin room query remains permitted.
+    await _list_rooms(ws_hass, non_admin, {"id": 4, "type": "roommind/rooms/list"})
+    non_admin.send_result.assert_called_once()

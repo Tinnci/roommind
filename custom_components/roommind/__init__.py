@@ -7,6 +7,7 @@ import logging
 from pathlib import Path
 
 from homeassistant.components.frontend import (
+    add_extra_js_url,
     async_register_built_in_panel,
     async_remove_panel,
 )
@@ -27,6 +28,7 @@ from .websocket_api import async_register_websocket_commands
 _LOGGER = logging.getLogger(__name__)
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+CARD_URL = "/roommind/roommind-card.js"
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -61,6 +63,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator.cleanup_orphaned_entities()
 
     await _async_register_panel(hass)
+    await _async_register_card(hass)
     await _async_check_version_mismatch(hass)
 
     return True
@@ -162,6 +165,25 @@ async def _async_check_version_mismatch(hass: HomeAssistant) -> None:
         ir.async_delete_issue(hass, DOMAIN, "restart_required")
 
 
+async def _async_register_card(hass: HomeAssistant) -> None:
+    """Load the dashboard card on every frontend page when built."""
+    if hass.data[DOMAIN].get("card_registered"):
+        return
+
+    card_js = Path(__file__).parent / "frontend" / "roommind-card.js"
+    if not card_js.exists():
+        _LOGGER.debug("RoomMind card JS not found at %s – skipping card registration", card_js)
+        return
+
+    try:
+        await hass.http.async_register_static_paths([StaticPathConfig(CARD_URL, str(card_js), False)])
+    except RuntimeError:
+        _LOGGER.debug("RoomMind card static path already registered")
+
+    add_extra_js_url(hass, f"{CARD_URL}?v={VERSION}")
+    hass.data[DOMAIN]["card_registered"] = True
+
+
 async def _async_register_panel(hass: HomeAssistant) -> None:
     """Register the RoomMind custom panel in the sidebar."""
     if hass.data[DOMAIN].get("panel_registered"):
@@ -189,12 +211,13 @@ async def _async_register_panel(hass: HomeAssistant) -> None:
             sidebar_title="RoomMind",
             sidebar_icon="mdi:home-thermometer",
             frontend_url_path="roommind",
+            require_admin=True,
             config={
                 "_panel_custom": {
                     "name": "roommind-panel",
                     "embed_iframe": False,
                     "trust_external": False,
-                    "js_url": "/roommind/roommind-panel.js",
+                    "js_url": f"/roommind/roommind-panel.js?v={VERSION}",
                 }
             },
         )

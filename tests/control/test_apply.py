@@ -4282,3 +4282,66 @@ async def test_dispatch_climate_defers_unregistered_entity_during_startup():
     )
     assert sent.dispatch is DispatchStatus.SENT
     hass.services.async_call.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_missed_off_retries_after_confirm_window(monkeypatch):
+    """A device seen to drop hvac_action on off gets retried if a later off leaves it heating."""
+    from datetime import UTC, datetime
+
+    from custom_components.roommind.const import OFF_CONFIRM_SECONDS, OFF_RESEND_INTERVAL_SECONDS
+    from custom_components.roommind.control import climate_actuator as actuator
+
+    actuator.clear_command_cache()
+    clock = [100.0]
+    monkeypatch.setattr(actuator, "_now", lambda: clock[0])
+
+    hass = build_hass()
+    # Step 1: First off while heating -> then device reports idle (qualifies in _reports_stop)
+    state_heat = MagicMock()
+    state_heat.state = "heat"
+    state_heat.attributes = {"hvac_modes": ["heat", "off"], "hvac_action": "heating", "min_temp": 5.0}
+    hass.states.get = MagicMock(return_value=state_heat)
+    await async_turn_off_climate(hass, "climate.trv_retry", area_id="living")
+
+    state_off_idle = MagicMock()
+    state_off_idle.state = "off"
+    state_off_idle.attributes = {"hvac_modes": ["heat", "off"], "hvac_action": "idle", "min_temp": 5.0}
+    hass.states.get = MagicMock(return_value=state_off_idle)
+    clock[0] += 30.0
+    await async_turn_off_climate(hass, "climate.trv_retry", area_id="living")
+    assert "climate.trv_retry" in actuator._reports_stop
+
+    # Step 2: Second off while heating, but device later shows state='off' while hvac_action stays 'heating'
+    hass.services.async_call.reset_mock()
+    hass.states.get = MagicMock(return_value=state_heat)
+    await async_turn_off_climate(hass, "climate.trv_retry", area_id="living")
+    sent_count = hass.services.async_call.call_count
+
+    state_stuck = MagicMock()
+    state_stuck.state = "off"
+    state_stuck.last_changed = datetime(2026, 11, 25, 12, 0, tzinfo=UTC)
+    state_stuck.attributes = {"hvac_modes": ["heat", "off"], "hvac_action": "heating", "min_temp": 5.0}
+    hass.states.get = MagicMock(return_value=state_stuck)
+
+    # Before confirm window: no retry
+    clock[0] += 60.0
+    await async_turn_off_climate(hass, "climate.trv_retry", area_id="living")
+    assert hass.services.async_call.call_count == sent_count
+
+    # After confirm window: retries off!
+    clock[0] += OFF_CONFIRM_SECONDS
+    await async_turn_off_climate(hass, "climate.trv_retry", area_id="living")
+    assert hass.services.async_call.call_count > sent_count
+    assert actuator._off_sent["climate.trv_retry"].resends == 1
+
+    # Immediate next cycle throttled until OFF_RESEND_INTERVAL_SECONDS
+    count_after_first = hass.services.async_call.call_count
+    clock[0] += 30.0
+    await async_turn_off_climate(hass, "climate.trv_retry", area_id="living")
+    assert hass.services.async_call.call_count == count_after_first
+
+    clock[0] += OFF_RESEND_INTERVAL_SECONDS + 1.0
+    await async_turn_off_climate(hass, "climate.trv_retry", area_id="living")
+    assert hass.services.async_call.call_count > count_after_first
+    actuator.clear_command_cache()

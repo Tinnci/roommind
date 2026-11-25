@@ -35,7 +35,7 @@ SETTINGS_SCHEMA: dict[vol.Marker, object] = {
     vol.Optional("learning_disabled_rooms"): [str],
     vol.Optional("hidden_rooms"): [str],
     vol.Optional("prediction_enabled"): bool,
-    vol.Optional("vacation_temp"): vol.Coerce(float),
+    vol.Optional("vacation_temp"): vol.All(vol.Coerce(float), vol.Range(min=5.0, max=35.0)),
     vol.Optional("vacation_until"): vol.Any(vol.Coerce(float), None),
     vol.Optional("presence_enabled"): bool,
     vol.Optional("presence_persons"): [str],

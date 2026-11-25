@@ -10,11 +10,19 @@ import logging
 import math
 import time
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
-from ..const import TargetTemps, make_roommind_context
+from ..const import (
+    OFF_CONFIRM_SECONDS,
+    OFF_RESEND_INTERVAL_SECONDS,
+    OFF_RESEND_MAX,
+    TargetTemps,
+    make_roommind_context,
+)
 from ..utils.device_utils import (
     DEFAULT_IDLE_SETBACK_OFFSET,
     IDLE_ACTION_FAN_ONLY,
@@ -35,6 +43,28 @@ _LOGGER = logging.getLogger(__name__)
 # resets on integration reload (module reimport).
 _last_commands: dict[str, dict[str, Any]] = {}
 _setpoint_override_warned: set[str] = set()
+
+
+@dataclass
+class _OffSent:
+    """An off command RoomMind sent, watched until the device stops reporting a run."""
+
+    at: float
+    wall: datetime
+    was_running: bool
+    resends: int = 0
+    resent_at: float = 0.0
+    gave_up: bool = False
+
+
+_RUNNING_ACTIONS = ("heating", "preheating", "cooling")
+_off_sent: dict[str, _OffSent] = {}
+# Devices whose hvac_action dropped from an active run after an off qualify for retries.
+_reports_stop: set[str] = set()
+
+
+def _now() -> float:
+    return time.monotonic()
 
 
 @dataclass(frozen=True, slots=True)
@@ -247,6 +277,8 @@ def clear_command_cache() -> None:
     _last_commands.clear()
     _setpoint_override_warned.clear()
     _temperature_dispatches.clear()
+    _off_sent.clear()
+    _reports_stop.clear()
 
 
 def last_command_snapshot() -> dict[str, dict[str, Any]]:
@@ -325,6 +357,8 @@ async def async_dispatch_climate(
         )
     if entity_id and service in ("set_hvac_mode", "set_temperature"):
         _last_commands[entity_id] = _cache_entry(service, desired)
+        if service == "set_hvac_mode" and desired.get("hvac_mode") != "off":
+            _off_sent.pop(entity_id, None)
     return DeviceActuationResult(entity_id, DispatchStatus.SENT, service, desired, context_id=context.id)
 
 
@@ -446,6 +480,88 @@ async def _async_idle_without_off_mode(
     return (await async_dispatch_climate(hass, "set_temperature", desired, area_id=area_id),)
 
 
+async def _confirm_off(
+    hass: HomeAssistant,
+    entity_id: str,
+    state: Any,
+    idle_setpoint: float | None,
+    *,
+    area_id: str,
+    protect_valve: bool,
+) -> DeviceOperations | None:
+    """Re-send off when a device reports 'off' but keeps reporting an active hvac_action."""
+    sent = _off_sent.get(entity_id)
+    if sent is None:
+        return None
+    action = state.attributes.get("hvac_action")
+    now = _now()
+    if action not in _RUNNING_ACTIONS:
+        if sent.was_running and now - sent.at < OFF_CONFIRM_SECONDS:
+            _reports_stop.add(entity_id)
+        if sent.resends:
+            _LOGGER.info(
+                "Area '%s': '%s' stopped after the off was sent %d more time(s)",
+                area_id,
+                entity_id,
+                sent.resends,
+            )
+        del _off_sent[entity_id]
+        return None
+    if sent.gave_up:
+        return None
+    if entity_id not in _reports_stop:
+        if now - sent.at >= OFF_CONFIRM_SECONDS:
+            del _off_sent[entity_id]
+        return None
+    changed = getattr(state, "last_changed", None)
+    if isinstance(changed, datetime) and changed - sent.wall > timedelta(minutes=1):
+        del _off_sent[entity_id]
+        return None
+    if now - sent.at < OFF_CONFIRM_SECONDS:
+        return None
+    if sent.resends and now - sent.resent_at < OFF_RESEND_INTERVAL_SECONDS:
+        return None
+    minutes = round((now - sent.at) / 60)
+    if sent.resends >= OFF_RESEND_MAX:
+        sent.gave_up = True
+        _reports_stop.discard(entity_id)
+        _LOGGER.warning(
+            "Area '%s': '%s' still reports %s %d min after RoomMind switched it off, also after "
+            "%d more sends; check the device",
+            area_id,
+            entity_id,
+            action,
+            minutes,
+            sent.resends,
+        )
+        return None
+    sent.resends += 1
+    sent.resent_at = now
+    _LOGGER.log(
+        logging.WARNING if sent.resends == 1 else logging.DEBUG,
+        "Area '%s': '%s' shows off but still reports %s %d min after RoomMind switched it off; "
+        "sending the off again (%d/%d)",
+        area_id,
+        entity_id,
+        action,
+        minutes,
+        sent.resends,
+        OFF_RESEND_MAX,
+    )
+    ops: list[DeviceActuationResult] = []
+    if protect_valve and "cool" not in (state.attributes.get("hvac_modes") or []) and idle_setpoint is not None:
+        ops.append(await _send_idle_setpoint(hass, entity_id, state, idle_setpoint, area_id=area_id))
+    ops.append(
+        await async_dispatch_climate(
+            hass,
+            "set_hvac_mode",
+            {"entity_id": entity_id, "hvac_mode": "off"},
+            area_id=area_id,
+        )
+    )
+    return tuple(ops)
+
+
 async def async_turn_off_climate(
     hass: HomeAssistant,
     entity_id: str,
@@ -474,6 +590,16 @@ async def async_turn_off_climate(
             ),
         )
     if state and state.state == "off":
+        confirmed = await _confirm_off(
+            hass,
+            entity_id,
+            state,
+            effective_setpoint,
+            area_id=area_id,
+            protect_valve=protect_valve,
+        )
+        if confirmed:
+            return confirmed
         return (DeviceActuationResult(entity_id, DispatchStatus.SKIPPED, "set_hvac_mode", desired),)
     if _should_use_cache(state):
         cached = _last_commands.get(entity_id)
@@ -485,7 +611,14 @@ async def async_turn_off_climate(
     # Still attempt off if lowering the setpoint fails.
     if protect_valve and state and effective_setpoint is not None:
         operations.append(await _send_idle_setpoint(hass, entity_id, state, effective_setpoint, area_id=area_id))
-    operations.append(await async_dispatch_climate(hass, "set_hvac_mode", desired, area_id=area_id))
+    off_result = await async_dispatch_climate(hass, "set_hvac_mode", desired, area_id=area_id)
+    operations.append(off_result)
+    if off_result.dispatch is DispatchStatus.SENT:
+        _off_sent[entity_id] = _OffSent(
+            at=_now(),
+            wall=dt_util.utcnow(),
+            was_running=bool(state is not None and state.attributes.get("hvac_action") in _RUNNING_ACTIONS),
+        )
     return tuple(operations)
 
 

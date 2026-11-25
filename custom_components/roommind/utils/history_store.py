@@ -113,11 +113,32 @@ class HistoryStore:
     def _ensure_dir(self) -> None:
         os.makedirs(self._base_dir, exist_ok=True)
 
+    @staticmethod
+    def _is_safe_id(area_id: str) -> bool:
+        """True when the id cannot point outside the history directory ('../x', absolute paths)."""
+        return (
+            bool(area_id)
+            and area_id not in (".", "..")
+            and os.path.basename(area_id) == area_id
+            and "/" not in area_id
+            and "\\" not in area_id
+            and "\0" not in area_id
+        )
+
+    def _room_path(self, area_id: str, kind: str) -> str:
+        if not self._is_safe_id(area_id):
+            raise ValueError(f"Unsafe room id for history files: {area_id!r}")
+        base = os.path.realpath(self._base_dir)
+        target = os.path.realpath(os.path.join(base, f"{area_id}_{kind}.csv"))
+        if os.path.commonpath([base, target]) != base:
+            raise ValueError(f"Unsafe room id for history files: {area_id!r}")
+        return os.path.join(self._base_dir, f"{area_id}_{kind}.csv")
+
     def _detail_path(self, area_id: str) -> str:
-        return os.path.join(self._base_dir, f"{area_id}_detail.csv")
+        return self._room_path(area_id, "detail")
 
     def _history_path(self, area_id: str) -> str:
-        return os.path.join(self._base_dir, f"{area_id}_history.csv")
+        return self._room_path(area_id, "history")
 
     @staticmethod
     def _migrate_header(path: str) -> None:

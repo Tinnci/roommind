@@ -755,3 +755,17 @@ def test_downsample_preserves_environmental_observations(history_dir):
     assert result[0]["humidity_sources"] == "sensor.primary_humidity"
     assert result[0]["humidity_source_count"] == 1.5
     assert result[0]["humidity_primary_available"] is True
+
+
+@pytest.mark.parametrize("bad_id", ["", ".", "..", "../escape", "sub/room", "sub\\room", "/etc/passwd", "bad\0id"])
+def test_unsafe_area_ids_rejected(history_dir, bad_id):
+    """Path-traversal and non-basename room IDs must be rejected before filesystem access."""
+    store = HistoryStore(history_dir)
+    with pytest.raises(ValueError, match="Unsafe room id"):
+        store.record(bad_id, {"room_temp": 20.0})
+    with pytest.raises(ValueError, match="Unsafe room id"):
+        store.read_detail(bad_id)
+    with pytest.raises(ValueError, match="Unsafe room id"):
+        store.read_history(bad_id)
+    with pytest.raises(ValueError, match="Unsafe room id"):
+        store.remove_room(bad_id)
