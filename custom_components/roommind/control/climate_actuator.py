@@ -301,6 +301,20 @@ async def async_dispatch_climate(
     """Submit one operation and retain its context even when dispatch fails."""
     desired = dict(data)
     entity_id = str(desired.get("entity_id", ""))
+    if entity_id and getattr(hass, "is_running", True) is False and hass.states.get(entity_id) is None:
+        _LOGGER.debug(
+            "Area '%s': deferring climate.%s on '%s' until startup completes",
+            area_id,
+            service,
+            entity_id,
+        )
+        return DeviceActuationResult(
+            entity_id,
+            DispatchStatus.DEFERRED,
+            service,
+            desired,
+            diagnostic="entity not yet registered during startup",
+        )
     context = make_roommind_context()
     try:
         await hass.services.async_call("climate", service, dict(desired), blocking=True, context=context)

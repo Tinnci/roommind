@@ -670,3 +670,31 @@ async def test_room_fan_speed_policy_applies_to_climate_devices_and_night_cap(ha
 
     night_calls = [call.args[:3] for call in hass.services.async_call.call_args_list]
     assert ("climate", "set_fan_mode", {"entity_id": "climate.living_ac", "fan_mode": "low"}) in night_calls
+
+
+@pytest.mark.asyncio
+async def test_airflow_defers_unregistered_entity_during_startup(hass):
+    """Startup cycles defer airflow service calls while HA is booting and entity is unregistered."""
+    hass.is_running = False
+    hass.states.get.return_value = None
+    mgr = AirflowControlManager(hass)
+
+    sent = await mgr._call(
+        "bedroom",
+        "fan",
+        "turn_off",
+        {"entity_id": "fan.unregistered"},
+    )
+    assert sent is False
+    hass.services.async_call.assert_not_called()
+
+    # Once registered (even while booting or running), the command executes cleanly without cache pollution.
+    hass.is_running = True
+    sent_later = await mgr._call(
+        "bedroom",
+        "fan",
+        "turn_off",
+        {"entity_id": "fan.unregistered"},
+    )
+    assert sent_later is True
+    hass.services.async_call.assert_called_once()

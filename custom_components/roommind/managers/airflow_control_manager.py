@@ -271,6 +271,15 @@ class AirflowControlManager:
 
     async def _call(self, area_id: str, domain: str, service: str, data: dict) -> bool:
         entity_id = data.get("entity_id", "")
+        if entity_id and getattr(self.hass, "is_running", True) is False and self.hass.states.get(entity_id) is None:
+            _LOGGER.debug(
+                "Room '%s': deferring airflow %s.%s on '%s' until startup completes",
+                area_id,
+                domain,
+                service,
+                entity_id,
+            )
+            return False
         cache_key = (entity_id, service)
         signature = tuple(sorted(data.items()))
         if self._last_commands.get(cache_key) == signature:

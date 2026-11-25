@@ -4251,3 +4251,34 @@ async def test_proportional_setpoint_unchanged_default():
     from custom_components.roommind.control.mpc_controller import HEATING_BOOST_TARGET
 
     assert temp_arg == HEATING_BOOST_TARGET
+
+
+@pytest.mark.asyncio
+async def test_dispatch_climate_defers_unregistered_entity_during_startup():
+    """Startup cycles must defer unregistered climate entities instead of firing noisy HA calls."""
+    from custom_components.roommind.control.actuation import DispatchStatus
+    from custom_components.roommind.control.climate_actuator import async_dispatch_climate
+
+    hass = build_hass()
+    hass.is_running = False
+    hass.states.get = MagicMock(return_value=None)
+
+    deferred = await async_dispatch_climate(
+        hass,
+        "set_temperature",
+        {"entity_id": "climate.unregistered_ac", "temperature": 21.0},
+        area_id="bedroom",
+    )
+    assert deferred.dispatch is DispatchStatus.DEFERRED
+    hass.services.async_call.assert_not_called()
+
+    # Once HA is running, normal dispatch proceeds even if entity state lookup is patched.
+    hass.is_running = True
+    sent = await async_dispatch_climate(
+        hass,
+        "set_temperature",
+        {"entity_id": "climate.unregistered_ac", "temperature": 21.0},
+        area_id="bedroom",
+    )
+    assert sent.dispatch is DispatchStatus.SENT
+    hass.services.async_call.assert_called_once()
