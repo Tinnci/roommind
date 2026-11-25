@@ -27,6 +27,13 @@ export interface ThermostatUnitStatus {
   setpointHighC: number | null;
   unitTempC: number | null;
   fanMode: string | null;
+  fanModes: string[];
+  swingMode: string | null;
+  swingModes: string[];
+  swingHorizontalMode: string | null;
+  swingHorizontalModes: string[];
+  presetMode: string | null;
+  presetModes: string[];
   overdriveDeltaC: number | null;
   compressorGroupName: string | null;
   isMaster: boolean;
@@ -168,6 +175,22 @@ export function buildThermostatFleet(
         : typeof actuation?.desired?.fan_mode === "string"
           ? actuation.desired.fan_mode
           : null;
+    const strArr = (val: unknown): string[] =>
+      Array.isArray(val)
+        ? val.filter((v): v is string => typeof v === "string" && v.length > 0)
+        : [];
+    const fanModes = strArr(haState?.attributes?.fan_modes);
+    const swingMode =
+      typeof haState?.attributes?.swing_mode === "string" ? haState.attributes.swing_mode : null;
+    const swingModes = strArr(haState?.attributes?.swing_modes);
+    const swingHorizontalMode =
+      typeof haState?.attributes?.swing_horizontal_mode === "string"
+        ? haState.attributes.swing_horizontal_mode
+        : null;
+    const swingHorizontalModes = strArr(haState?.attributes?.swing_horizontal_modes);
+    const presetMode =
+      typeof haState?.attributes?.preset_mode === "string" ? haState.attributes.preset_mode : null;
+    const presetModes = strArr(haState?.attributes?.preset_modes);
 
     const refTarget = getRoomReferenceTarget(config, hvacMode);
     let overdriveDeltaC: number | null = null;
@@ -204,6 +227,13 @@ export function buildThermostatFleet(
       setpointHighC,
       unitTempC,
       fanMode,
+      fanModes,
+      swingMode,
+      swingModes,
+      swingHorizontalMode,
+      swingHorizontalModes,
+      presetMode,
+      presetModes,
       overdriveDeltaC,
       compressorGroupName: group?.name ?? null,
       isMaster: group?.master_entity === device.entity_id,

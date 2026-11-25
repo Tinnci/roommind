@@ -88,6 +88,7 @@ ROOM_CONFIG_DEFAULTS: dict[str, object] = {
     "heat_source_outdoor_threshold": DEFAULT_HEAT_SOURCE_OUTDOOR_THRESHOLD,
     "heat_source_ac_min_outdoor": DEFAULT_HEAT_SOURCE_AC_MIN_OUTDOOR,
     "climate_control_enabled": True,
+    "fan_speed_mode": "auto",
 }
 
 
@@ -244,6 +245,7 @@ ROOM_CONFIG_SCHEMA: dict[vol.Marker, object] = {
     vol.Optional("heat_source_outdoor_threshold"): vol.All(vol.Coerce(float), vol.Range(min=-20, max=25)),
     vol.Optional("heat_source_ac_min_outdoor"): vol.All(vol.Coerce(float), vol.Range(min=-30, max=5)),
     vol.Optional("climate_control_enabled"): bool,
+    vol.Optional("fan_speed_mode"): str,
     vol.Optional("room_volume_m3"): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0))),
     vol.Optional("control_target"): vol.In(["air_temperature", "perceived_temperature"]),
     vol.Optional("quiet_hours"): vol.Any(

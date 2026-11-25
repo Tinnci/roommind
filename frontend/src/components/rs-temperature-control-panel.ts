@@ -10,6 +10,7 @@ import {
   toCelsius,
   toDisplay,
 } from "../utils/temperature";
+import { buildRoomFanCapabilities, type FanSpeedOption } from "../utils/fan-control";
 import { roommindThemeStyles } from "../styles/theme-styles";
 
 @customElement("rs-temperature-control-panel")
@@ -24,6 +25,8 @@ export class RsTemperatureControlPanel extends LitElement {
   @property({ type: Number }) public ecoHeat = 17.0;
   @property({ type: Number }) public ecoCool = 27.0;
   @property({ type: Boolean }) public hasSchedule = false;
+  @property() public fanSpeedMode = "auto";
+  @property({ type: Boolean }) public nightCapActive = false;
   @property() public language = "en";
 
   @state() private _targetTempC = 21;
@@ -401,6 +404,129 @@ export class RsTemperatureControlPanel extends LitElement {
         color: var(--success-color, #4caf50);
       }
 
+      .control-fan-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding-top: 10px;
+        border-top: var(--roommind-border-faint);
+        min-width: 0;
+      }
+
+      .fan-row-meta {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+        min-width: 0;
+      }
+
+      .fan-row-meta ha-icon {
+        --mdc-icon-size: 16px;
+        color: var(--primary-color);
+      }
+
+      .fan-meta-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 2px 7px;
+        border-radius: 999px;
+      }
+
+      .fan-meta-badge.night {
+        background: var(--roommind-warning-tint, rgba(255, 152, 0, 0.14));
+        color: var(--warning-color, #ef6c00);
+      }
+
+      .fan-meta-badge.dry {
+        background: var(--roommind-info-tint, rgba(33, 150, 243, 0.12));
+        color: var(--roommind-info-color, #1976d2);
+      }
+
+      .fan-speed-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+      }
+
+      .fan-speed-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        min-height: 32px;
+        padding: 0 10px;
+        border-radius: var(--roommind-radius-control, 8px);
+        border: var(--roommind-border-subtle);
+        background: var(--roommind-panel-surface);
+        color: var(--primary-text-color);
+        font: inherit;
+        font-size: 12px;
+        font-weight: 650;
+        cursor: pointer;
+        touch-action: manipulation;
+        white-space: nowrap;
+        transition:
+          background var(--roommind-motion-duration) ease,
+          border-color var(--roommind-motion-duration) ease;
+      }
+
+      .fan-speed-button:hover {
+        background: var(--roommind-surface-hover);
+        border-color: var(--roommind-primary-border);
+      }
+
+      .fan-speed-button ha-icon {
+        --mdc-icon-size: 15px;
+      }
+
+      .speed-bars {
+        display: inline-flex;
+        align-items: flex-end;
+        gap: 1.5px;
+        height: 12px;
+      }
+
+      .speed-bar {
+        width: 2.5px;
+        border-radius: 1px;
+        background: currentColor;
+        opacity: 0.22;
+      }
+
+      .speed-bar.on {
+        opacity: 0.95;
+      }
+
+      .fan-speed-button[active][data-tone="auto"] {
+        border-color: var(--roommind-primary-border);
+        background: var(--roommind-primary-strong);
+        color: var(--primary-color);
+      }
+
+      .fan-speed-button[active][data-tone="calm"] {
+        border-color: var(--roommind-success-color, #26a69a);
+        background: var(--roommind-success-tint, rgba(38, 166, 154, 0.14));
+        color: var(--roommind-success-color, #00796b);
+      }
+
+      .fan-speed-button[active][data-tone="medium"] {
+        border-color: var(--roommind-info-color, #2196f3);
+        background: var(--roommind-info-tint, rgba(33, 150, 243, 0.14));
+        color: var(--roommind-info-color, #1976d2);
+      }
+
+      .fan-speed-button[active][data-tone="strong"] {
+        border-color: var(--roommind-warning-color, #ff9800);
+        background: var(--roommind-warning-tint, rgba(255, 152, 0, 0.14));
+        color: var(--roommind-warning-color, #ef6c00);
+      }
+
       .error {
         color: var(--error-color, #d32f2f);
         font-size: 12px;
@@ -512,6 +638,9 @@ export class RsTemperatureControlPanel extends LitElement {
     const disabled = !this.config || !this.climateControlEnabled || this._busy;
     const isNonTempMode = ["off", "fan_only", "dry"].includes(this.climateMode);
     const tempDisabled = disabled || isNonTempMode;
+    const fanCaps = buildRoomFanCapabilities(this.config, this.hass);
+    const fanDisabled =
+      !this.config || !this.climateControlEnabled || this.climateMode === "off" || this._busy;
     const comfortIcon =
       this.climateMode === "cool_only"
         ? "mdi:snowflake"
@@ -656,6 +785,38 @@ export class RsTemperatureControlPanel extends LitElement {
               ${this._renderPresetButton("eco", "override.eco", "mdi:leaf", tempDisabled)}
             </div>
           </div>
+
+          ${
+            fanCaps.hasFanControl
+              ? html`
+                  <div class="control-fan-row">
+                    <div class="fan-row-meta">
+                      <ha-icon icon="mdi:fan"></ha-icon>
+                      <span class="section-label">${localize("fan.label", this.language)}</span>
+                      ${
+                        this.nightCapActive
+                          ? html`<span class="fan-meta-badge night"
+                              >${localize("fan.night_capped", this.language)}</span
+                            >`
+                          : nothing
+                      }
+                      ${
+                        this.climateMode === "dry"
+                          ? html`<span class="fan-meta-badge dry"
+                              >${localize("fan.dry_hint", this.language)}</span
+                            >`
+                          : nothing
+                      }
+                    </div>
+                    <div class="fan-speed-buttons">
+                      ${fanCaps.roomOptions.map((opt) =>
+                        this._renderFanSpeedButton(opt, fanDisabled),
+                      )}
+                    </div>
+                  </div>
+                `
+              : nothing
+          }
         </div>
       </ha-card>
     `;
@@ -722,6 +883,49 @@ export class RsTemperatureControlPanel extends LitElement {
         ${localize(labelKey, this.language)}
       </button>
     `;
+  }
+
+  private _renderFanSpeedButton(opt: FanSpeedOption, disabled: boolean) {
+    const active = (this.fanSpeedMode || "auto").toLowerCase() === opt.value.toLowerCase();
+    const heights = [4, 6, 8, 10, 12];
+    return html`
+      <button
+        class="fan-speed-button"
+        type="button"
+        data-tone=${opt.tone}
+        ?active=${active}
+        aria-pressed=${active}
+        ?disabled=${disabled}
+        @click=${() => this._onFanSpeedClick(opt.value)}
+      >
+        ${
+          opt.isAuto
+            ? html`<ha-icon icon="mdi:fan-auto"></ha-icon>`
+            : html`
+                <span class="speed-bars" aria-hidden="true">
+                  ${heights.map(
+                    (h, idx) =>
+                      html`<span
+                        class="speed-bar ${idx < opt.bars ? "on" : ""}"
+                        style="height:${h}px"
+                      ></span>`,
+                  )}
+                </span>
+              `
+        }
+        <span>${opt.label}</span>
+      </button>
+    `;
+  }
+
+  private _onFanSpeedClick(value: string): void {
+    this.dispatchEvent(
+      new CustomEvent("fan-speed-changed", {
+        detail: { fanSpeedMode: value },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   private _statusText(ov: ReturnType<typeof this.getEffectiveOverride>): string {

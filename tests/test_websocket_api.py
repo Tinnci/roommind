@@ -21,6 +21,7 @@ from custom_components.roommind.websocket_api import (
     _csv_to_points,
     _safe_float,
     websocket_delete_room,
+    websocket_fan_set,
     websocket_get_analytics,
     websocket_get_diagnostics,
     websocket_get_settings,
@@ -42,6 +43,7 @@ _save_room = websocket_save_room.__wrapped__
 _delete_room = websocket_delete_room.__wrapped__
 _override_set = websocket_override_set.__wrapped__
 _override_clear = websocket_override_clear.__wrapped__
+_fan_set = websocket_fan_set.__wrapped__
 _get_settings = websocket_get_settings.__wrapped__
 _save_settings = websocket_save_settings.__wrapped__
 _thermal_reset = websocket_thermal_reset.__wrapped__
@@ -1879,14 +1881,14 @@ async def test_analytics_model_has_occupancy_sensors_false(ws_hass, store, conne
 
 
 def test_register_websocket_commands(hass):
-    """async_register_websocket_commands registers all 13 commands."""
+    """async_register_websocket_commands registers all 14 commands."""
     from unittest.mock import patch
 
     from custom_components.roommind.websocket_api import async_register_websocket_commands
 
     with patch("custom_components.roommind.websocket_api.websocket_api.async_register_command") as mock_reg:
         async_register_websocket_commands(hass)
-        assert mock_reg.call_count == 13
+        assert mock_reg.call_count == 14
 
 
 @pytest.mark.asyncio
@@ -2953,3 +2955,67 @@ async def test_get_diagnostics_no_config_entry(ws_hass, store, connection):
 
     connection.send_error.assert_called_once()
     assert connection.send_error.call_args[0][1] == "not_found"
+
+
+@pytest.mark.asyncio
+async def test_fan_set_persists_room_policy_and_dispatches_unit_controls(ws_hass, store, connection):
+    """roommind/fan/set updates fan_speed_mode and supports per-entity swing/speed calls."""
+    await store.async_load()
+    await _save_room(
+        ws_hass,
+        connection,
+        {
+            "id": 1,
+            "type": "roommind/rooms/save",
+            "area_id": "living",
+            "devices": [{"entity_id": "climate.living_ac", "type": "ac", "role": "auto"}],
+        },
+    )
+    connection.send_result.reset_mock()
+
+    ac_state = SimpleNamespace(
+        state="cool",
+        attributes={
+            "fan_mode": "auto",
+            "fan_modes": ["auto", "quiet", "low", "medium", "high"],
+            "swing_modes": ["off", "vertical"],
+        },
+    )
+    fan_state = SimpleNamespace(
+        state="on",
+        attributes={"percentage": 50, "supported_features": 15},
+    )
+    ws_hass.states.get = MagicMock(
+        side_effect=lambda eid: ac_state if eid == "climate.living_ac" else fan_state if eid == "fan.stand" else None
+    )
+
+    await _fan_set(
+        ws_hass,
+        connection,
+        {"id": 2, "type": "roommind/fan/set", "area_id": "living", "fan_speed_mode": "quiet"},
+    )
+    assert store.get_room("living")["fan_speed_mode"] == "quiet"
+    assert ("climate", "set_fan_mode", {"entity_id": "climate.living_ac", "fan_mode": "quiet"}) in [
+        c.args[:3] for c in ws_hass.services.async_call.call_args_list
+    ]
+
+    ws_hass.services.async_call.reset_mock()
+    connection.send_result.reset_mock()
+    await _fan_set(
+        ws_hass,
+        connection,
+        {
+            "id": 3,
+            "type": "roommind/fan/set",
+            "area_id": "living",
+            "entity_id": "fan.stand",
+            "percentage": 75,
+            "oscillating": True,
+            "direction": "reverse",
+        },
+    )
+    calls = [c.args[:3] for c in ws_hass.services.async_call.call_args_list]
+    assert ("fan", "turn_on", {"entity_id": "fan.stand", "percentage": 75}) in calls
+    assert ("fan", "oscillate", {"entity_id": "fan.stand", "oscillating": True}) in calls
+    assert ("fan", "set_direction", {"entity_id": "fan.stand", "direction": "reverse"}) in calls
+    connection.send_result.assert_called_once()

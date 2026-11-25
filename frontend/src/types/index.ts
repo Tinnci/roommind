@@ -353,6 +353,7 @@ export interface RoomConfig {
   heat_source_outdoor_threshold?: number;
   heat_source_ac_min_outdoor?: number;
   climate_control_enabled?: boolean;
+  fan_speed_mode?: string;
   live?: RoomLiveData;
 }
 

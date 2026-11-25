@@ -9,7 +9,12 @@ from homeassistant.components.climate import ClimateEntityFeature
 from homeassistant.components.fan import FanEntityFeature
 
 from ..const import MODE_COOLING, MODE_HEATING
-from .airflow_levels import fan_mode_level
+from .airflow_levels import (
+    fan_mode_level,
+    fan_preset_mode_level,
+    resolve_fan_mode_for_policy,
+    resolve_fan_target_for_policy,
+)
 from .environmental_factor_manager import AIRFLOW_ROLE_HVAC_FAN
 
 OUTCOME_APPLIED = "applied"
@@ -51,22 +56,42 @@ def plan_fan_airflow(
     config: dict[str, Any],
     attrs: dict[str, Any],
     level: float,
+    fan_speed_policy: str | None = None,
+    night_cap: float | None = None,
 ) -> AirflowCommandPlan:
     """Plan service calls for a fan entity."""
-    if level <= 0.0:
+    if level <= 0.0 and (not fan_speed_policy or fan_speed_policy.lower() == "auto"):
         return AirflowCommandPlan(
             OUTCOME_APPLIED,
             [AirflowServiceCommand("fan", "turn_off", {"entity_id": entity_id})],
             assumed_level=0.0,
         )
 
-    commands = [
-        AirflowServiceCommand(
-            "fan",
-            "turn_on",
-            {"entity_id": entity_id, "percentage": max(1, min(100, round(level * 100)))},
+    preset_modes = [str(item) for item in attrs.get("preset_modes") or []]
+    supports_speed = (
+        supports_feature(attrs, FanEntityFeature.SET_SPEED)
+        or attrs.get("percentage") is not None
+        or not preset_modes
+    )
+    policy_pct: int | None = None
+    policy_preset: str | None = None
+    if fan_speed_policy and fan_speed_policy.lower() != "auto":
+        policy_pct, policy_preset = resolve_fan_target_for_policy(
+            fan_speed_policy,
+            attrs,
+            night_cap=night_cap,
         )
-    ]
+
+    turn_on_data: dict[str, Any] = {"entity_id": entity_id}
+    effective_level = level
+    if supports_speed:
+        pct = policy_pct if policy_pct is not None else max(1, min(100, round(level * 100)))
+        if night_cap is not None:
+            pct = min(pct, max(1, min(100, round(float(night_cap) * 100))))
+        turn_on_data["percentage"] = pct
+        effective_level = pct / 100.0
+
+    commands = [AirflowServiceCommand("fan", "turn_on", turn_on_data)]
     skipped_services: list[dict[str, str]] = []
 
     direction = config.get("preferred_direction")
@@ -90,9 +115,15 @@ def plan_fan_airflow(
                 )
             )
 
-    preset_mode = config.get("preferred_preset_mode")
+    preset_mode = config.get("preferred_preset_mode") or policy_preset
+    if not preset_mode and not supports_speed and preset_modes:
+        active_presets = [mode for mode in preset_modes if mode.lower() not in {"off", "none", "stop", "stopped"}]
+        if active_presets:
+            preset_mode = min(
+                active_presets,
+                key=lambda mode: abs(fan_preset_mode_level(mode, preset_modes) - effective_level),
+            )
     if preset_mode:
-        preset_modes = [str(item) for item in attrs.get("preset_modes") or []]
         if not supports_feature(attrs, FanEntityFeature.PRESET_MODE) or (
             preset_modes and preset_mode not in preset_modes
         ):
@@ -106,7 +137,7 @@ def plan_fan_airflow(
         OUTCOME_APPLIED,
         commands,
         skipped_services=skipped_services,
-        assumed_level=level,
+        assumed_level=effective_level,
     )
 
 
@@ -121,14 +152,17 @@ def plan_climate_airflow(
     roommind_fan_only_owned: bool,
     night_active: bool = False,
     away_active: bool = False,
+    fan_speed_policy: str | None = None,
+    night_cap: float | None = None,
 ) -> AirflowCommandPlan:
     """Plan service calls for a climate airflow entity."""
     fan_modes = [str(item) for item in attrs.get("fan_modes") or []]
     preset_modes = [str(item) for item in attrs.get("preset_modes") or []]
     hvac_modes = [str(item) for item in attrs.get("hvac_modes") or []]
     active_thermal_mode = mode in (MODE_HEATING, MODE_COOLING)
+    explicit_policy = bool(fan_speed_policy and fan_speed_policy.lower() != "auto")
 
-    if level <= 0.0:
+    if level <= 0.0 and not (explicit_policy and active_thermal_mode):
         return _plan_climate_zero_level(
             entity_id=entity_id,
             fan_modes=fan_modes,
@@ -165,7 +199,16 @@ def plan_climate_airflow(
         return AirflowCommandPlan(OUTCOME_SKIPPED_OFF_CLIMATE, skip_reason="climate_off")
 
     skipped_services: list[dict[str, str]] = []
-    fan_mode = nearest_fan_mode(level, fan_modes)
+    fan_mode = (
+        resolve_fan_mode_for_policy(
+            fan_speed_policy,
+            fan_modes,
+            fallback_level=None if explicit_policy else level,
+            night_cap=night_cap,
+        )
+        if explicit_policy or night_cap is not None
+        else nearest_fan_mode(level, fan_modes)
+    )
     if fan_mode:
         if not supports_feature(attrs, ClimateEntityFeature.FAN_MODE):
             skipped_services.append({"service": "climate.set_fan_mode", "reason": "fan_mode_unsupported"})

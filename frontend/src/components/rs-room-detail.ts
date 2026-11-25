@@ -698,10 +698,13 @@ export class RsRoomDetail extends LitElement {
         .ecoHeat=${this._ecoHeat}
         .ecoCool=${this._ecoCool}
         .hasSchedule=${this._schedules.length > 0}
+        .fanSpeedMode=${this._draft.fanSpeedMode}
+        .nightCapActive=${Boolean(this.config?.live?.night_mode?.active)}
         .language=${this.hass.language}
         @climate-control-toggle=${this._onClimateControlToggle}
         @mode-changed=${this._onModeChanged}
         @baseline-target-changed=${this._onBaselineTargetChanged}
+        @fan-speed-changed=${this._onFanSpeedChanged}
       ></rs-temperature-control-panel>
     `;
   }
@@ -716,6 +719,28 @@ export class RsRoomDetail extends LitElement {
   private _onBaselineTargetChanged(e: CustomEvent<{ temperature: number }>) {
     this._draft = applyBaselineTargetChange(this._currentDraft(), e.detail.temperature);
     this._autoSave();
+  }
+
+  private async _onFanSpeedChanged(e: CustomEvent<{ fanSpeedMode: string }>) {
+    const fanSpeedMode = e.detail.fanSpeedMode;
+    this._patchDraft({ fanSpeedMode });
+    if (!this.hass?.callWS || !this.area) {
+      this._autoSave();
+      return;
+    }
+    fireSaveStatus(this, "saving");
+    this._error = "";
+    try {
+      await this.hass.callWS({
+        type: "roommind/fan/set",
+        area_id: this.area.area_id,
+        fan_speed_mode: fanSpeedMode,
+      });
+      fireSaveStatus(this, "saved");
+      this.dispatchEvent(new CustomEvent("room-updated", { bubbles: true, composed: true }));
+    } catch {
+      this._autoSave();
+    }
   }
 
   private _onModeChanged(e: CustomEvent<{ mode: ClimateMode }>) {

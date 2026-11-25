@@ -32,6 +32,7 @@ from ..const import (
     TargetTemps,
     is_override_active,
 )
+from ..managers.airflow_levels import resolve_fan_mode_for_policy
 from ..room_config import resolve_setback_offset
 from ..settings_config import mpc_control_enabled
 from ..utils.device_utils import (
@@ -1144,11 +1145,17 @@ class MPCController:
                 operations.append(mode_result)
                 _, idle_fan_mode = get_idle_action(self._devices, eid)
                 attrs = ac_state.attributes if ac_state else {}
-                fan_modes = attrs.get("fan_modes") or []
-                if idle_fan_mode and idle_fan_mode in fan_modes and attrs.get("fan_mode") != idle_fan_mode:
+                fan_modes = [str(item) for item in attrs.get("fan_modes") or []]
+                fan_policy = str(self.room_config.get("fan_speed_mode") or "auto").strip()
+                target_fan = (
+                    resolve_fan_mode_for_policy(fan_policy, fan_modes) or idle_fan_mode
+                    if fan_policy.lower() != "auto"
+                    else idle_fan_mode
+                )
+                if target_fan and target_fan in fan_modes and attrs.get("fan_mode") != target_fan:
                     fan_result = await self._call(
                         "set_fan_mode",
-                        {"entity_id": eid, "fan_mode": idle_fan_mode},
+                        {"entity_id": eid, "fan_mode": target_fan},
                     )
                     operations.append(fan_result)
                 report.record(eid, active=True, operations=tuple(operations))

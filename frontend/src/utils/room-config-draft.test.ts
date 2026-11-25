@@ -344,4 +344,30 @@ describe("room config draft", () => {
     expect(applyBaselineTargetChange(autoDraft, 26).comfortCool).toBe(26);
     expect(applyBaselineTargetChange(autoDraft, 19).comfortHeat).toBe(19);
   });
+
+  test("preserves fanSpeedMode across draft creation and save payload", () => {
+    const empty = createEmptyRoomConfigDraft();
+    expect(empty.fanSpeedMode).toBe("auto");
+
+    const draft = createRoomConfigDraft({
+      area_id: "living",
+      thermostats: [],
+      acs: [],
+      temperature_sensor: "",
+      humidity_sensor: "",
+      window_sensors: [],
+      window_open_delay: 0,
+      window_close_delay: 0,
+      climate_mode: "cool_only",
+      schedules: [],
+      schedule_selector_entity: "",
+      comfort_heat: 21,
+      comfort_cool: 24,
+      eco_heat: 17,
+      eco_cool: 27,
+      fan_speed_mode: "quiet",
+    });
+    expect(draft.fanSpeedMode).toBe("quiet");
+    expect(buildRoomSavePayload("living", draft).fan_speed_mode).toBe("quiet");
+  });
 });

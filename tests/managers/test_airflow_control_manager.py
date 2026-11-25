@@ -618,3 +618,55 @@ async def test_away_climate_uses_away_preset_over_night_preference(hass):
         "set_preset_mode",
         {"entity_id": "climate.bedroom_ac", "preset_mode": "eco"},
     ) in calls
+
+
+@pytest.mark.asyncio
+async def test_room_fan_speed_policy_applies_to_climate_devices_and_night_cap(hass):
+    hass.states.get.return_value = _state(
+        "cool",
+        {
+            "fan_mode": "auto",
+            "fan_modes": ["auto", "quiet", "low", "medium", "high", "turbo"],
+            "supported_features": int(ClimateEntityFeature.FAN_MODE),
+        },
+    )
+    mgr = AirflowControlManager(hass)
+
+    await mgr.async_apply(
+        "living",
+        {
+            "fan_speed_mode": "turbo",
+            "max_fan_level_night": 0.35,
+            "devices": [{"entity_id": "climate.living_ac", "type": "ac", "role": "auto"}],
+        },
+        mix_level=0.0,
+        mode="cooling",
+        context=AirflowRuntimeContext(night_active=False),
+    )
+
+    calls = [call.args[:3] for call in hass.services.async_call.call_args_list]
+    assert ("climate", "set_fan_mode", {"entity_id": "climate.living_ac", "fan_mode": "turbo"}) in calls
+
+    hass.services.async_call.reset_mock()
+    hass.states.get.return_value = _state(
+        "cool",
+        {
+            "fan_mode": "turbo",
+            "fan_modes": ["auto", "quiet", "low", "medium", "high", "turbo"],
+            "supported_features": int(ClimateEntityFeature.FAN_MODE),
+        },
+    )
+    await mgr.async_apply(
+        "living",
+        {
+            "fan_speed_mode": "turbo",
+            "max_fan_level_night": 0.35,
+            "devices": [{"entity_id": "climate.living_ac", "type": "ac", "role": "auto"}],
+        },
+        mix_level=0.0,
+        mode="cooling",
+        context=AirflowRuntimeContext(night_active=True),
+    )
+
+    night_calls = [call.args[:3] for call in hass.services.async_call.call_args_list]
+    assert ("climate", "set_fan_mode", {"entity_id": "climate.living_ac", "fan_mode": "low"}) in night_calls

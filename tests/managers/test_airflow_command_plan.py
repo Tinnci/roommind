@@ -5,6 +5,7 @@ from __future__ import annotations
 from custom_components.roommind.managers.airflow_command_plan import (
     AirflowServiceCommand,
     plan_climate_airflow,
+    plan_fan_airflow,
     select_climate_preset,
 )
 
@@ -70,3 +71,36 @@ def test_away_climate_preset_takes_priority_over_night_and_thermal() -> None:
         )
         == "eco"
     )
+
+
+def test_plan_fan_airflow_omits_percentage_for_preset_only_fan() -> None:
+    plan = plan_fan_airflow(
+        entity_id="fan.preset_only",
+        config={"role": "circulation"},
+        attrs={"supported_features": 8, "preset_modes": ["auto", "sleep", "turbo"]},
+        level=0.3,
+        fan_speed_policy="quiet",
+    )
+
+    assert plan.commands == [
+        AirflowServiceCommand("fan", "turn_on", {"entity_id": "fan.preset_only"}),
+        AirflowServiceCommand("fan", "set_preset_mode", {"entity_id": "fan.preset_only", "preset_mode": "sleep"}),
+    ]
+
+
+def test_plan_climate_airflow_honors_explicit_policy_and_night_cap() -> None:
+    plan = plan_climate_airflow(
+        entity_id="climate.ac",
+        config={"role": "hvac_fan"},
+        attrs={"fan_modes": ["auto", "quiet", "low", "medium", "high", "turbo"], "hvac_modes": ["off", "cool"]},
+        current_hvac_mode="cool",
+        level=0.0,
+        mode="cooling",
+        roommind_fan_only_owned=False,
+        fan_speed_policy="turbo",
+        night_cap=0.35,
+    )
+
+    assert plan.commands == [
+        AirflowServiceCommand("climate", "set_fan_mode", {"entity_id": "climate.ac", "fan_mode": "low"}),
+    ]

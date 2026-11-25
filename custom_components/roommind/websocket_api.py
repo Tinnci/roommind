@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 import time
 from copy import deepcopy
@@ -17,7 +18,9 @@ from .const import (
     OVERRIDE_TYPES,
     build_override_live,
     is_override_suppressed,
+    make_roommind_context,
 )
+from .managers.airflow_levels import resolve_fan_mode_for_policy, resolve_fan_target_for_policy
 from .room_config import ROOM_CONFIG_FIELDS, ROOM_CONFIG_SCHEMA, resolve_setback_offset
 from .services.analytics_service import (
     _compute_target_forecast,  # noqa: F401 - re-exported for tests
@@ -450,6 +453,129 @@ async def websocket_override_clear(
     connection.send_result(msg["id"], {"success": True})
 
 
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "roommind/fan/set",
+        vol.Required("area_id"): str,
+        vol.Optional("fan_speed_mode"): str,
+        vol.Optional("entity_id"): str,
+        vol.Optional("fan_mode"): str,
+        vol.Optional("percentage"): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
+        vol.Optional("preset_mode"): str,
+        vol.Optional("swing_mode"): str,
+        vol.Optional("swing_horizontal_mode"): str,
+        vol.Optional("oscillating"): bool,
+        vol.Optional("direction"): vol.In(["forward", "reverse"]),
+        vol.Optional("turn_on"): bool,
+    }
+)
+@websocket_api.async_response
+async def websocket_fan_set(
+    hass: HomeAssistant,
+    connection: ActiveConnection,
+    msg: dict,
+) -> None:
+    """Apply room-level fan_speed_mode or per-unit fan/swing/oscillation controls."""
+    store = hass.data[DOMAIN]["store"]
+    area_id = msg["area_id"]
+    room = store.get_room(area_id)
+    if room is None:
+        connection.send_error(msg["id"], "not_found", f"Room '{area_id}' not found")
+        return
+
+    applied: list[dict] = []
+    ctx = make_roommind_context()
+
+    async def _dispatch(domain: str, service: str, data: dict) -> None:
+        result = hass.services.async_call(domain, service, data, blocking=True, context=ctx)
+        if inspect.isawaitable(result):
+            await result
+        applied.append({"domain": domain, "service": service, **data})
+
+    if "fan_speed_mode" in msg:
+        mode_val = str(msg["fan_speed_mode"] or "auto").strip()
+        await store.async_update_room(area_id, {"fan_speed_mode": mode_val})
+
+        seen: set[str] = set()
+        for dev in room.get("devices", []) or []:
+            eid = dev.get("entity_id", "") if isinstance(dev, dict) else ""
+            if not eid or eid in seen or not eid.startswith("climate."):
+                continue
+            seen.add(eid)
+            st = hass.states.get(eid)
+            if st is None or str(st.state) in ("off", "unavailable", "unknown"):
+                continue
+            fan_modes = [str(m) for m in (st.attributes or {}).get("fan_modes") or []]
+            target_mode = resolve_fan_mode_for_policy(mode_val, fan_modes)
+            if target_mode and st.attributes.get("fan_mode") != target_mode:
+                await _dispatch("climate", "set_fan_mode", {"entity_id": eid, "fan_mode": target_mode})
+
+        for dev in room.get("airflow_devices", []) or []:
+            eid = dev.get("entity_id", "") if isinstance(dev, dict) else ""
+            if not eid or eid in seen:
+                continue
+            if dev.get("role") == "ventilation" or not dev.get("controllable") or not dev.get("control_enabled"):
+                continue
+            seen.add(eid)
+            st = hass.states.get(eid)
+            if st is None or str(st.state) in ("off", "unavailable", "unknown"):
+                continue
+            if eid.startswith("climate."):
+                fan_modes = [str(m) for m in (st.attributes or {}).get("fan_modes") or []]
+                target_mode = resolve_fan_mode_for_policy(mode_val, fan_modes)
+                if target_mode and st.attributes.get("fan_mode") != target_mode:
+                    await _dispatch("climate", "set_fan_mode", {"entity_id": eid, "fan_mode": target_mode})
+            elif eid.startswith("fan."):
+                pct, preset = resolve_fan_target_for_policy(mode_val, st.attributes or {})
+                if pct is not None:
+                    await _dispatch("fan", "turn_on", {"entity_id": eid, "percentage": pct})
+                if preset:
+                    await _dispatch("fan", "set_preset_mode", {"entity_id": eid, "preset_mode": preset})
+
+        coordinator = _get_coordinator(hass)
+        if coordinator:
+            await coordinator.async_request_refresh()
+
+    if "entity_id" in msg:
+        eid = msg["entity_id"]
+        st = hass.states.get(eid)
+        if st is None:
+            connection.send_error(msg["id"], "not_found", f"Entity '{eid}' not found")
+            return
+        domain = eid.split(".", 1)[0] if "." in eid else ""
+        if domain not in ("climate", "fan"):
+            connection.send_error(msg["id"], "invalid", f"Unsupported domain for fan control: '{eid}'")
+            return
+        if domain == "climate":
+            if "fan_mode" in msg:
+                await _dispatch("climate", "set_fan_mode", {"entity_id": eid, "fan_mode": msg["fan_mode"]})
+            if "swing_mode" in msg:
+                await _dispatch("climate", "set_swing_mode", {"entity_id": eid, "swing_mode": msg["swing_mode"]})
+            if "swing_horizontal_mode" in msg:
+                await _dispatch(
+                    "climate",
+                    "set_swing_horizontal_mode",
+                    {"entity_id": eid, "swing_horizontal_mode": msg["swing_horizontal_mode"]},
+                )
+            if "preset_mode" in msg:
+                await _dispatch("climate", "set_preset_mode", {"entity_id": eid, "preset_mode": msg["preset_mode"]})
+        else:
+            if msg.get("turn_on") is False or msg.get("percentage") == 0:
+                await _dispatch("fan", "turn_off", {"entity_id": eid})
+            elif "percentage" in msg:
+                await _dispatch("fan", "turn_on", {"entity_id": eid, "percentage": int(msg["percentage"])})
+            elif msg.get("turn_on") is True:
+                await _dispatch("fan", "turn_on", {"entity_id": eid})
+            if "preset_mode" in msg:
+                await _dispatch("fan", "set_preset_mode", {"entity_id": eid, "preset_mode": msg["preset_mode"]})
+            if "oscillating" in msg:
+                await _dispatch("fan", "oscillate", {"entity_id": eid, "oscillating": bool(msg["oscillating"])})
+            if "direction" in msg:
+                await _dispatch("fan", "set_direction", {"entity_id": eid, "direction": msg["direction"]})
+
+    connection.send_result(msg["id"], {"success": True, "applied": applied})
+
+
 # ---------------------------------------------------------------------------
 # Get settings
 # ---------------------------------------------------------------------------
@@ -698,6 +824,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_delete_room)
     websocket_api.async_register_command(hass, websocket_override_set)
     websocket_api.async_register_command(hass, websocket_override_clear)
+    websocket_api.async_register_command(hass, websocket_fan_set)
     websocket_api.async_register_command(hass, websocket_get_settings)
     websocket_api.async_register_command(hass, websocket_save_settings)
     websocket_api.async_register_command(hass, websocket_get_analytics)

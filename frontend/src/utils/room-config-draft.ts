@@ -61,6 +61,7 @@ export interface RoomConfigDraft {
   isOutdoor: boolean;
   valveProtectionExclude: Set<string>;
   climateControlEnabled: boolean;
+  fanSpeedMode: string;
   heatSourceOrchestration: boolean;
   heatSourcePrimaryDelta: number;
   heatSourceOutdoorThreshold: number;
@@ -119,6 +120,7 @@ export function createEmptyRoomConfigDraft(): RoomConfigDraft {
     isOutdoor: false,
     valveProtectionExclude: new Set(),
     climateControlEnabled: true,
+    fanSpeedMode: "auto",
     heatSourceOrchestration: false,
     heatSourcePrimaryDelta: 1.5,
     heatSourceOutdoorThreshold: 5.0,
@@ -218,6 +220,7 @@ export function createRoomConfigDraft(config: RoomConfig | null): RoomConfigDraf
   draft.isOutdoor = config.is_outdoor ?? false;
   draft.valveProtectionExclude = new Set(config.valve_protection_exclude ?? []);
   draft.climateControlEnabled = config.climate_control_enabled ?? true;
+  draft.fanSpeedMode = config.fan_speed_mode ?? "auto";
   draft.heatSourceOrchestration = config.heat_source_orchestration ?? false;
   draft.heatSourcePrimaryDelta = config.heat_source_primary_delta ?? 1.5;
   draft.heatSourceOutdoorThreshold = config.heat_source_outdoor_threshold ?? 5.0;
@@ -525,6 +528,7 @@ export function buildRoomSavePayload(
     display_name: draft.displayName,
     covers: [...draft.selectedCovers],
     climate_control_enabled: draft.climateControlEnabled,
+    fan_speed_mode: draft.fanSpeedMode,
     covers_auto_enabled: draft.coversAutoEnabled,
     covers_deploy_threshold: draft.coversDeployThreshold,
     covers_min_position: draft.coversMinPosition,

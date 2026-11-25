@@ -8,6 +8,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from homeassistant.components.climate import ClimateEntityFeature
 from homeassistant.core import HomeAssistant
 
 from ..const import make_roommind_context
@@ -16,8 +17,9 @@ from .airflow_command_plan import (
     AirflowCommandPlan,
     plan_climate_airflow,
     plan_fan_airflow,
+    supports_feature,
 )
-from .airflow_levels import fan_mode_level, fan_preset_mode_level
+from .airflow_levels import fan_mode_level, fan_preset_mode_level, resolve_fan_mode_for_policy
 from .environmental_factor_manager import AIRFLOW_ROLE_VENTILATION
 
 _LOGGER = logging.getLogger(__name__)
@@ -65,16 +67,19 @@ class AirflowControlManager:
         night_active = context.night_active
         away_active = context.presence_away
         night_cap = room.get("max_fan_level_night")
+        fan_speed_mode = str(room.get("fan_speed_mode") or "auto").strip()
         capped_by_night = False
         if night_active and night_cap is not None:
             capped_mix = min(mix_target, _clamp_level(float(night_cap)))
             capped_by_night = capped_mix < mix_target
             mix_target = capped_mix
         statuses: list[dict[str, Any]] = []
+        handled_eids: set[str] = set()
         for config in room.get("airflow_devices", []) or []:
             entity_id = config.get("entity_id", "")
             if not entity_id:
                 continue
+            handled_eids.add(entity_id)
             role = config.get("role", "")
             target = vent_target if role == AIRFLOW_ROLE_VENTILATION else mix_target
             domain = entity_id.split(".", 1)[0] if "." in entity_id else ""
@@ -85,9 +90,24 @@ class AirflowControlManager:
                 status.update({"outcome": OUTCOME_BLOCKED_BY_MODE, "skip_reason": "control_disabled"})
                 statuses.append(status)
                 continue
+            policy = fan_speed_mode if role != AIRFLOW_ROLE_VENTILATION and fan_speed_mode.lower() != "auto" else None
+            effective_night_cap = (
+                _clamp_level(float(night_cap))
+                if night_active and night_cap is not None and role != AIRFLOW_ROLE_VENTILATION
+                else None
+            )
             try:
                 if domain == "fan":
-                    status.update(await self._apply_fan(area_id, entity_id, config, target))
+                    status.update(
+                        await self._apply_fan(
+                            area_id,
+                            entity_id,
+                            config,
+                            target,
+                            fan_speed_policy=policy,
+                            night_cap=effective_night_cap,
+                        )
+                    )
                 elif domain == "climate":
                     status.update(
                         await self._apply_climate(
@@ -98,6 +118,8 @@ class AirflowControlManager:
                             mode,
                             night_active,
                             away_active,
+                            fan_speed_policy=policy,
+                            night_cap=effective_night_cap,
                         )
                     )
                 else:
@@ -108,12 +130,89 @@ class AirflowControlManager:
             status["roommind_fan_only"] = entity_id in self._roommind_fan_only
             status.update(self._assumed_status(entity_id, config))
             statuses.append(status)
+
+        await self._apply_room_climate_fan_policy(
+            area_id,
+            room,
+            handled_eids=handled_eids,
+            fan_speed_mode=fan_speed_mode,
+            night_active=night_active,
+            night_cap=_clamp_level(float(night_cap)) if night_cap is not None else None,
+        )
         return statuses
 
-    async def _apply_fan(self, area_id: str, entity_id: str, config: dict, level: float) -> dict[str, Any]:
+    async def _apply_room_climate_fan_policy(
+        self,
+        area_id: str,
+        room: dict,
+        *,
+        handled_eids: set[str],
+        fan_speed_mode: str,
+        night_active: bool,
+        night_cap: float | None,
+    ) -> None:
+        explicit_policy = fan_speed_mode.lower() != "auto"
+        apply_night_cap = night_active and night_cap is not None
+        if not explicit_policy and not apply_night_cap:
+            return
+        for device in room.get("devices", []) or []:
+            eid = device.get("entity_id", "") if isinstance(device, dict) else ""
+            if not eid or eid in handled_eids or not eid.startswith("climate."):
+                continue
+            state = self.hass.states.get(eid)
+            if state is None or str(state.state) in ("off", "unavailable", "unknown"):
+                continue
+            attrs = state.attributes or {}
+            fan_modes = [str(item) for item in attrs.get("fan_modes") or []]
+            if not fan_modes or not supports_feature(attrs, ClimateEntityFeature.FAN_MODE):
+                continue
+            current_hvac = str(state.state)
+            current_fan = attrs.get("fan_mode")
+            cap = night_cap if apply_night_cap else None
+            if not explicit_policy:
+                if (
+                    current_hvac == "dry"
+                    or current_fan is None
+                    or cap is None
+                    or fan_mode_level(str(current_fan), fan_modes) <= cap + 0.05
+                ):
+                    continue
+                desired = resolve_fan_mode_for_policy("auto", fan_modes, night_cap=cap)
+            else:
+                if current_hvac == "dry" and fan_speed_mode.lower() not in [m.lower() for m in fan_modes]:
+                    continue
+                desired = resolve_fan_mode_for_policy(fan_speed_mode, fan_modes, night_cap=cap)
+            if desired and current_fan != desired:
+                try:
+                    await self._call(
+                        area_id,
+                        "climate",
+                        "set_fan_mode",
+                        {"entity_id": eid, "fan_mode": desired},
+                    )
+                except Exception:  # noqa: BLE001
+                    _LOGGER.warning("Room '%s': climate fan policy failed for '%s'", area_id, eid, exc_info=True)
+
+    async def _apply_fan(
+        self,
+        area_id: str,
+        entity_id: str,
+        config: dict,
+        level: float,
+        *,
+        fan_speed_policy: str | None = None,
+        night_cap: float | None = None,
+    ) -> dict[str, Any]:
         state = self.hass.states.get(entity_id)
         attrs = state.attributes if state else {}
-        plan = plan_fan_airflow(entity_id=entity_id, config=config, attrs=attrs, level=level)
+        plan = plan_fan_airflow(
+            entity_id=entity_id,
+            config=config,
+            attrs=attrs,
+            level=level,
+            fan_speed_policy=fan_speed_policy,
+            night_cap=night_cap,
+        )
         return await self._execute_plan(area_id, entity_id, plan)
 
     async def _apply_climate(
@@ -125,6 +224,9 @@ class AirflowControlManager:
         mode: str,
         night_active: bool = False,
         away_active: bool = False,
+        *,
+        fan_speed_policy: str | None = None,
+        night_cap: float | None = None,
     ) -> dict[str, Any]:
         state = self.hass.states.get(entity_id)
         attrs = state.attributes if state else {}
@@ -139,6 +241,8 @@ class AirflowControlManager:
             roommind_fan_only_owned=entity_id in self._roommind_fan_only,
             night_active=night_active,
             away_active=away_active,
+            fan_speed_policy=fan_speed_policy,
+            night_cap=night_cap,
         )
         return await self._execute_plan(area_id, entity_id, plan)
 
