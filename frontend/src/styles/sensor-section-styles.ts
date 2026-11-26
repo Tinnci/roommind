@@ -76,6 +76,8 @@ export const sensorSectionStyles = css`
     border-radius: 8px;
     background: var(--roommind-surface-muted);
     color: var(--secondary-text-color);
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .count-chip.has-selection {
@@ -130,7 +132,7 @@ export const sensorSectionStyles = css`
 
   .sensor-table-row {
     display: grid;
-    grid-template-columns: 32px minmax(0, 1fr) auto auto auto;
+    grid-template-columns: 32px minmax(0, 1fr) auto auto auto auto;
     align-items: center;
     gap: 10px;
     min-width: 0;
@@ -331,6 +333,54 @@ export const sensorSectionStyles = css`
     border-radius: 8px;
     letter-spacing: 0;
     text-transform: uppercase;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .filtered-sensors-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 4px;
+    padding-top: 8px;
+    border-top: var(--roommind-border-faint);
+  }
+
+  .filtered-sensors-toggle {
+    display: inline-flex;
+    align-items: center;
+    align-self: flex-start;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: var(--roommind-border-subtle);
+    background: var(--roommind-surface);
+    color: var(--secondary-text-color);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    --mdc-icon-size: 14px;
+  }
+
+  .filtered-sensors-toggle:hover {
+    color: var(--primary-color);
+    border-color: var(--roommind-primary-border);
+  }
+
+  .filtered-reason-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 9.5px;
+    font-weight: 600;
+    color: var(--secondary-text-color);
+    background: var(--roommind-surface-muted);
+    padding: 1px 6px;
+    border-radius: 8px;
+    letter-spacing: 0;
+    text-transform: uppercase;
+    white-space: nowrap;
     flex-shrink: 0;
   }
 
@@ -544,6 +594,8 @@ export const sensorSectionStyles = css`
     font-weight: 600;
     color: var(--primary-color);
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .fusion-list {
@@ -592,6 +644,7 @@ export const sensorSectionStyles = css`
     color: var(--secondary-text-color);
     background: var(--roommind-surface-muted);
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
 
   .fusion-chip.primary {
@@ -609,7 +662,7 @@ export const sensorSectionStyles = css`
     background: var(--roommind-error-tint);
   }
 
-  @media (max-width: 520px) {
+  @media (max-width: 680px) {
     .sensor-table-row {
       grid-template-columns: 32px minmax(0, 1fr);
       align-items: start;

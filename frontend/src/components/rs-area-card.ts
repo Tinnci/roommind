@@ -169,7 +169,9 @@ export class RsAreaCard extends LitElement {
         display: flex;
         align-items: flex-start;
         justify-content: space-between;
+        flex-wrap: wrap;
         gap: 10px;
+        row-gap: 6px;
         min-width: 0;
       }
 
@@ -189,7 +191,7 @@ export class RsAreaCard extends LitElement {
         margin: 0;
         min-width: 0;
         line-height: 1.25;
-        overflow-wrap: anywhere;
+        overflow-wrap: break-word;
         white-space: normal;
       }
 
@@ -228,7 +230,7 @@ export class RsAreaCard extends LitElement {
         padding: 2px 9px;
         border-radius: 8px;
         max-width: 100%;
-        white-space: normal;
+        white-space: nowrap;
       }
 
       .mode-dot {
@@ -266,6 +268,7 @@ export class RsAreaCard extends LitElement {
         align-items: baseline;
         gap: 4px;
         min-width: 0;
+        white-space: nowrap;
       }
 
       .current-temp,
@@ -299,6 +302,7 @@ export class RsAreaCard extends LitElement {
         min-width: 0;
         font-weight: 600;
         color: var(--primary-text-color);
+        white-space: nowrap;
       }
 
       .delta-chip {
@@ -310,6 +314,7 @@ export class RsAreaCard extends LitElement {
         font-weight: 600;
         line-height: 1.25;
         color: var(--secondary-text-color);
+        white-space: nowrap;
         --mdc-icon-size: 13px;
       }
 
@@ -365,6 +370,7 @@ export class RsAreaCard extends LitElement {
         padding: 2px 6px;
         border-radius: 6px;
         background: var(--roommind-tile-surface, rgba(0, 0, 0, 0.04));
+        white-space: nowrap;
         --mdc-icon-size: 13px;
       }
 
@@ -388,6 +394,7 @@ export class RsAreaCard extends LitElement {
         border: var(--roommind-border-faint, 1px solid rgba(0, 0, 0, 0.08));
         color: var(--secondary-text-color);
         max-width: 100%;
+        white-space: nowrap;
         font-variant-numeric: tabular-nums;
       }
 
@@ -423,7 +430,9 @@ export class RsAreaCard extends LitElement {
         display: flex;
         align-items: flex-start;
         justify-content: space-between;
+        flex-wrap: wrap;
         gap: 10px;
+        row-gap: 4px;
         margin-top: 10px;
         min-height: 20px;
       }
@@ -435,6 +444,7 @@ export class RsAreaCard extends LitElement {
         font-size: 12px;
         font-weight: 500;
         color: var(--secondary-text-color);
+        white-space: nowrap;
         min-height: 22px;
       }
 
@@ -516,8 +526,9 @@ export class RsAreaCard extends LitElement {
       .outdoor-badge {
         max-width: 100%;
         line-height: 1.25;
-        overflow-wrap: anywhere;
-        white-space: normal;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .status-badge ha-icon,
@@ -548,6 +559,7 @@ export class RsAreaCard extends LitElement {
         display: inline-flex;
         align-items: center;
         gap: 8px;
+        row-gap: 4px;
         flex-wrap: wrap;
         min-width: 0;
       }

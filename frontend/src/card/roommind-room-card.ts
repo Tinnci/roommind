@@ -309,6 +309,7 @@ export class RoomMindRoomCard extends LitElement {
         display: flex;
         align-items: center;
         justify-content: space-between;
+        flex-wrap: wrap;
         gap: 8px;
       }
       .card-name {
@@ -327,6 +328,8 @@ export class RoomMindRoomCard extends LitElement {
         font-weight: 600;
         padding: 2px 8px;
         border-radius: 999px;
+        white-space: nowrap;
+        flex-shrink: 0;
       }
       .status-pill.warn,
       .status-pill[data-tone="warning"] {
@@ -349,6 +352,7 @@ export class RoomMindRoomCard extends LitElement {
         display: flex;
         align-items: center;
         justify-content: space-between;
+        flex-wrap: wrap;
         gap: 12px;
         margin-top: 12px;
       }
@@ -356,15 +360,21 @@ export class RoomMindRoomCard extends LitElement {
         display: flex;
         align-items: baseline;
         gap: 8px;
+        white-space: nowrap;
+        flex-shrink: 0;
       }
       .metric-val {
         font-size: 24px;
         font-weight: 650;
         font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        flex-shrink: 0;
       }
       .metric-sub {
         font-size: 12.5px;
         color: var(--secondary-text-color);
+        white-space: nowrap;
+        flex-shrink: 0;
       }
       .target-controls {
         display: flex;
@@ -379,6 +389,8 @@ export class RoomMindRoomCard extends LitElement {
         background: var(--secondary-background-color, transparent);
         color: var(--primary-text-color);
         font-size: 16px;
+        white-space: nowrap;
+        flex-shrink: 0;
         cursor: pointer;
       }
       .target-readout {
@@ -391,6 +403,8 @@ export class RoomMindRoomCard extends LitElement {
         font-size: 14px;
         font-weight: 600;
         font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        flex-shrink: 0;
       }
       .override-clear {
         background: none;
@@ -398,6 +412,8 @@ export class RoomMindRoomCard extends LitElement {
         padding: 0;
         color: var(--primary-color);
         font-size: 11px;
+        white-space: nowrap;
+        flex-shrink: 0;
         cursor: pointer;
       }
       .card-footer {

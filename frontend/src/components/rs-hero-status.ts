@@ -92,6 +92,7 @@ export class RsHeroStatus extends LitElement {
         margin-top: 2px;
         font-size: 11px;
         font-weight: 600;
+        white-space: nowrap;
         --mdc-icon-size: 13px;
       }
 
@@ -137,6 +138,7 @@ export class RsHeroStatus extends LitElement {
       .hero-temps {
         display: inline-flex;
         align-items: center;
+        flex-wrap: wrap;
         gap: 14px;
         min-width: 0;
         flex-shrink: 0;
@@ -151,6 +153,7 @@ export class RsHeroStatus extends LitElement {
         align-items: baseline;
         gap: 4px;
         min-width: 0;
+        white-space: nowrap;
       }
 
       .hero-current {
@@ -193,6 +196,7 @@ export class RsHeroStatus extends LitElement {
         letter-spacing: -0.02em;
         color: var(--primary-text-color);
         line-height: 1.15;
+        white-space: nowrap;
       }
 
       /* Override-aware target styling */
@@ -226,6 +230,7 @@ export class RsHeroStatus extends LitElement {
         color: var(--secondary-text-color);
         background: var(--roommind-surface-subtle);
         border: 1px solid transparent;
+        white-space: nowrap;
         box-sizing: border-box;
       }
 
@@ -345,6 +350,7 @@ export class RsHeroStatus extends LitElement {
         cursor: pointer;
         padding: 2px 0;
         text-decoration: underline;
+        white-space: nowrap;
       }
 
       .hero-status-pills {
@@ -365,6 +371,7 @@ export class RsHeroStatus extends LitElement {
         border-radius: 7px;
         background: var(--roommind-tile-surface, var(--secondary-background-color));
         color: var(--secondary-text-color);
+        white-space: nowrap;
       }
 
       .reason-pill[data-tone="warning"] {
@@ -430,6 +437,7 @@ export class RsHeroStatus extends LitElement {
         gap: 4px;
         font-size: 11px;
         color: var(--secondary-text-color);
+        white-space: nowrap;
         cursor: pointer;
       }
       .control-mode-info-icon {

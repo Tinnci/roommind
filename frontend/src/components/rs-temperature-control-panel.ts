@@ -186,6 +186,8 @@ export class RsTemperatureControlPanel extends LitElement {
         justify-content: center;
         gap: 5px;
         min-width: 0;
+        white-space: nowrap;
+        flex-shrink: 0;
         border-radius: var(--roommind-radius-control, 8px);
         border: var(--roommind-border-subtle);
         background: var(--roommind-panel-surface);
@@ -317,6 +319,7 @@ export class RsTemperatureControlPanel extends LitElement {
 
       .duration-buttons {
         display: inline-flex;
+        flex-wrap: wrap;
         gap: 4px;
       }
 

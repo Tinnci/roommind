@@ -34,7 +34,9 @@ export class RsSectionCard extends LitElement {
       .section-header {
         display: flex;
         align-items: center;
+        flex-wrap: wrap;
         gap: 10px;
+        row-gap: 8px;
         min-height: var(--roommind-header-min-height, 38px);
         padding: 11px 16px;
         background: var(--roommind-surface);
@@ -65,10 +67,10 @@ export class RsSectionCard extends LitElement {
         font-weight: 650;
         color: var(--primary-text-color);
         margin: 0;
-        flex: 1;
+        flex: 1 1 140px;
         min-width: 0;
         line-height: 1.3;
-        overflow-wrap: anywhere;
+        overflow-wrap: break-word;
         white-space: normal;
       }
 
@@ -77,6 +79,7 @@ export class RsSectionCard extends LitElement {
         --mdc-icon-size: 18px;
         color: var(--secondary-text-color);
         margin: -4px -8px -4px 0;
+        flex-shrink: 0;
         opacity: 0.58;
         transition:
           opacity 0.15s ease,

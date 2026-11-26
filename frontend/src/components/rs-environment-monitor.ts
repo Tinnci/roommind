@@ -64,7 +64,7 @@ export class RsEnvironmentMonitor extends LitElement {
         flex-direction: column;
         gap: 3px;
         min-width: 0;
-        flex: 1 1 240px;
+        flex: 1 1 200px;
       }
 
       .quickstart-title {
@@ -91,6 +91,8 @@ export class RsEnvironmentMonitor extends LitElement {
         font: inherit;
         font-size: 12.5px;
         font-weight: 600;
+        white-space: nowrap;
+        flex-shrink: 0;
         cursor: pointer;
         --mdc-icon-size: 16px;
       }
@@ -101,7 +103,7 @@ export class RsEnvironmentMonitor extends LitElement {
 
       .summary-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(min(155px, 100%), 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(min(165px, 100%), 1fr));
         gap: 8px;
       }
 
@@ -130,6 +132,7 @@ export class RsEnvironmentMonitor extends LitElement {
         font-weight: 650;
         color: var(--primary-text-color);
         font-variant-numeric: tabular-nums;
+        white-space: nowrap;
         --mdc-icon-size: 16px;
       }
 
@@ -171,7 +174,9 @@ export class RsEnvironmentMonitor extends LitElement {
         display: flex;
         align-items: baseline;
         justify-content: space-between;
+        flex-wrap: wrap;
         gap: 8px;
+        row-gap: 2px;
       }
 
       .trend-title {
@@ -185,6 +190,7 @@ export class RsEnvironmentMonitor extends LitElement {
         font-weight: 650;
         font-variant-numeric: tabular-nums;
         color: var(--secondary-text-color);
+        white-space: nowrap;
       }
 
       .trend-delta.up {
@@ -205,7 +211,9 @@ export class RsEnvironmentMonitor extends LitElement {
         display: flex;
         align-items: baseline;
         justify-content: space-between;
+        flex-wrap: wrap;
         gap: 8px;
+        row-gap: 2px;
         font-size: 11.5px;
         color: var(--secondary-text-color);
         font-variant-numeric: tabular-nums;
@@ -214,6 +222,7 @@ export class RsEnvironmentMonitor extends LitElement {
       .trend-current {
         font-weight: 650;
         color: var(--primary-text-color);
+        white-space: nowrap;
       }
 
       .trend-empty {
@@ -242,6 +251,8 @@ export class RsEnvironmentMonitor extends LitElement {
         font: inherit;
         font-size: 11.5px;
         font-weight: 600;
+        white-space: nowrap;
+        flex-shrink: 0;
         cursor: pointer;
         --mdc-icon-size: 14px;
       }
@@ -341,6 +352,7 @@ export class RsEnvironmentMonitor extends LitElement {
         border-radius: 5px;
         background: var(--roommind-surface-muted);
         font-weight: 600;
+        white-space: nowrap;
       }
 
       .sensor-tag.primary {
@@ -358,6 +370,7 @@ export class RsEnvironmentMonitor extends LitElement {
         font-weight: 650;
         font-variant-numeric: tabular-nums;
         color: var(--primary-text-color);
+        white-space: nowrap;
         flex: 0 0 auto;
       }
 

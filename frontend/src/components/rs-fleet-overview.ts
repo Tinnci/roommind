@@ -78,6 +78,8 @@ export class RsFleetOverview extends LitElement {
       background: var(--roommind-surface-subtle, rgba(0, 0, 0, 0.03));
       border: var(--roommind-border-faint, 1px solid rgba(0, 0, 0, 0.08));
       font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
 
     .kpi strong {
@@ -110,6 +112,8 @@ export class RsFleetOverview extends LitElement {
       color: var(--secondary-text-color);
       font-size: 12px;
       font-weight: 500;
+      white-space: nowrap;
+      flex-shrink: 0;
       cursor: pointer;
       transition: all 0.15s ease;
       font-family: inherit;

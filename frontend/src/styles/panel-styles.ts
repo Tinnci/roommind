@@ -17,7 +17,8 @@ export const panelStyles = css`
   .toolbar {
     display: flex;
     align-items: center;
-    height: 56px;
+    gap: 6px;
+    min-height: 56px;
     padding: 0 12px;
     font-size: 20px;
     background-color: var(--app-header-background-color, var(--primary-background-color));
@@ -32,6 +33,7 @@ export const panelStyles = css`
   .toolbar .title {
     margin-left: 4px;
     font-weight: 400;
+    min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -45,6 +47,7 @@ export const panelStyles = css`
   .toolbar-view-switch {
     display: inline-flex;
     align-items: center;
+    flex-shrink: 0;
     gap: 2px;
     padding: 3px;
     margin-right: 6px;
@@ -65,6 +68,8 @@ export const panelStyles = css`
     font-family: inherit;
     font-size: 12px;
     font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
     cursor: pointer;
     --mdc-icon-size: 15px;
     transition:
@@ -86,6 +91,8 @@ export const panelStyles = css`
     font-size: 13px;
     font-weight: 400;
     margin-right: 8px;
+    white-space: nowrap;
+    flex-shrink: 0;
     opacity: 1;
     transition: opacity 0.3s ease;
   }
@@ -119,6 +126,8 @@ export const panelStyles = css`
     position: sticky;
     top: 56px;
     z-index: 3;
+    overflow-x: auto;
+    scrollbar-width: none;
   }
 
   .tab {
@@ -129,6 +138,8 @@ export const panelStyles = css`
     color: var(--secondary-text-color);
     font-size: 14px;
     font-weight: 500;
+    white-space: nowrap;
+    flex-shrink: 0;
     border-bottom: 2px solid transparent;
     transition: all 0.2s ease;
     font-family: inherit;

@@ -16,6 +16,8 @@ export class RsBadge extends LitElement {
     }
 
     .badge {
+      display: inline-flex;
+      align-items: center;
       font-size: 10px;
       font-weight: 600;
       color: var(--primary-color);
@@ -24,6 +26,8 @@ export class RsBadge extends LitElement {
       border-radius: 4px;
       letter-spacing: 0;
       text-transform: uppercase;
+      white-space: nowrap;
+      flex-shrink: 0;
       cursor: default;
     }
   `;

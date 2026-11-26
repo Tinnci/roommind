@@ -148,6 +148,7 @@ export class RsDeviceSection extends LitElement {
         font-size: 14px;
         font-weight: 500;
         color: var(--primary-text-color);
+        white-space: nowrap;
         flex-shrink: 0;
       }
 
@@ -171,6 +172,7 @@ export class RsDeviceSection extends LitElement {
         border-radius: 8px;
         letter-spacing: 0;
         text-transform: uppercase;
+        white-space: nowrap;
         flex-shrink: 0;
       }
 
@@ -271,6 +273,8 @@ export class RsDeviceSection extends LitElement {
         font: inherit;
         font-size: 13px;
         font-weight: 600;
+        white-space: nowrap;
+        flex-shrink: 0;
         cursor: pointer;
         --mdc-icon-size: 16px;
       }

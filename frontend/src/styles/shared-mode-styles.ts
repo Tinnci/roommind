@@ -13,12 +13,18 @@ export const modeStyles = css`
     font-weight: 500;
     padding: 4px 14px;
     border-radius: var(--roommind-radius-control, 8px);
+    white-space: nowrap;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 0;
   }
 
   .mode-dot {
     width: 8px;
     height: 8px;
     border-radius: 50%;
+    flex-shrink: 0;
   }
 
   .mode-pill.mode-unverified-output .mode-dot {

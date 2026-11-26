@@ -239,6 +239,8 @@ export class RsRoomConfigurationHub extends LitElement {
       font: inherit;
       font-size: 12px;
       font-weight: 600;
+      white-space: nowrap;
+      flex-shrink: 0;
       cursor: pointer;
     }
 
@@ -259,8 +261,8 @@ export class RsRoomConfigurationHub extends LitElement {
     }
 
     .role-bar {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      display: flex;
+      flex-wrap: wrap;
       gap: 6px;
       margin-bottom: 10px;
     }
@@ -269,7 +271,9 @@ export class RsRoomConfigurationHub extends LitElement {
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      flex: 1 1 auto;
       gap: 6px;
+      min-height: 34px;
       padding: 7px 10px;
       border-radius: 9px;
       border: var(--roommind-border-faint);
@@ -278,6 +282,7 @@ export class RsRoomConfigurationHub extends LitElement {
       font: inherit;
       font-size: 12px;
       font-weight: 600;
+      white-space: nowrap;
       cursor: pointer;
       --mdc-icon-size: 15px;
       transition:
@@ -326,6 +331,8 @@ export class RsRoomConfigurationHub extends LitElement {
       font: inherit;
       font-size: 11.5px;
       font-weight: 600;
+      white-space: nowrap;
+      flex-shrink: 0;
       cursor: pointer;
     }
 
@@ -336,7 +343,7 @@ export class RsRoomConfigurationHub extends LitElement {
 
     .config-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(min(195px, 100%), 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
       gap: 8px;
     }
 
@@ -462,7 +469,7 @@ export class RsRoomConfigurationHub extends LitElement {
       font-size: 13px;
       font-weight: 600;
       line-height: 1.3;
-      overflow-wrap: anywhere;
+      overflow-wrap: break-word;
       white-space: normal;
     }
 
@@ -477,8 +484,7 @@ export class RsRoomConfigurationHub extends LitElement {
       font-size: 10.5px;
       font-weight: 600;
       line-height: 1.5;
-      overflow-wrap: anywhere;
-      white-space: normal;
+      white-space: nowrap;
     }
 
     .complete .config-status {
@@ -500,7 +506,7 @@ export class RsRoomConfigurationHub extends LitElement {
       color: var(--secondary-text-color);
       font-size: 11.5px;
       line-height: 1.35;
-      overflow-wrap: anywhere;
+      overflow-wrap: break-word;
       white-space: normal;
     }
 
