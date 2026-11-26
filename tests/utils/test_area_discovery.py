@@ -17,6 +17,9 @@ def _make_entry(
     disabled_by: str | None = None,
     device_class: str | None = None,
     original_device_class: str | None = None,
+    entity_category: str | None = None,
+    name: str | None = None,
+    original_name: str | None = None,
 ):
     return SimpleNamespace(
         entity_id=entity_id,
@@ -26,6 +29,9 @@ def _make_entry(
         disabled_by=disabled_by,
         device_class=device_class,
         original_device_class=original_device_class,
+        entity_category=entity_category,
+        name=name,
+        original_name=original_name,
     )
 
 
@@ -92,4 +98,87 @@ def test_suggest_area_entities_classifies_direct_and_device_inherited_entities(m
     assert suggestion["covers"] == ["cover.living_blinds"]
     assert suggestion["airflow_devices"] == [
         {"entity_id": "fan.living_ceiling", "role": "circulation", "controllable": True, "control_enabled": False}
+    ]
+
+
+def test_suggest_area_entities_filters_appliance_diagnostic_and_outdoor_temps(monkeypatch):
+    entries = {
+        # Dining room: water heater + purifier only -> 0 ambient temps
+        "water_heater.xiaomi_cn_2060084384_ymm5_s_2_water_heater": _make_entry(
+            "water_heater.xiaomi_cn_2060084384_ymm5_s_2_water_heater",
+            device_id="dev_waterheater",
+            platform="xiaomi_home",
+        ),
+        "sensor.xiaomi_cn_2060084384_ymm5_temperature_p_4_4": _make_entry(
+            "sensor.xiaomi_cn_2060084384_ymm5_temperature_p_4_4",
+            device_id="dev_waterheater",
+            platform="xiaomi_home",
+            device_class="temperature",
+            original_name=" 使用记录 温度",
+        ),
+        "sensor.chunmi_cn_395394739_tsa1_temperature_p_2_5": _make_entry(
+            "sensor.chunmi_cn_395394739_tsa1_temperature_p_2_5",
+            device_id="dev_purifier",
+            platform="xiaomi_home",
+            device_class="temperature",
+            original_name="出水温度",
+        ),
+        # Bedroom: keep ambient zM1/ATC sensors, drop AC diagnostic & outdoor temps
+        "sensor.wo_shi_2_kong_diao_2_2": _make_entry(
+            "sensor.wo_shi_2_kong_diao_2_2",
+            device_id="dev_ac2",
+            platform="tcl_udp_ac",
+            device_class="temperature",
+            entity_category="diagnostic",
+            original_name="室内机盘管温度",
+        ),
+        "sensor.wo_shi_2_kong_diao_2_22": _make_entry(
+            "sensor.wo_shi_2_kong_diao_2_22",
+            device_id="dev_ac2",
+            platform="tcl_udp_ac",
+            device_class="temperature",
+            original_name="室外温度",
+        ),
+        "sensor.wo_shi_zm1_ad46_temperature": _make_entry(
+            "sensor.wo_shi_zm1_ad46_temperature",
+            area_id="wo_shi",
+            platform="zm1",
+            device_class="temperature",
+            original_name="温度",
+        ),
+        "sensor.wo_shi_atc_6e73_temperature": _make_entry(
+            "sensor.wo_shi_atc_6e73_temperature",
+            area_id="ke_ting",
+            platform="bthome",
+            device_class="temperature",
+            original_name="温度",
+        ),
+        "sensor.temperature_humidity_sensor_with_button_a248_temperature": _make_entry(
+            "sensor.temperature_humidity_sensor_with_button_a248_temperature",
+            area_id="ke_ting",
+            platform="xiaomi_ble",
+            device_class="temperature",
+            original_name="温度",
+        ),
+    }
+    entity_reg = SimpleNamespace(entities=entries)
+    devices_map = {
+        "dev_waterheater": SimpleNamespace(area_id="can_ting", name="米家智能恒温燃气热水器16L S10", model="xiaomi.waterheater.ymm5"),
+        "dev_purifier": SimpleNamespace(area_id="can_ting", name="小米台式净饮机", model="chunmi.ysj.tsa1"),
+        "dev_ac2": SimpleNamespace(area_id="wo_shi_2", name="TCL AC", model="KFRd-35G"),
+    }
+    device_reg = SimpleNamespace(async_get=devices_map.get)
+
+    monkeypatch.setattr("custom_components.roommind.utils.area_discovery.er.async_get", lambda _hass: entity_reg)
+    monkeypatch.setattr("custom_components.roommind.utils.area_discovery.dr.async_get", lambda _hass: device_reg)
+
+    hass = MagicMock()
+    hass.states.get = MagicMock(return_value=None)
+
+    assert suggest_area_entities(hass, "can_ting")["temperature_sensors"] == []
+    assert suggest_area_entities(hass, "wo_shi_2")["temperature_sensors"] == []
+    assert suggest_area_entities(hass, "wo_shi")["temperature_sensors"] == ["sensor.wo_shi_zm1_ad46_temperature"]
+    assert suggest_area_entities(hass, "ke_ting")["temperature_sensors"] == [
+        "sensor.temperature_humidity_sensor_with_button_a248_temperature",
+        "sensor.wo_shi_atc_6e73_temperature",
     ]

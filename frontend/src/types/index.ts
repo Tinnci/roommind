@@ -633,6 +633,9 @@ export interface HassEntityRegistryEntry {
   area_id: string | null;
   device_id: string | null;
   platform: string;
+  entity_category?: string | null;
+  hidden?: boolean;
+  name?: string | null;
 }
 
 export interface HassDeviceRegistryEntry {
@@ -640,6 +643,9 @@ export interface HassDeviceRegistryEntry {
   area_id: string | null;
   name?: string | null;
   name_by_user?: string | null;
+  manufacturer?: string | null;
+  model?: string | null;
+  model_id?: string | null;
 }
 
 export interface HassEntity {

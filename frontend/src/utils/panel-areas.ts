@@ -7,6 +7,7 @@ import {
   isRoomMindEntity,
   resolveRoomModePresentation,
 } from "./room-state";
+import { classifyNonAmbientTempSensor, isDiagnosticOrConfigEntity } from "./ambient-sensor-filter";
 import { hasConfiguredSensors } from "./environment-monitor";
 import { isRoomControlEffective } from "./room-overview-status";
 import { formatTemp, tempUnit } from "./temperature";
@@ -119,11 +120,13 @@ export function computeAreaInfos(
     const tempSensorCount = areaEntities.filter(
       (e) =>
         e.entity_id.startsWith("sensor.") &&
-        hass.states[e.entity_id]?.attributes?.device_class === "temperature",
+        hass.states[e.entity_id]?.attributes?.device_class === "temperature" &&
+        classifyNonAmbientTempSensor(e.entity_id, hass) === null,
     ).length;
     const humiditySensorCount = areaEntities.filter(
       (e) =>
         e.entity_id.startsWith("sensor.") &&
+        !isDiagnosticOrConfigEntity(e.entity_id, hass) &&
         hass.states[e.entity_id]?.attributes?.device_class === "humidity",
     ).length;
 

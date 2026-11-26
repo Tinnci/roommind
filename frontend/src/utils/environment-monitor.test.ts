@@ -291,4 +291,89 @@ describe("environment-monitor", () => {
     expect(summary!.path.startsWith("M0,")).toBe(true);
     expect(summary!.areaPath.endsWith("Z")).toBe(true);
   });
+
+  test("excludes non-ambient sensors from inspectAreaSensors unless explicitly configured", () => {
+    const hass = {
+      language: "en",
+      config: { unit_system: { temperature: "°C" } },
+      areas: {
+        can_ting: { area_id: "can_ting", name: "Dining", picture: null, floor_id: null },
+      },
+      devices: {
+        dev_wh: { id: "dev_wh", area_id: "can_ting", model: "xiaomi.waterheater.ymm5" },
+        dev_purifier: { id: "dev_purifier", area_id: "can_ting", model: "chunmi.ysj.tsa1" },
+      },
+      entities: {
+        "water_heater.wh": {
+          entity_id: "water_heater.wh",
+          area_id: null,
+          device_id: "dev_wh",
+          platform: "xiaomi_home",
+        },
+        "sensor.wh_temp": {
+          entity_id: "sensor.wh_temp",
+          area_id: null,
+          device_id: "dev_wh",
+          platform: "xiaomi_home",
+        },
+        "sensor.purifier_temp": {
+          entity_id: "sensor.purifier_temp",
+          area_id: null,
+          device_id: "dev_purifier",
+          platform: "xiaomi_home",
+        },
+        "sensor.outdoor_temp": {
+          entity_id: "sensor.outdoor_temp",
+          area_id: "can_ting",
+          device_id: null,
+          platform: "tcl_udp_ac",
+        },
+      },
+      states: {
+        "sensor.wh_temp": {
+          entity_id: "sensor.wh_temp",
+          state: "45.0",
+          attributes: {
+            device_class: "temperature",
+            unit_of_measurement: "°C",
+            friendly_name: "使用记录 温度",
+          },
+        },
+        "sensor.purifier_temp": {
+          entity_id: "sensor.purifier_temp",
+          state: "27.0",
+          attributes: {
+            device_class: "temperature",
+            unit_of_measurement: "°C",
+            friendly_name: "出水温度",
+          },
+        },
+        "sensor.outdoor_temp": {
+          entity_id: "sensor.outdoor_temp",
+          state: "16.0",
+          attributes: {
+            device_class: "temperature",
+            unit_of_measurement: "°C",
+            friendly_name: "室外温度",
+          },
+        },
+      },
+    } as unknown as HomeAssistant;
+
+    const unconfiguredInv = inspectAreaSensors("can_ting", hass, null);
+    expect(unconfiguredInv.temperatureSensors).toEqual([]);
+    expect(unconfiguredInv.previewTempC).toBeNull();
+    expect(unconfiguredInv.unlinkedSensorCount).toBe(0);
+
+    // Layer 3: if user explicitly configured one anyway, keep it visible
+    const configuredOverride = inspectAreaSensors(
+      "can_ting",
+      hass,
+      makeRoom({ area_id: "can_ting", temperature_sensor: "sensor.purifier_temp" }),
+    );
+    expect(configuredOverride.temperatureSensors.map((s) => s.entityId)).toEqual([
+      "sensor.purifier_temp",
+    ]);
+    expect(configuredOverride.previewTempC).toBe(27.0);
+  });
 });

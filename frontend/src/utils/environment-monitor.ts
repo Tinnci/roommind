@@ -3,6 +3,7 @@
  */
 import type { AnalyticsDataPoint, HomeAssistant, RoomConfig } from "../types";
 import type { TranslationKey } from "./localize";
+import { classifyNonAmbientTempSensor, isDiagnosticOrConfigEntity } from "./ambient-sensor-filter";
 import { hasClimateDevice } from "./room-overview-status";
 import { getEntitiesForArea, isRoomMindEntity } from "./room-state";
 
@@ -349,6 +350,10 @@ export function inspectAreaSensors(
 
     if (entityId.startsWith("sensor.")) {
       if (deviceClass === "temperature" || configuredTemp.has(entityId)) {
+        const isConfiguredTemp = configuredTemp.has(entityId);
+        if (!isConfiguredTemp && classifyNonAmbientTempSensor(entityId, hass) !== null) {
+          continue;
+        }
         const rawValue = parseNumericState(entityState?.state);
         const unit = String(attrs.unit_of_measurement ?? "°C");
         const valueC =
@@ -363,19 +368,26 @@ export function inspectAreaSensors(
           valueC,
           rawValue,
           unit,
-          configured: configuredTemp.has(entityId),
+          configured: isConfiguredTemp,
           isPrimary: entityId === primaryTemp,
         });
       } else if (deviceClass === "humidity" || configuredHum.has(entityId)) {
+        const isConfiguredHum = configuredHum.has(entityId);
+        if (!isConfiguredHum && isDiagnosticOrConfigEntity(entityId, hass)) {
+          continue;
+        }
         const value = parseNumericState(entityState?.state);
         humiditySensors.push({
           entityId,
           name,
           value,
-          configured: configuredHum.has(entityId),
+          configured: isConfiguredHum,
           isPrimary: entityId === primaryHum,
         });
       } else if (AIR_QUALITY_DEVICE_CLASSES.has(deviceClass)) {
+        if (isDiagnosticOrConfigEntity(entityId, hass)) {
+          continue;
+        }
         const value = parseNumericState(entityState?.state);
         const unit = String(attrs.unit_of_measurement ?? "");
         const displayValue =
@@ -392,6 +404,9 @@ export function inspectAreaSensors(
       }
     } else if (entityId.startsWith("binary_sensor.")) {
       const configured = configuredWin.has(entityId) || configuredOcc.has(entityId);
+      if (!configured && isDiagnosticOrConfigEntity(entityId, hass)) {
+        continue;
+      }
       if (BINARY_ENV_DEVICE_CLASSES.has(deviceClass) || configured) {
         const rawState = entityState?.state;
         const isOn = rawState === "on" ? true : rawState === "off" ? false : null;

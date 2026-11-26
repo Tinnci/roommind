@@ -147,4 +147,78 @@ describe("panel-areas helpers", () => {
     };
     expect(formatHiddenRoomMeta(info, hass, "en")).toBe("23.4°C · 54%");
   });
+
+  it("excludes diagnostic, appliance, and outdoor sensors from unconfigured area counts", () => {
+    const hass = makeHass({
+      areas: {
+        can_ting: makeArea("can_ting", "Dining"),
+        ke_ting: makeArea("ke_ting", "Living"),
+      },
+      devices: {
+        dev_wh: { id: "dev_wh", area_id: "can_ting", model: "xiaomi.waterheater.ymm5" },
+        dev_purifier: {
+          id: "dev_purifier",
+          area_id: "can_ting",
+          name: "小米台式净饮机",
+          model: "chunmi.ysj.tsa1",
+        },
+      },
+      entities: {
+        "water_heater.wh": {
+          entity_id: "water_heater.wh",
+          area_id: null,
+          device_id: "dev_wh",
+          platform: "xiaomi_home",
+        },
+        "sensor.wh_temp": {
+          entity_id: "sensor.wh_temp",
+          area_id: null,
+          device_id: "dev_wh",
+          platform: "xiaomi_home",
+        },
+        "sensor.purifier_temp": {
+          entity_id: "sensor.purifier_temp",
+          area_id: null,
+          device_id: "dev_purifier",
+          platform: "xiaomi_home",
+        },
+        "sensor.coil_diag": {
+          entity_id: "sensor.coil_diag",
+          area_id: "ke_ting",
+          device_id: null,
+          platform: "tcl_udp_ac",
+          entity_category: "diagnostic",
+        },
+        "sensor.room_temp": {
+          entity_id: "sensor.room_temp",
+          area_id: "ke_ting",
+          device_id: null,
+          platform: "bthome",
+        },
+      },
+      states: {
+        "sensor.wh_temp": {
+          state: "45",
+          attributes: { device_class: "temperature", friendly_name: "使用记录 温度" },
+        },
+        "sensor.purifier_temp": {
+          state: "27",
+          attributes: { device_class: "temperature", friendly_name: "出水温度" },
+        },
+        "sensor.coil_diag": {
+          state: "21",
+          attributes: { device_class: "temperature", friendly_name: "室内机盘管温度" },
+        },
+        "sensor.room_temp": {
+          state: "22",
+          attributes: { device_class: "temperature", friendly_name: "客厅 温度" },
+        },
+      },
+    });
+
+    const infos = computeAreaInfos(hass, {}, []);
+    const byId = Object.fromEntries(infos.map((i) => [i.area.area_id, i]));
+    expect(byId.can_ting?.tempSensorCount).toBe(0);
+    expect(byId.ke_ting?.tempSensorCount).toBe(1);
+  });
 });

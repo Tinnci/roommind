@@ -5,6 +5,10 @@ import { getEntitiesForArea, isRoomMindEntity } from "../utils/room-state";
 import { localize } from "../utils/localize";
 import { openEntityInfo } from "../utils/events";
 import {
+  classifyNonAmbientTempSensor,
+  type NonAmbientReason,
+} from "../utils/ambient-sensor-filter";
+import {
   formatSensorAge,
   formatSensorValue,
   freshnessLabel,
@@ -48,6 +52,7 @@ export class RsSensorSection extends LitElement {
 
   @state() private _pickerOpen = false;
   @state() private _collapsed: Partial<Record<SensorKind, boolean>> = {};
+  @state() private _showFilteredTempSensors = false;
 
   static override styles = [inputStyles, sensorSectionStyles];
 
@@ -282,13 +287,26 @@ export class RsSensorSection extends LitElement {
     externalSensors: string[],
     lang: string,
   ) {
-    const total = areaSensors.length + externalSensors.length;
+    const selectedIds = this._temperatureSensorIds();
+    const selectedSet = new Set(selectedIds);
+    const ambientAreaSensors: { entity_id: string }[] = [];
+    const filteredAreaSensors: { entity_id: string; reason: NonAmbientReason }[] = [];
+
+    for (const entry of areaSensors) {
+      const reason = classifyNonAmbientTempSensor(entry.entity_id, this.hass);
+      if (reason === null || selectedSet.has(entry.entity_id)) {
+        ambientAreaSensors.push(entry);
+      } else {
+        filteredAreaSensors.push({ entity_id: entry.entity_id, reason });
+      }
+    }
+
+    const total = ambientAreaSensors.length + externalSensors.length;
     const isCollapsed = this._collapsed.temp ?? false;
     const ids = [
-      ...areaSensors.map((e) => ({ entityId: e.entity_id, external: false })),
+      ...ambientAreaSensors.map((e) => ({ entityId: e.entity_id, external: false })),
       ...externalSensors.map((entityId) => ({ entityId, external: true })),
     ];
-    const selectedIds = this._temperatureSensorIds();
 
     return html`
       <div class="sensor-block ${isCollapsed ? "collapsed" : ""}">
@@ -296,10 +314,8 @@ export class RsSensorSection extends LitElement {
           <ha-icon icon="mdi:thermometer"></ha-icon>
           <div class="block-title">${localize("devices.temp_sensors", lang)}</div>
           ${
-            this._temperatureSensorIds().length > 0
-              ? html`<span class="count-chip has-selection"
-                  >${this._temperatureSensorIds().length}</span
-                >`
+            selectedIds.length > 0
+              ? html`<span class="count-chip has-selection">${selectedIds.length}</span>`
               : total > 0
                 ? html`<span class="count-chip">${total}</span>`
                 : nothing
@@ -338,6 +354,55 @@ export class RsSensorSection extends LitElement {
                       : html`<div class="empty-row">
                           ${localize("devices.no_temp_sensors", lang)}
                         </div>`
+                  }
+                  ${
+                    filteredAreaSensors.length > 0
+                      ? html`
+                          <div class="filtered-sensors-wrap">
+                            <button
+                              type="button"
+                              class="filtered-sensors-toggle"
+                              @click=${() => {
+                                this._showFilteredTempSensors = !this._showFilteredTempSensors;
+                              }}
+                            >
+                              <ha-icon
+                                icon=${
+                                  this._showFilteredTempSensors
+                                    ? "mdi:chevron-up"
+                                    : "mdi:filter-off-outline"
+                                }
+                              ></ha-icon>
+                              <span>
+                                ${localize(
+                                  this._showFilteredTempSensors
+                                    ? "devices.filtered_temp_toggle_hide"
+                                    : "devices.filtered_temp_toggle_show",
+                                  lang,
+                                  { count: String(filteredAreaSensors.length) },
+                                )}
+                              </span>
+                            </button>
+                            ${
+                              this._showFilteredTempSensors
+                                ? html`
+                                    <div class="sensor-table">
+                                      ${filteredAreaSensors.map(({ entity_id, reason }) =>
+                                        this._renderPrioritySensorRow(
+                                          entity_id,
+                                          false,
+                                          "temp",
+                                          selectedIds.indexOf(entity_id),
+                                          reason,
+                                        ),
+                                      )}
+                                    </div>
+                                  `
+                                : nothing
+                            }
+                          </div>
+                        `
+                      : nothing
                   }
                 </div>
               `
@@ -418,6 +483,7 @@ export class RsSensorSection extends LitElement {
     external: boolean,
     kind: "temp" | "humidity",
     priorityIndex: number,
+    filteredReason: NonAmbientReason | null = null,
   ) {
     const state = this.hass.states[entityId];
     const friendlyName = (state?.attributes?.friendly_name as string) || entityId;
@@ -432,6 +498,14 @@ export class RsSensorSection extends LitElement {
         : selected
           ? localize("devices.priority_backup", lang, { index: String(priorityIndex + 1) })
           : localize("devices.priority_disabled", lang);
+    const filteredReasonLabel =
+      filteredReason === "appliance"
+        ? localize("devices.filtered_reason_appliance", lang)
+        : filteredReason === "diagnostic"
+          ? localize("devices.filtered_reason_diagnostic", lang)
+          : filteredReason === "outdoor"
+            ? localize("devices.filtered_reason_outdoor", lang)
+            : "";
     return html`
       <div
         class="sensor-table-row ${selected ? "selected" : ""}"
@@ -454,6 +528,11 @@ export class RsSensorSection extends LitElement {
             ${
               external
                 ? html`<span class="external-badge">${localize("devices.other_area", lang)}</span>`
+                : nothing
+            }
+            ${
+              filteredReasonLabel
+                ? html`<span class="filtered-reason-badge">${filteredReasonLabel}</span>`
                 : nothing
             }
           </div>
